@@ -1,9 +1,12 @@
 import { useState } from 'react'
 import { api, ApiError } from '../lib/api'
 
+const IS_DEV = window.location.hostname !== 'ah-ha.app'
+
 export default function AuthPage() {
   const [email, setEmail] = useState('')
   const [sent, setSent] = useState(false)
+  const [devLink, setDevLink] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -11,9 +14,14 @@ export default function AuthPage() {
     e.preventDefault()
     setLoading(true)
     setError('')
+    setDevLink('')
     try {
       await api.post('/auth/magic-link', { email })
       setSent(true)
+      if (IS_DEV) {
+        const res = await api.get<{ url: string }>(`/auth/dev-link?email=${encodeURIComponent(email)}`)
+        setDevLink(res.url)
+      }
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Something went wrong')
     } finally {
@@ -31,8 +39,19 @@ export default function AuthPage() {
             We sent a sign-in link to <span className="text-slate-200">{email}</span>.
             It expires in 15 minutes.
           </p>
+          {devLink && (
+            <div className="mt-2 p-3 bg-yellow-950 border border-yellow-800 rounded-lg text-left space-y-1">
+              <p className="text-xs text-yellow-400 font-semibold">Dev mode — click to sign in:</p>
+              <a
+                href={devLink}
+                className="text-xs text-yellow-300 hover:text-yellow-100 break-all underline"
+              >
+                {devLink}
+              </a>
+            </div>
+          )}
           <button
-            onClick={() => { setSent(false); setEmail('') }}
+            onClick={() => { setSent(false); setEmail(''); setDevLink('') }}
             className="text-sm text-slate-500 hover:text-slate-300 underline"
           >
             Use a different email
