@@ -96,14 +96,22 @@ export default function App() {
     return <Shell><KeysPage /></Shell>
   }
 
-  // Space views: /spaces/:type/:slug
-  const spaceMatch = path.match(/^\/spaces\/([^/]+)\/([^/]+)$/)
+  // Space views: /spaces/:username/:type/:slug
+  const spaceMatch = path.match(/^\/spaces\/([^/]+)\/([^/]+)\/([^/]+)$/)
   if (spaceMatch) {
-    const [, type, slug] = spaceMatch
+    const [, , type, slug] = spaceMatch
     if (type === 'board') return <Shell><BoardPage slug={slug} /></Shell>
     if (type === 'trail') return <Shell><TrailPage slug={slug} /></Shell>
     if (type === 'note')  return <Shell><NotePage slug={slug} /></Shell>
     if (type === 'list')  return <Shell><ListPage slug={slug} /></Shell>
+  }
+
+  // Legacy redirect: /spaces/:type/:slug → /spaces/:username/:type/:slug
+  const legacyMatch = path.match(/^\/spaces\/([^/]+)\/([^/]+)$/)
+  if (legacyMatch && user?.username) {
+    const [, type, slug] = legacyMatch
+    window.location.replace(`/spaces/${user.username}/${type}/${slug}`)
+    return null
   }
 
   // Fallback
