@@ -4,9 +4,8 @@ import { verifyJWT } from '../lib/jwt.js'
 import { validateApiKey } from '../lib/api-key.js'
 
 const authPlugin: FastifyPluginAsync = async (fastify) => {
-  // Decorate request with requireAuth helper
-  fastify.decorateRequest('user', null)
-  fastify.decorateRequest('apiKeyId', null)
+  fastify.decorateRequest('user', undefined)
+  fastify.decorateRequest('apiKeyId', undefined)
 
   fastify.decorate('authenticate', authenticate)
 }
