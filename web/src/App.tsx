@@ -7,16 +7,35 @@ import BoardPage from './pages/BoardPage'
 import TrailPage from './pages/TrailPage'
 import NotePage from './pages/NotePage'
 import ListPage from './pages/ListPage'
+import KeysPage from './pages/KeysPage'
+import SearchPage from './pages/SearchPage'
 
 function Shell({ children }: { children: React.ReactNode }) {
   const { user } = useMe()
+  const path = window.location.pathname
+  const navLink = (href: string, label: string) => (
+    <a
+      href={href}
+      className={`text-sm transition ${path === href || path.startsWith(href + '/') ? 'text-slate-200' : 'text-slate-500 hover:text-slate-300'}`}
+    >
+      {label}
+    </a>
+  )
   return (
     <div className="flex flex-col min-h-screen">
       <header className="border-b border-slate-800 px-4 h-12 flex items-center justify-between flex-shrink-0">
-        <a href="/spaces" className="font-bold text-sm tracking-tight">Ah-Ha</a>
+        <div className="flex items-center gap-5">
+          <a href="/spaces" className="font-bold text-sm tracking-tight">Ah-Ha</a>
+          {user && (
+            <>
+              {navLink('/spaces', 'Spaces')}
+              {navLink('/search', 'Search')}
+            </>
+          )}
+        </div>
         {user && (
           <div className="flex items-center gap-3">
-            <a href="/spaces" className="text-sm text-slate-400 hover:text-slate-200 transition">Spaces</a>
+            {navLink('/keys', 'API Keys')}
             <span className="text-xs text-slate-600">{user.username}</span>
           </div>
         )}
@@ -65,6 +84,16 @@ export default function App() {
   // Spaces list
   if (path === '/spaces') {
     return <Shell><SpacesPage /></Shell>
+  }
+
+  // Search
+  if (path === '/search') {
+    return <Shell><SearchPage /></Shell>
+  }
+
+  // API Keys
+  if (path === '/keys') {
+    return <Shell><KeysPage /></Shell>
   }
 
   // Space views: /spaces/:type/:slug
