@@ -25,6 +25,7 @@ export default defineConfig({
     }),
   ],
   server: {
+    allowedHosts: ['gmk.local', 'mini.local', 'localhost'],
     proxy: {
       '/api': 'http://localhost:3100',
       '/auth': 'http://localhost:3100',
