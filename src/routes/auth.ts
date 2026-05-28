@@ -111,6 +111,17 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
     return { ok: true, username: body.username }
   })
 
+  // GET /auth/dev-link?email= — returns the verify URL directly (non-production only)
+  fastify.get<{ Querystring: { email: string } }>('/auth/dev-link', async (req, reply) => {
+    if (process.env['NODE_ENV'] === 'production') return reply.status(404).send()
+    const { email } = req.query
+    if (!email) return reply.status(400).send({ error: 'email required' })
+    const token = await createMagicToken(fastify.redis, email).catch(() => null)
+    if (!token) return reply.status(429).send({ error: 'Rate limited' })
+    const base = process.env['BASE_URL'] ?? 'http://localhost:3100'
+    return { url: `${base}/auth/verify?token=${token}` }
+  })
+
   // POST /auth/logout
   fastify.post('/auth/logout', async (_req, reply) => {
     reply.clearCookie('aha_session', { path: '/' })
