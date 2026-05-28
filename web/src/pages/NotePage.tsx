@@ -7,22 +7,39 @@ export default function NotePage({ slug }: { slug: string }) {
   const [body, setBody] = useState('')
   const [saving, setSaving] = useState(false)
   const [dirty, setDirty] = useState(false)
+  const [saveError, setSaveError] = useState('')
+  const [savedAt, setSavedAt] = useState<Date | null>(null)
 
   useEffect(() => {
     if (data?.data?.body !== undefined) {
       setBody(data.data.body)
       setDirty(false)
     }
-  }, [data?.data?.body])
+    if (data?.data?.updated_at) {
+      setSavedAt(new Date(data.data.updated_at))
+    }
+  }, [data?.data?.body, data?.data?.updated_at])
 
   async function save() {
+    if (!dirty) return
+    setSaveError('')
     setSaving(true)
     try {
       await api.put(`/api/note/${slug}`, { body })
       setDirty(false)
+      setSavedAt(new Date())
       await mutate()
+    } catch (err: any) {
+      setSaveError(err?.response?.data?.error ?? 'Save failed')
     } finally {
       setSaving(false)
+    }
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent) {
+    if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+      e.preventDefault()
+      save()
     }
   }
 
@@ -31,9 +48,11 @@ export default function NotePage({ slug }: { slug: string }) {
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-bold capitalize">{slug}</h1>
         <div className="flex items-center gap-3">
-          {data?.data?.updated_at && (
-            <span className="text-xs text-slate-500">Saved {new Date(data.data.updated_at).toLocaleString()}</span>
+          {saveError && <span className="text-xs text-red-400">{saveError}</span>}
+          {!saveError && savedAt && !dirty && (
+            <span className="text-xs text-slate-500">Saved {savedAt.toLocaleTimeString()}</span>
           )}
+          {dirty && !saveError && <span className="text-xs text-slate-500">Unsaved changes</span>}
           <button
             onClick={save}
             disabled={saving || !dirty}
@@ -45,8 +64,9 @@ export default function NotePage({ slug }: { slug: string }) {
       </div>
       <textarea
         value={body}
-        onChange={e => { setBody(e.target.value); setDirty(true) }}
-        placeholder="Start writing…"
+        onChange={e => { setBody(e.target.value); setDirty(true); setSaveError('') }}
+        onKeyDown={handleKeyDown}
+        placeholder="Start writing… (Ctrl+S to save)"
         className="flex-1 min-h-[60vh] w-full px-4 py-3 bg-slate-900 border border-slate-800 rounded-xl text-sm leading-relaxed focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none font-mono"
       />
     </div>

@@ -1,5 +1,6 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
+import { createHash } from 'crypto'
 import { getPool } from '../lib/timescale.js'
 
 const appendBody = z.object({
@@ -21,6 +22,10 @@ const queryParams = z.object({
   cursor: z.string().optional(),      // ISO timestamp for pagination
 })
 
+function hashEntry(id: string, ts: Date, text: string): string {
+  return createHash('sha256').update(`${id}|${ts.toISOString()}|${text}`).digest('hex')
+}
+
 const trailRoutes: FastifyPluginAsync = async (fastify) => {
   // POST /api/trail/:slug/append
   fastify.post<{ Params: { slug: string } }>(
@@ -32,9 +37,20 @@ const trailRoutes: FastifyPluginAsync = async (fastify) => {
       if (!space) return reply.status(404).send({ error: 'Trail not found' })
 
       const db = getPool()
+
+      // Fetch the most recent entry to build the hash chain
+      const prev = await db.query<{ id: string; ts: Date; text: string }>(
+        `SELECT id, ts, text FROM trail_entries WHERE space_ref = $1 ORDER BY ts DESC LIMIT 1`,
+        [space['ref']]
+      )
+      const prevRow = prev.rows[0]
+      const prevHash = prevRow
+        ? hashEntry(prevRow.id, prevRow.ts, prevRow.text)
+        : hashEntry('genesis', new Date(0), space['ref'] as string)
+
       const result = await db.query<{ id: string; ts: Date }>(
-        `INSERT INTO trail_entries (space_ref, org_id, text, tone, source, tags, meta, created_by)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        `INSERT INTO trail_entries (space_ref, org_id, text, tone, source, tags, meta, created_by, prev_hash)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
          RETURNING id, ts`,
         [
           space['ref'],
@@ -44,9 +60,8 @@ const trailRoutes: FastifyPluginAsync = async (fastify) => {
           body.source,
           body.tags,
           JSON.stringify(body.meta),
-          req.apiKeyId
-            ? null
-            : req.user!.id.toString(),
+          req.apiKeyId ? null : req.user!.id.toString(),
+          prevHash,
         ]
       )
 
@@ -62,6 +77,7 @@ const trailRoutes: FastifyPluginAsync = async (fastify) => {
           source: body.source,
           tags: body.tags,
           meta: body.meta,
+          prev_hash: prevHash,
         },
       }
     }
@@ -110,7 +126,7 @@ const trailRoutes: FastifyPluginAsync = async (fastify) => {
 
       const db = getPool()
       const result = await db.query(
-        `SELECT id, ts, text, tone, source, tags, meta, created_by
+        `SELECT id, ts, text, tone, source, tags, meta, created_by, prev_hash
          FROM trail_entries
          WHERE ${where}
          ORDER BY ts DESC

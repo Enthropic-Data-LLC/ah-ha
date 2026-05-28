@@ -29,7 +29,7 @@ export default function ListPage({ slug }: { slug: string }) {
   }
 
   async function toggleDone(item: ListItem) {
-    await api.patch(`/api/list/${slug}/items/${item._id}`, { done: !item.done })
+    await api.patch(`/api/list/${slug}/items/${item._id}/check`, { done: !item.done })
     await mutate()
   }
 

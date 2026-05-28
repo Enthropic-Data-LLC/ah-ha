@@ -21,6 +21,7 @@ interface TrailEntry {
   tone: 'happy' | 'sorrow' | 'neutral'
   source: string
   tags: string[]
+  prev_hash: string
 }
 
 export default function TrailPage({ slug }: { slug: string }) {
@@ -81,12 +82,17 @@ export default function TrailPage({ slug }: { slug: string }) {
         )}
         {entries.map(entry => (
           <div key={entry.id} className="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-1">
-            <div className="flex items-center gap-2 text-xs text-slate-500">
+            <div className="flex items-center gap-2 text-xs text-slate-500 flex-wrap">
               <span className={TONE_COLORS[entry.tone]}>{TONE_ICONS[entry.tone]}</span>
               <span>{new Date(entry.ts).toLocaleString()}</span>
               {entry.tags.length > 0 && entry.tags.map(tag => (
                 <span key={tag} className="px-1.5 py-0.5 bg-slate-800 rounded text-slate-400">#{tag}</span>
               ))}
+              {entry.prev_hash && (
+                <span title={`prev: ${entry.prev_hash}`} className="font-mono text-slate-700 hover:text-slate-500 cursor-default transition">
+                  #{entry.prev_hash.slice(0, 8)}
+                </span>
+              )}
             </div>
             <p className="text-sm whitespace-pre-wrap">{entry.text}</p>
           </div>
