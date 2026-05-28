@@ -20,8 +20,8 @@ const sub = new Redis(REDIS_URL)
 // room → set of WebSocket clients
 const rooms = new Map<string, Set<WebSocket>>()
 
-sub.psubscribe('ws:*', (err: Error | null) => {
-  if (err) console.error('Redis psubscribe error', err)
+sub.psubscribe('ws:*').catch((err: unknown) => {
+  console.error('Redis psubscribe error', err)
 })
 
 sub.on('pmessage', (_pattern: string, channel: string, message: string) => {
