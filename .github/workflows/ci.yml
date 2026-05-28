@@ -22,3 +22,7 @@ jobs:
       - name: Type check MCP package
         working-directory: mcp
         run: npm ci && npx tsc --noEmit
+
+      - name: Type check web
+        working-directory: web
+        run: npm install --legacy-peer-deps && npx tsc -b
