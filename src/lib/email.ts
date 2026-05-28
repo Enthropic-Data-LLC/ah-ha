@@ -1,21 +1,29 @@
-import { Resend } from 'resend'
+import nodemailer from 'nodemailer'
 
-const FROM = process.env['EMAIL_FROM'] ?? 'noreply@ah-ha.app'
+const FROM = process.env['EMAIL_FROM'] ?? 'noreply@smbaiguy.com'
 const OVERRIDE = process.env['EMAIL_OVERRIDE']
+
+const transporter = nodemailer.createTransport({
+  host: process.env['SMTP_HOST'] ?? 'smtp.migadu.com',
+  port: parseInt(process.env['SMTP_PORT'] ?? '465', 10),
+  secure: (process.env['SMTP_PORT'] ?? '465') === '465',
+  auth: {
+    user: process.env['SMTP_USER'],
+    pass: process.env['SMTP_PASS'],
+  },
+})
 
 export async function sendMagicLink(to: string, token: string) {
   const base = process.env['BASE_URL'] ?? 'https://ah-ha.app'
   const url = `${base}/auth/verify?token=${token}`
   const dest = OVERRIDE ?? to
 
-  const apiKey = process.env['RESEND_API_KEY']
-  if (!apiKey) {
-    console.log(`[email] RESEND_API_KEY not set — magic link for ${dest}: ${url}`)
+  if (!process.env['SMTP_USER'] || !process.env['SMTP_PASS']) {
+    console.log(`[email] SMTP not configured — magic link for ${dest}: ${url}`)
     return
   }
 
-  const resend = new Resend(apiKey)
-  await resend.emails.send({
+  await transporter.sendMail({
     from: FROM,
     to: dest,
     subject: 'Your Ah-Ha sign-in link',
