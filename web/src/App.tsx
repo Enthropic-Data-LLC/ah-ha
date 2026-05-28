@@ -25,7 +25,7 @@ function Shell({ children }: { children: React.ReactNode }) {
     <div className="flex flex-col min-h-screen">
       <header className="border-b border-slate-800 px-4 h-12 flex items-center justify-between flex-shrink-0">
         <div className="flex items-center gap-5">
-          <a href="/spaces" className="font-bold text-sm tracking-tight">Ah-Ha</a>
+          <a href={user ? `/${user.username}` : '/auth'} className="font-bold text-sm tracking-tight">Ah-Ha</a>
           {user && (
             <>
               {navLink(`/${user.username}`, 'Spaces')}
@@ -55,7 +55,7 @@ export default function App() {
   }
   if (path === '/auth' || path === '/') {
     if (!isLoading && !isLoggedOut) {
-      window.location.href = '/spaces'
+      window.location.href = user?.username ? `/${user.username}` : '/spaces'
       return null
     }
     return <AuthPage />
