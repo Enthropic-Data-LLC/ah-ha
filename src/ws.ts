@@ -7,7 +7,7 @@
 import 'dotenv/config'
 import { WebSocketServer, WebSocket } from 'ws'
 import { IncomingMessage } from 'http'
-import Redis from 'ioredis'
+import { Redis } from 'ioredis'
 import { verifyJWT } from './lib/jwt.js'
 
 const PORT = parseInt(process.env['WS_PORT'] ?? '3001', 10)
@@ -20,11 +20,11 @@ const sub = new Redis(REDIS_URL)
 // room → set of WebSocket clients
 const rooms = new Map<string, Set<WebSocket>>()
 
-sub.psubscribe('ws:*', (err) => {
+sub.psubscribe('ws:*', (err: Error | null) => {
   if (err) console.error('Redis psubscribe error', err)
 })
 
-sub.on('pmessage', (_pattern, channel, message) => {
+sub.on('pmessage', (_pattern: string, channel: string, message: string) => {
   const spaceRef = channel.replace('ws:', '')
   const members = rooms.get(spaceRef)
   if (!members) return

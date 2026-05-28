@@ -29,7 +29,7 @@ async function authenticate(req: FastifyRequest, reply: FastifyReply) {
     if (!key) {
       return reply.status(401).send({ error: 'Invalid API key' })
     }
-    req.user = { id: key.user_id, orgId: key.org_id, plan: key.plan, username: key.username }
+    req.user = { id: key.user_id, orgId: key.org_id, plan: key.plan as import('../types.js').Plan, username: key.username }
     req.apiKeyId = key._id
     // Update last_used async — fire and forget
     req.server.mongo.collection('api_keys')

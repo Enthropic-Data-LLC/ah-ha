@@ -1,5 +1,5 @@
 import { nanoid } from 'nanoid'
-import type Redis from 'ioredis'
+import type { Redis } from 'ioredis'
 
 const TTL = parseInt(process.env['MAGIC_LINK_TTL'] ?? '900', 10)
 const RATE_LIMIT = 3

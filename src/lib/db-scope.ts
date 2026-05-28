@@ -16,10 +16,11 @@ export function createScopedDb(db: Db, orgId: ObjectId): Db {
         return new Proxy(col, {
           get(colTarget, method: string) {
             if (!SCOPED_METHODS.has(method)) {
-              return Reflect.get(colTarget, method)
+              return Reflect.get(colTarget, method as string)
             }
             return (query: Filter<Document>, ...rest: unknown[]) =>
-              (colTarget as Record<string, (...args: unknown[]) => unknown>)[method]({ ...query, org_id: orgId }, ...rest)
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              (colTarget as any)[method]({ ...query, org_id: orgId }, ...rest)
           },
         })
       }

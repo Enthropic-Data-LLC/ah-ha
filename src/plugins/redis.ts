@@ -1,5 +1,5 @@
 import fp from 'fastify-plugin'
-import Redis from 'ioredis'
+import { Redis } from 'ioredis'
 import type { FastifyPluginAsync } from 'fastify'
 
 declare module 'fastify' {
