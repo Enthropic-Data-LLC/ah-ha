@@ -1,4 +1,5 @@
 import { useMe } from './hooks/useMe'
+import LandingPage from './pages/LandingPage'
 import AuthPage from './pages/AuthPage'
 import VerifyPage from './pages/VerifyPage'
 import OnboardingPage from './pages/OnboardingPage'
@@ -53,9 +54,16 @@ export default function App() {
   if (path === '/auth/verify' || path.startsWith('/auth/verify?')) {
     return <VerifyPage />
   }
-  if (path === '/auth' || path === '/') {
-    if (!isLoading && !isLoggedOut) {
-      window.location.href = user?.username ? `/${user.username}` : '/spaces'
+  if (path === '/') {
+    if (!isLoading && user?.username) {
+      window.location.replace(`/${user.username}`)
+      return null
+    }
+    return <LandingPage />
+  }
+  if (path === '/auth') {
+    if (!isLoading && user?.username) {
+      window.location.replace(`/${user.username}`)
       return null
     }
     return <AuthPage />
@@ -130,7 +138,7 @@ export default function App() {
   // Fallback
   return (
     <div className="min-h-screen flex items-center justify-center text-slate-500 text-sm">
-      404 — <a href="/spaces" className="ml-1 underline hover:text-slate-300">Go home</a>
+      404 — <a href="/" className="ml-1 underline hover:text-slate-300">Go home</a>
     </div>
   )
 }

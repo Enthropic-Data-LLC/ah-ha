@@ -1,5 +1,8 @@
 import 'dotenv/config'
+import { fileURLToPath } from 'url'
+import { join, dirname } from 'path'
 import Fastify from 'fastify'
+import staticFiles from '@fastify/static'
 import cookie from '@fastify/cookie'
 import cors from '@fastify/cors'
 import sensible from '@fastify/sensible'
@@ -51,6 +54,13 @@ await fastify.register(searchRoutes)
 await fastify.register(keysRoutes)
 
 fastify.get('/healthz', async () => ({ ok: true, ts: new Date().toISOString() }))
+
+// Serve built frontend — SPA fallback sends index.html for any unmatched GET
+const webDist = join(dirname(fileURLToPath(import.meta.url)), '..', 'web', 'dist')
+await fastify.register(staticFiles, { root: webDist, wildcard: false })
+fastify.setNotFoundHandler(async (_req, reply) => {
+  reply.sendFile('index.html')
+})
 
 fastify.addHook('onClose', async () => {
   await closePool()
