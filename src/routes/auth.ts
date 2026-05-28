@@ -116,7 +116,7 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
     if (process.env['NODE_ENV'] === 'production') return reply.status(404).send()
     const { email } = req.query
     if (!email) return reply.status(400).send({ error: 'email required' })
-    const token = await createMagicToken(fastify.redis, email).catch(() => null)
+    const token = await createMagicToken(fastify.redis, email, true).catch(() => null)
     if (!token) return reply.status(429).send({ error: 'Rate limited' })
     const base = process.env['BASE_URL'] ?? 'http://localhost:3100'
     return { url: `${base}/auth/verify?token=${token}` }
