@@ -21,7 +21,7 @@ function refToUrl(ref: string): string {
   if (parts.length < 3) return '/spaces'
   const [username, type, rest] = parts
   const slug = rest?.split('#')[0] ?? ''
-  return `/spaces/${username}/${type}/${slug}`
+  return `/${username}/spaces/${type}/${slug}`
 }
 
 export default function SearchPage() {

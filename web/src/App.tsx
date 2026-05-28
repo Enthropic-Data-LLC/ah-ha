@@ -28,7 +28,7 @@ function Shell({ children }: { children: React.ReactNode }) {
           <a href="/spaces" className="font-bold text-sm tracking-tight">Ah-Ha</a>
           {user && (
             <>
-              {navLink('/spaces', 'Spaces')}
+              {navLink(`/${user.username}/spaces`, 'Spaces')}
               {navLink('/search', 'Search')}
             </>
           )}
@@ -81,8 +81,9 @@ export default function App() {
     return <OnboardingPage />
   }
 
-  // Spaces list
+  // /spaces → redirect to /:username/spaces
   if (path === '/spaces') {
+    if (user?.username) { window.location.replace(`/${user.username}/spaces`); return null }
     return <Shell><SpacesPage /></Shell>
   }
 
@@ -96,8 +97,14 @@ export default function App() {
     return <Shell><KeysPage /></Shell>
   }
 
-  // Space views: /spaces/:username/:type/:slug
-  const spaceMatch = path.match(/^\/spaces\/([^/]+)\/([^/]+)\/([^/]+)$/)
+  // /:username/spaces — spaces list
+  const spacesListMatch = path.match(/^\/([^/]+)\/spaces$/)
+  if (spacesListMatch) {
+    return <Shell><SpacesPage /></Shell>
+  }
+
+  // /:username/spaces/:type/:slug — space detail
+  const spaceMatch = path.match(/^\/([^/]+)\/spaces\/([^/]+)\/([^/]+)$/)
   if (spaceMatch) {
     const [, , type, slug] = spaceMatch
     if (type === 'board') return <Shell><BoardPage slug={slug} /></Shell>
@@ -106,11 +113,11 @@ export default function App() {
     if (type === 'list')  return <Shell><ListPage slug={slug} /></Shell>
   }
 
-  // Legacy redirect: /spaces/:type/:slug → /spaces/:username/:type/:slug
-  const legacyMatch = path.match(/^\/spaces\/([^/]+)\/([^/]+)$/)
-  if (legacyMatch && user?.username) {
-    const [, type, slug] = legacyMatch
-    window.location.replace(`/spaces/${user.username}/${type}/${slug}`)
+  // Legacy redirect: /spaces/:username/:type/:slug → /:username/spaces/:type/:slug
+  const legacyMatch = path.match(/^\/spaces\/([^/]+)\/([^/]+)\/([^/]+)$/)
+  if (legacyMatch) {
+    const [, username, type, slug] = legacyMatch
+    window.location.replace(`/${username}/spaces/${type}/${slug}`)
     return null
   }
 

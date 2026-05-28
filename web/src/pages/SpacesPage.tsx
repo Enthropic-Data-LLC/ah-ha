@@ -118,7 +118,7 @@ export default function SpacesPage() {
           {spaces.map(space => (
             <a
               key={space._id}
-              href={`/spaces/${user?.username ?? space.ref.split('/')[0]}/${space.type}/${space.slug}`}
+              href={`/${user?.username ?? space.ref.split('/')[0]}/spaces/${space.type}/${space.slug}`}
               className="flex items-center gap-3 px-4 py-3 bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-xl transition group"
             >
               <span className="text-xl">{TYPE_ICONS[space.type]}</span>
