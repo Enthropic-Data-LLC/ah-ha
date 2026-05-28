@@ -30,7 +30,7 @@ export default function NotePage({ slug }: { slug: string }) {
       setSavedAt(new Date())
       await mutate()
     } catch (err: any) {
-      setSaveError(err?.response?.data?.error ?? 'Save failed')
+      setSaveError(err?.message ?? 'Save failed')
     } finally {
       setSaving(false)
     }
