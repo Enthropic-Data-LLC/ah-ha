@@ -1,0 +1,49 @@
+app = "ah-ha"
+primary_region = "iad"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  NODE_ENV = "production"
+  PORT = "3000"
+  WS_PORT = "3001"
+
+[processes]
+  api      = "node dist/api.js"
+  ws       = "node dist/ws.js"
+  presence = "node dist/presence.js"
+
+[[services]]
+  protocol = "tcp"
+  internal_port = 3000
+  processes = ["api"]
+
+  [[services.ports]]
+    port = 443
+    handlers = ["tls", "http"]
+
+  [[services.ports]]
+    port = 80
+    handlers = ["http"]
+    [services.ports.force_https]
+      enabled = true
+
+[[services]]
+  protocol = "tcp"
+  internal_port = 3001
+  processes = ["ws"]
+
+  [[services.ports]]
+    port = 4000
+    handlers = ["tls"]
+
+[checks]
+  [checks.api]
+    grace_period = "10s"
+    interval = "15s"
+    method = "GET"
+    path = "/healthz"
+    port = 3000
+    timeout = "5s"
+    type = "http"
