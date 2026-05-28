@@ -4,6 +4,9 @@ import VerifyPage from './pages/VerifyPage'
 import OnboardingPage from './pages/OnboardingPage'
 import SpacesPage from './pages/SpacesPage'
 import BoardPage from './pages/BoardPage'
+import TrailPage from './pages/TrailPage'
+import NotePage from './pages/NotePage'
+import ListPage from './pages/ListPage'
 
 function Shell({ children }: { children: React.ReactNode }) {
   const { user } = useMe()
@@ -64,10 +67,14 @@ export default function App() {
     return <Shell><SpacesPage /></Shell>
   }
 
-  // Board view: /spaces/board/:slug
-  const boardMatch = path.match(/^\/spaces\/board\/([^/]+)$/)
-  if (boardMatch) {
-    return <Shell><BoardPage slug={boardMatch[1]} /></Shell>
+  // Space views: /spaces/:type/:slug
+  const spaceMatch = path.match(/^\/spaces\/([^/]+)\/([^/]+)$/)
+  if (spaceMatch) {
+    const [, type, slug] = spaceMatch
+    if (type === 'board') return <Shell><BoardPage slug={slug} /></Shell>
+    if (type === 'trail') return <Shell><TrailPage slug={slug} /></Shell>
+    if (type === 'note')  return <Shell><NotePage slug={slug} /></Shell>
+    if (type === 'list')  return <Shell><ListPage slug={slug} /></Shell>
   }
 
   // Fallback

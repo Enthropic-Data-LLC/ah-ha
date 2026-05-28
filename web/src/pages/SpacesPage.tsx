@@ -17,18 +17,34 @@ const TYPE_LABELS: Record<string, string> = {
   list: 'List',
 }
 
+function toSlug(name: string) {
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 64)
+}
+
 export default function SpacesPage() {
   const { data, mutate } = useSWR<{ data: Space[] }>('/api/spaces', fetcher)
   const [creating, setCreating] = useState(false)
   const [name, setName] = useState('')
   const [type, setType] = useState<Space['type']>('board')
+  const [error, setError] = useState('')
+  const [submitting, setSubmitting] = useState(false)
 
   async function createSpace(e: React.FormEvent) {
     e.preventDefault()
-    await api.post('/api/spaces', { name, type })
-    setName('')
-    setCreating(false)
-    await mutate()
+    const slug = toSlug(name)
+    if (slug.length < 3) { setError('Name too short (needs 3+ URL-safe characters)'); return }
+    setError('')
+    setSubmitting(true)
+    try {
+      await api.post('/api/spaces', { name, type, slug })
+      setName('')
+      setCreating(false)
+      await mutate()
+    } catch (err: any) {
+      setError(err?.response?.data?.error ?? 'Failed to create space')
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   const spaces = data?.data ?? []
@@ -38,7 +54,7 @@ export default function SpacesPage() {
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-bold">Spaces</h1>
         <button
-          onClick={() => setCreating(true)}
+          onClick={() => { setCreating(true); setError('') }}
           className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-sm font-medium rounded-lg transition"
         >
           + New space
@@ -53,10 +69,13 @@ export default function SpacesPage() {
             required
             type="text"
             value={name}
-            onChange={e => setName(e.target.value)}
+            onChange={e => { setName(e.target.value); setError('') }}
             placeholder="Space name"
             className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
           />
+          {name && (
+            <p className="text-xs text-slate-500">slug: <span className="text-slate-400">{toSlug(name)}</span></p>
+          )}
           <div className="grid grid-cols-4 gap-2">
             {(['board', 'trail', 'note', 'list'] as const).map(t => (
               <button
@@ -73,12 +92,13 @@ export default function SpacesPage() {
               </button>
             ))}
           </div>
+          {error && <p className="text-xs text-red-400">{error}</p>}
           <div className="flex gap-2 justify-end">
             <button type="button" onClick={() => setCreating(false)} className="px-3 py-1.5 text-sm text-slate-400 hover:text-slate-200">
               Cancel
             </button>
-            <button type="submit" className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-sm font-medium rounded-lg transition">
-              Create
+            <button type="submit" disabled={submitting} className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-sm font-medium rounded-lg transition">
+              {submitting ? 'Creating…' : 'Create'}
             </button>
           </div>
         </form>
