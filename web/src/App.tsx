@@ -28,7 +28,7 @@ function Shell({ children }: { children: React.ReactNode }) {
           <a href="/spaces" className="font-bold text-sm tracking-tight">Ah-Ha</a>
           {user && (
             <>
-              {navLink(`/${user.username}/spaces`, 'Spaces')}
+              {navLink(`/${user.username}`, 'Spaces')}
               {navLink('/search', 'Search')}
             </>
           )}
@@ -81,9 +81,9 @@ export default function App() {
     return <OnboardingPage />
   }
 
-  // /spaces → redirect to /:username/spaces
+  // /spaces → redirect to /:username
   if (path === '/spaces') {
-    if (user?.username) { window.location.replace(`/${user.username}/spaces`); return null }
+    if (user?.username) { window.location.replace(`/${user.username}`); return null }
     return <Shell><SpacesPage /></Shell>
   }
 
@@ -97,9 +97,9 @@ export default function App() {
     return <Shell><KeysPage /></Shell>
   }
 
-  // /:username/spaces — spaces list
-  const spacesListMatch = path.match(/^\/([^/]+)\/spaces$/)
-  if (spacesListMatch) {
+  // /:username — spaces list (user home)
+  const userHomeMatch = path.match(/^\/([^/]+)$/)
+  if (userHomeMatch) {
     return <Shell><SpacesPage /></Shell>
   }
 
@@ -118,6 +118,12 @@ export default function App() {
   if (legacyMatch) {
     const [, username, type, slug] = legacyMatch
     window.location.replace(`/${username}/spaces/${type}/${slug}`)
+    return null
+  }
+  // Legacy redirect: /:username/spaces → /:username
+  const spacesHomeMatch = path.match(/^\/([^/]+)\/spaces$/)
+  if (spacesHomeMatch) {
+    window.location.replace(`/${spacesHomeMatch[1]}`)
     return null
   }
 
