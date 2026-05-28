@@ -1,6 +1,5 @@
 import { Resend } from 'resend'
 
-const resend = new Resend(process.env['RESEND_API_KEY'])
 const FROM = process.env['EMAIL_FROM'] ?? 'noreply@ah-ha.app'
 const OVERRIDE = process.env['EMAIL_OVERRIDE']
 
@@ -9,6 +8,13 @@ export async function sendMagicLink(to: string, token: string) {
   const url = `${base}/auth/verify?token=${token}`
   const dest = OVERRIDE ?? to
 
+  const apiKey = process.env['RESEND_API_KEY']
+  if (!apiKey) {
+    console.log(`[email] RESEND_API_KEY not set — magic link for ${dest}: ${url}`)
+    return
+  }
+
+  const resend = new Resend(apiKey)
   await resend.emails.send({
     from: FROM,
     to: dest,
