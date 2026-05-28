@@ -1,0 +1,26 @@
+{
+  "name": "@ah-ha/mcp-server",
+  "version": "0.1.0",
+  "description": "MCP server for Ah-Ha — exposes Spaces, Board, Trail, Note, List, Links as Claude tools",
+  "type": "module",
+  "bin": {
+    "ah-ha-mcp": "./dist/index.js"
+  },
+  "main": "./dist/index.js",
+  "scripts": {
+    "build": "tsup src/index.ts --format esm --outDir dist --dts",
+    "dev": "tsx src/index.ts",
+    "prepublishOnly": "npm run build"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "tsup": "^8.3.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.2"
+  },
+  "files": ["dist"],
+  "engines": { "node": ">=20" }
+}
