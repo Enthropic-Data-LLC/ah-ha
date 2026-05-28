@@ -1,8 +1,12 @@
 name: Deploy to Fly.io
 
 on:
-  push:
-    branches: [main]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment'
+        required: true
+        default: 'production'
 
 jobs:
   deploy:
