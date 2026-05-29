@@ -66,7 +66,7 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
     reply.setCookie('aha_session', jwt, {
       httpOnly: true,
       secure: process.env['NODE_ENV'] === 'production',
-      sameSite: 'strict',
+      sameSite: 'lax',
       path: '/',
       maxAge: 30 * 24 * 60 * 60,
     })
@@ -103,7 +103,7 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
     reply.setCookie('aha_session', jwt, {
       httpOnly: true,
       secure: process.env['NODE_ENV'] === 'production',
-      sameSite: 'strict',
+      sameSite: 'lax',
       path: '/',
       maxAge: 30 * 24 * 60 * 60,
     })
