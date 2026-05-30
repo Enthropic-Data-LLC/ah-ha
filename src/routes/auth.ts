@@ -21,7 +21,10 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
     })
     if (!token) return
 
-    await sendMagicLink(email, token)
+    // Fire email async — never block the response on email delivery
+    sendMagicLink(email, token).catch(err =>
+      fastify.log.error({ err }, 'sendMagicLink failed')
+    )
 
     // Always return 200 regardless of whether email exists (no user enumeration)
     return { ok: true }
@@ -142,3 +145,5 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
 }
 
 export default authRoutes
+
+void nanoid  // suppress unused import warning
