@@ -1,7 +1,7 @@
 {
-  "name": "@ah-ha/mcp-server",
+  "name": "@enthropicdata/ah-ha-mcp-server",
   "version": "0.1.0",
-  "description": "MCP server for Ah-Ha — exposes Spaces, Board, Trail, Note, List, Links as Claude tools",
+  "description": "MCP server for Ah-Ha \u2014 exposes your Spaces, Board, Trail, Note, and List as AI tools for Claude Desktop, Cursor, and any MCP client",
   "type": "module",
   "bin": {
     "ah-ha-mcp": "./dist/index.js"
@@ -12,6 +12,26 @@
     "dev": "tsx src/index.ts",
     "prepublishOnly": "npm run build"
   },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "ah-ha",
+    "claude",
+    "ai",
+    "productivity",
+    "kanban",
+    "trail",
+    "adhd",
+    "personal-knowledge"
+  ],
+  "author": "Enthropic Data LLC",
+  "license": "MIT",
+  "homepage": "https://ah-ha.app",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sohocs509/ah-ha.git",
+    "directory": "mcp"
+  },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.0",
     "zod": "^3.23.8"
@@ -21,6 +41,14 @@
     "tsx": "^4.19.0",
     "typescript": "^5.7.2"
   },
-  "files": ["dist"],
-  "engines": { "node": ">=20" }
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
 }
