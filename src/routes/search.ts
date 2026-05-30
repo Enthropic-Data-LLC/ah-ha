@@ -18,23 +18,29 @@ const searchRoutes: FastifyPluginAsync = async (fastify) => {
       const orgId = req.user!.orgId
       const results: unknown[] = []
 
+      // Case-insensitive regex — works without a text index in dev;
+      // production Atlas Search is wired at the reverse-proxy layer.
+      const qRegex = { $regex: params.q, $options: 'i' }
       const mongoFilter: Record<string, unknown> = {
         org_id: orgId,
         deleted_at: { $exists: false },
-        $text: { $search: params.q },
+        $or: [{ title: qRegex }, { notes: qRegex }],
       }
       if (params.space) mongoFilter['space_ref'] = { $regex: params.space }
 
-      // Search board cards + note content in parallel
+      // Search board cards + trail entries in parallel
       const [cards, trailResults] = await Promise.all([
-        // Board cards (title + notes text search)
+        // Board cards (title + notes)
         (!params.type || params.type === 'board')
-          ? fastify.mongo.collection('board_cards').find(mongoFilter, {
-              projection: { score: { $meta: 'textScore' } },
-            }).sort({ score: { $meta: 'textScore' } }).limit(params.limit).toArray().catch(() => [])
+          ? fastify.mongo.collection('board_cards')
+              .find(mongoFilter)
+              .sort({ updated_at: -1 })
+              .limit(params.limit)
+              .toArray()
+              .catch(() => [])
           : Promise.resolve([]),
 
-        // Trail entries full-text (TimescaleDB ILIKE — Atlas Search in prod)
+        // Trail entries (TimescaleDB ILIKE — Atlas Search in prod)
         (!params.type || params.type === 'trail')
           ? getPool().query(
               `SELECT id, space_ref, ts, text, tone, source
@@ -50,7 +56,7 @@ const searchRoutes: FastifyPluginAsync = async (fastify) => {
       ])
 
       for (const c of cards) {
-        results.push({ type: 'card', ref: c['ref'], title: c['title'], space_ref: c['space_ref'], updated_at: c['updated_at'] })
+        results.push({ type: 'board', ref: c['ref'], title: c['title'], space_ref: c['space_ref'], updated_at: c['updated_at'] })
       }
       for (const t of trailResults) {
         results.push({ type: 'trail', ref: `${t['space_ref'] as string}#entry_${t['id'] as string}`, title: (t['text'] as string).slice(0, 100), space_ref: t['space_ref'], ts: t['ts'] })

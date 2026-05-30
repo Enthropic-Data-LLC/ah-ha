@@ -58,7 +58,8 @@ const linksRoutes: FastifyPluginAsync = async (fastify) => {
       if (!req.query.ref) return reply.status(400).send({ error: 'ref required' })
       const maxDepth = Math.min(parseInt(req.query.depth ?? '2', 10), 3)
 
-      const visited = new Set<string>([req.query.ref])
+      const visitedNodes = new Set<string>([req.query.ref])
+      const seenEdges = new Set<string>()
       const frontier = [req.query.ref]
       const allLinks: unknown[] = []
 
@@ -71,18 +72,24 @@ const linksRoutes: FastifyPluginAsync = async (fastify) => {
 
         const nextFrontier: string[] = []
         for (const link of links) {
-          allLinks.push(link)
-          const other = link['from_ref'] === frontier[0] ? link['to_ref'] : link['from_ref']
-          if (!visited.has(other as string)) {
-            visited.add(other as string)
-            nextFrontier.push(other as string)
+          const edgeId = (link['_id'] as ObjectId).toString()
+          if (!seenEdges.has(edgeId)) {
+            seenEdges.add(edgeId)
+            allLinks.push(link)
+          }
+          for (const refKey of ['from_ref', 'to_ref'] as const) {
+            const ref = link[refKey] as string
+            if (!visitedNodes.has(ref)) {
+              visitedNodes.add(ref)
+              nextFrontier.push(ref)
+            }
           }
         }
         frontier.length = 0
         frontier.push(...nextFrontier)
       }
 
-      return { data: allLinks, meta: { nodes: [...visited], depth: maxDepth } }
+      return { data: allLinks, meta: { nodes: [...visitedNodes], depth: maxDepth } }
     }
   )
 
