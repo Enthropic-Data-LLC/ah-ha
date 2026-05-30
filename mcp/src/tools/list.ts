@@ -11,7 +11,8 @@ export function registerListTools(server: McpServer) {
       include_done: z.boolean().optional().describe('Include completed items (default true)'),
     },
     async ({ slug, include_done }) => {
-      const data = await get(`/api/list/${slug}/items`, include_done === false ? { include_done: '0' } : undefined)
+      const query = include_done === false ? { done: 'false' } : undefined
+      const data = await get(`/api/list/${slug}/items`, query)
       return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] }
     },
   )
@@ -22,10 +23,10 @@ export function registerListTools(server: McpServer) {
     {
       slug: z.string().describe('List slug'),
       text: z.string().min(1).max(500).describe('Item text'),
-      notes: z.string().optional().describe('Optional notes or context'),
     },
-    async ({ slug, ...body }) => {
-      const data = await post(`/api/list/${slug}/items`, body)
+    // Backend expects { title } — map from user-friendly param name `text`
+    async ({ slug, text }) => {
+      const data = await post(`/api/list/${slug}/items`, { title: text })
       return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] }
     },
   )
@@ -39,22 +40,22 @@ export function registerListTools(server: McpServer) {
       done: z.boolean().describe('true to check off, false to uncheck'),
     },
     async ({ slug, id, done }) => {
-      const data = await patch(`/api/list/${slug}/items/${id}`, { done })
+      const data = await patch(`/api/list/${slug}/items/${id}/check`, { done })
       return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] }
     },
   )
 
   server.tool(
     'aha_list_update',
-    'Update a list item text or notes',
+    'Update a list item title',
     {
       slug: z.string().describe('List slug'),
       id: z.string().describe('Item ID'),
-      text: z.string().min(1).max(500).optional(),
-      notes: z.string().optional(),
+      text: z.string().min(1).max(500).describe('New item text'),
     },
-    async ({ slug, id, ...body }) => {
-      const data = await patch(`/api/list/${slug}/items/${id}`, body)
+    // Backend expects { title } — map from `text`
+    async ({ slug, id, text }) => {
+      const data = await patch(`/api/list/${slug}/items/${id}`, { title: text })
       return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] }
     },
   )

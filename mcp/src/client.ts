@@ -32,9 +32,9 @@ export async function api<T = unknown>(
   return res.json() as Promise<T>
 }
 
-export const get = <T>(path: string, query?: Record<string, string | number | undefined>) =>
+export const get   = <T>(path: string, query?: Record<string, string | number | undefined>) =>
   api<T>('GET', path, undefined, query)
-
-export const post = <T>(path: string, body: unknown) => api<T>('POST', path, body)
+export const post  = <T>(path: string, body: unknown) => api<T>('POST',  path, body)
+export const put   = <T>(path: string, body: unknown) => api<T>('PUT',   path, body)
 export const patch = <T>(path: string, body: unknown) => api<T>('PATCH', path, body)
-export const del = <T>(path: string) => api<T>('DELETE', path)
+export const del   = <T>(path: string)               => api<T>('DELETE', path)

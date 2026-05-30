@@ -1,6 +1,6 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
-import { get, post } from '../client.js'
+import { get, post, put } from '../client.js'
 
 export function registerNoteTools(server: McpServer) {
   server.tool(
@@ -20,8 +20,9 @@ export function registerNoteTools(server: McpServer) {
       slug: z.string().describe('Note slug'),
       text: z.string().min(1).describe('Markdown text to append'),
     },
+    // Backend expects { content } — map from user-friendly param name `text`
     async ({ slug, text }) => {
-      const data = await post(`/api/note/${slug}/append`, { text })
+      const data = await post(`/api/note/${slug}/append`, { content: text })
       return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] }
     },
   )
@@ -34,7 +35,7 @@ export function registerNoteTools(server: McpServer) {
       body: z.string().describe('New full markdown content'),
     },
     async ({ slug, body }) => {
-      const data = await post(`/api/note/${slug}`, { body })
+      const data = await put(`/api/note/${slug}`, { body })
       return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] }
     },
   )
