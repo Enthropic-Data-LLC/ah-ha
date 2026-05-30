@@ -2,9 +2,16 @@ import type { FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
 import { ObjectId } from 'mongodb'
 import type { SpaceType } from '../types.js'
+import { initial } from '../lib/lexorank.js'
 
 const RESERVED_USERNAMES = new Set(['api', 'auth', 'app', 'settings', 'admin', 'www', 'status', 'docs', 'blog', 'onboarding'])
 const SLUG_RE = /^[a-z0-9-]{3,64}$/
+
+const DEFAULT_BOARD_COLUMNS = [
+  { title: 'To Do',       color: '#94a3b8' },
+  { title: 'In Progress', color: '#818cf8' },
+  { title: 'Done',        color: '#34d399' },
+]
 
 const createSpaceBody = z.object({
   type: z.enum(['board', 'note', 'list', 'trail', 'table']),
@@ -43,8 +50,9 @@ const spacesRoutes: FastifyPluginAsync = async (fastify) => {
     if (existing) return reply.status(409).send({ error: 'Space already exists' })
 
     const now = new Date()
+    const spaceId = new ObjectId()
     const space = {
-      _id: new ObjectId(),
+      _id: spaceId,
       ref,
       slug: body.slug,
       type: body.type,
@@ -58,6 +66,21 @@ const spacesRoutes: FastifyPluginAsync = async (fastify) => {
     }
 
     await fastify.mongo.collection('spaces').insertOne(space)
+
+    // Auto-create default columns for new board spaces
+    if (body.type === 'board') {
+      const base = initial()
+      const cols = DEFAULT_BOARD_COLUMNS.map((col, i) => ({
+        _id: new ObjectId(),
+        space_id: spaceId,
+        org_id: user.orgId,
+        title: col.title,
+        color: col.color,
+        position: base + i,
+        created_at: now,
+      }))
+      await fastify.mongo.collection('board_columns').insertMany(cols)
+    }
 
     reply.status(201)
     return { data: space }

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import type { BoardCard, BoardColumn } from '../lib/types'
 
 interface Props {
@@ -10,11 +10,17 @@ interface Props {
 }
 
 export default function CardModal({ card, columns, onClose, onSave, onDelete }: Props) {
-  const [title, setTitle] = useState(card.title)
-  const [notes, setNotes] = useState(card.notes)
+  const [title, setTitle]       = useState(card.title)
+  const [notes, setNotes]       = useState(card.notes)
   const [priority, setPriority] = useState(card.priority)
-  const [tags, setTags] = useState(card.tags.join(', '))
-  const [saving, setSaving] = useState(false)
+  const [tags, setTags]         = useState(card.tags.join(', '))
+  const [saving, setSaving]     = useState(false)
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
 
   async function save() {
     setSaving(true)
@@ -37,7 +43,10 @@ export default function CardModal({ card, columns, onClose, onSave, onDelete }: 
   const col = columns.find(c => c._id === card.column_id)
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-4" onClick={onClose}>
+    <div
+      className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-4"
+      onClick={onClose}
+    >
       <div
         className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto"
         onClick={e => e.stopPropagation()}
@@ -49,6 +58,7 @@ export default function CardModal({ card, columns, onClose, onSave, onDelete }: 
 
         <div className="p-4 space-y-4">
           <textarea
+            autoFocus
             value={title}
             onChange={e => setTitle(e.target.value)}
             rows={2}
