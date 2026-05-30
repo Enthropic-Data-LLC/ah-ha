@@ -14,14 +14,15 @@ export async function api<T = unknown>(
     }
   }
 
+  const hasBody = body !== undefined
   const res = await fetch(url.toString(), {
     method,
     headers: {
-      'Content-Type': 'application/json',
+      ...(hasBody ? { 'Content-Type': 'application/json' } : {}),
       'Authorization': `Bearer ${API_KEY}`,
       'X-Aha-Source': 'mcp',
     },
-    body: body !== undefined ? JSON.stringify(body) : undefined,
+    body: hasBody ? JSON.stringify(body) : undefined,
   })
 
   if (!res.ok) {
