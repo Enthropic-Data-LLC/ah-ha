@@ -13,10 +13,19 @@ const DEFAULT_BOARD_COLUMNS = [
   { title: 'Done',        color: '#34d399' },
 ]
 
+function slugify(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 60)
+}
+
 const createSpaceBody = z.object({
   type: z.enum(['board', 'note', 'list', 'trail', 'table']),
   name: z.string().min(1).max(100),
-  slug: z.string().regex(SLUG_RE),
+  slug: z.string().regex(SLUG_RE).optional(),
+  description: z.string().max(500).optional(),
 })
 
 const spacesRoutes: FastifyPluginAsync = async (fastify) => {
@@ -44,7 +53,12 @@ const spacesRoutes: FastifyPluginAsync = async (fastify) => {
       return reply.status(400).send({ error: 'Reserved username' })
     }
 
-    const ref = `${user.username}/${body.type}/${body.slug}`
+    const slug = body.slug ?? slugify(body.name)
+    if (!SLUG_RE.test(slug)) {
+      return reply.status(400).send({ error: 'Could not generate valid slug from name — provide one explicitly' })
+    }
+
+    const ref = `${user.username}/${body.type}/${slug}`
 
     const existing = await fastify.mongo.collection('spaces').findOne({ ref })
     if (existing) return reply.status(409).send({ error: 'Space already exists' })
@@ -54,9 +68,10 @@ const spacesRoutes: FastifyPluginAsync = async (fastify) => {
     const space = {
       _id: spaceId,
       ref,
-      slug: body.slug,
+      slug,
       type: body.type,
       name: body.name,
+      description: body.description ?? '',
       owner_id: user.id,
       org_id: user.orgId,
       settings: {},
@@ -94,6 +109,7 @@ const spacesRoutes: FastifyPluginAsync = async (fastify) => {
       const ref = decodeURIComponent(req.params.ref)
       const body = z.object({
         name: z.string().min(1).max(100).optional(),
+        description: z.string().max(500).optional(),
         pinned: z.boolean().optional(),
         settings: z.record(z.unknown()).optional(),
       }).parse(req.body)
@@ -125,14 +141,24 @@ const spacesRoutes: FastifyPluginAsync = async (fastify) => {
     }
   )
 
-  // GET /api/spaces — list my spaces
-  fastify.get('/api/spaces', { preHandler: fastify.authenticate }, async (req) => {
-    const spaces = await fastify.mongo.collection('spaces')
-      .find({ org_id: req.user!.orgId, deleted_at: { $exists: false } })
-      .sort({ pinned: -1, updated_at: -1 })
-      .toArray()
-    return { data: spaces }
-  })
+  // GET /api/spaces — list my spaces, optional ?type= filter
+  fastify.get<{ Querystring: { type?: string } }>(
+    '/api/spaces',
+    { preHandler: fastify.authenticate },
+    async (req) => {
+      const filter: Record<string, unknown> = {
+        org_id: req.user!.orgId,
+        deleted_at: { $exists: false },
+      }
+      if (req.query.type) filter['type'] = req.query.type
+
+      const spaces = await fastify.mongo.collection('spaces')
+        .find(filter)
+        .sort({ pinned: -1, updated_at: -1 })
+        .toArray()
+      return { data: spaces }
+    }
+  )
 }
 
 export default spacesRoutes

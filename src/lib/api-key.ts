@@ -23,13 +23,16 @@ export async function validateApiKey(db: Db, incoming: string) {
   if (!key) return null
   const valid = await argon2.verify(key['hash'] as string, incoming)
   if (!valid) return null
-  return key as {
-    _id: ObjectId
-    user_id: ObjectId
-    org_id: ObjectId
-    plan: string
-    username: string
-    scope: string
-    access: string
+
+  const user = await db.collection('users').findOne({ _id: key['user_id'] as ObjectId })
+
+  return {
+    _id: key['_id'] as ObjectId,
+    user_id: key['user_id'] as ObjectId,
+    org_id: key['org_id'] as ObjectId,
+    plan: (user?.['plan'] as string) ?? 'free',
+    username: (user?.['username'] as string) ?? '',
+    scope: key['scope'] as string,
+    access: key['access'] as string,
   }
 }
