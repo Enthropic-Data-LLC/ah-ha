@@ -3,10 +3,12 @@ import { z } from 'zod'
 import { createHash } from 'crypto'
 import { getPool } from '../lib/timescale.js'
 
+const VALID_SOURCES = new Set(['manual', 'mqtt', 'mcp', 'api', 'n8n', 'presence', 'nfc'])
+
 const appendBody = z.object({
   text: z.string().min(1).max(10000),
   tone: z.enum(['happy', 'sorrow', 'neutral']).default('neutral'),
-  source: z.string().max(100).default('manual'),
+  source: z.string().max(100).optional(),
   tags: z.array(z.string()).default([]),
   meta: z.record(z.unknown()).default({}),
 })
@@ -33,6 +35,10 @@ const trailRoutes: FastifyPluginAsync = async (fastify) => {
     { preHandler: fastify.authenticate },
     async (req, reply) => {
       const body = appendBody.parse(req.body)
+      const xSource = req.headers['x-aha-source']
+      const source = body.source
+        ?? (typeof xSource === 'string' && VALID_SOURCES.has(xSource) ? xSource : 'manual')
+
       const space = await getTrailSpace(fastify, req.params.slug, req.user!.orgId)
       if (!space) return reply.status(404).send({ error: 'Trail not found' })
 
@@ -57,7 +63,7 @@ const trailRoutes: FastifyPluginAsync = async (fastify) => {
           req.user!.orgId.toString(),
           body.text,
           body.tone,
-          body.source,
+          source,
           body.tags,
           JSON.stringify(body.meta),
           req.apiKeyId ? null : req.user!.id.toString(),
@@ -74,7 +80,7 @@ const trailRoutes: FastifyPluginAsync = async (fastify) => {
           ts: entry.ts,
           text: body.text,
           tone: body.tone,
-          source: body.source,
+          source,
           tags: body.tags,
           meta: body.meta,
           prev_hash: prevHash,
