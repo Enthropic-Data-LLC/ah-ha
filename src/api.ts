@@ -11,6 +11,7 @@ import rateLimit from '@fastify/rate-limit'
 import dbPlugin from './plugins/db.js'
 import redisPlugin from './plugins/redis.js'
 import authPlugin from './plugins/auth.js'
+import auditPlugin from './plugins/audit.js'
 
 import authRoutes from './routes/auth.js'
 import spacesRoutes from './routes/spaces.js'
@@ -24,6 +25,8 @@ import keysRoutes from './routes/keys.js'
 import tableRoutes from './routes/table.js'
 import mqttRoutes from './routes/mqtt.js'
 import notificationsRoutes from './routes/notifications.js'
+import auditRoutes from './routes/audit.js'
+import webhooksRoutes from './routes/webhooks.js'
 import { setupTrailSchema, closePool } from './lib/timescale.js'
 
 const isProd = process.env['NODE_ENV'] === 'production'
@@ -46,18 +49,12 @@ await fastify.register(sensible)
 await fastify.register(dbPlugin)
 await fastify.register(redisPlugin)
 await fastify.register(authPlugin)
-
-// ── Rate limiting ──────────────────────────────────────────────────────────
-// Key: org_id for authenticated routes, IP for public routes
-// redis store shared across instances
+await fastify.register(auditPlugin)
 
 await fastify.register(rateLimit, {
-  global: false,   // opt-in per route/group
+  global: false,
   redis: fastify.redis,
-  keyGenerator: (req) => {
-    // Use org_id if authenticated, else IP
-    return req.user?.orgId?.toString() ?? req.ip
-  },
+  keyGenerator: (req) => req.user?.orgId?.toString() ?? req.ip,
   errorResponseBuilder: (_req, context) => ({
     error: 'Too many requests',
     retryAfter: context.after,
@@ -67,15 +64,12 @@ await fastify.register(rateLimit, {
 // Auth endpoints — tight: 10/min by IP
 await fastify.register(async (sub) => {
   sub.addHook('onRoute', (route) => {
-    route.config = {
-      ...route.config,
-      rateLimit: { max: 10, timeWindow: '1 minute', keyGenerator: (req) => req.ip },
-    }
+    route.config = { ...route.config, rateLimit: { max: 10, timeWindow: '1 minute', keyGenerator: (req: { ip: string }) => req.ip } }
   })
   await sub.register(authRoutes)
 })
 
-// Reads — 200/min by org_id
+// All other routes — 200/min by org_id
 await fastify.register(async (sub) => {
   sub.addHook('onRoute', (route) => {
     if (['GET', 'HEAD'].includes(route.method as string)) {
@@ -93,11 +87,12 @@ await fastify.register(async (sub) => {
   await sub.register(tableRoutes)
   await sub.register(mqttRoutes)
   await sub.register(notificationsRoutes)
+  await sub.register(auditRoutes)
+  await sub.register(webhooksRoutes)
 })
 
 fastify.get('/healthz', async () => ({ ok: true, ts: new Date().toISOString() }))
 
-// Serve built frontend — SPA fallback sends index.html for any unmatched GET
 const webDist = join(dirname(fileURLToPath(import.meta.url)), '..', 'web', 'dist')
 await fastify.register(staticFiles, { root: webDist, wildcard: false })
 fastify.setNotFoundHandler(async (_req, reply) => {
@@ -108,7 +103,6 @@ fastify.addHook('onClose', async () => {
   await closePool()
 })
 
-// Set up TimescaleDB schema (non-fatal if TimescaleDB not yet available)
 if (process.env['TIMESCALE_URI']) {
   await setupTrailSchema().catch(err => {
     fastify.log.warn({ err }, 'TimescaleDB setup failed — trail routes will error until available')

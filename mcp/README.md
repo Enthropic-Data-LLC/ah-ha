@@ -2,7 +2,7 @@
 
 MCP server for [Ah-Ha](https://ah-ha.app) — exposes your Spaces as AI tools for Claude Desktop, Cursor, Windsurf, and any MCP-compatible client.
 
-Every space you create in Ah-Ha (Board, Trail, Note, List) is immediately queryable and writable by your AI assistant.
+Every space you create in Ah-Ha (Board, Trail, Note, List, Table) is immediately queryable and writable by your AI assistant.
 
 ## Install
 
@@ -46,7 +46,7 @@ Self-hosted / local:
 | Tool | Description |
 |------|-------------|
 | `aha_spaces_list` | List all your spaces |
-| `aha_spaces_create` | Create a new space |
+| `aha_spaces_create` | Create a new space (board, trail, note, list, table) |
 | `aha_board_list_cards` | List cards in a board |
 | `aha_board_create_card` | Create a card |
 | `aha_board_move_card` | Move a card between columns |
@@ -60,6 +60,15 @@ Self-hosted / local:
 | `aha_list_items` | List items (open + done) |
 | `aha_list_add` | Add an item |
 | `aha_list_check` | Check or uncheck an item |
+| `aha_table_schema` | Get column schema for a Table |
+| `aha_table_rows` | Read all rows, optionally filtered by column value |
+| `aha_table_get_cell` | Read a single cell by row ID + column name |
+| `aha_table_set_cell` | Set a single cell value |
+| `aha_table_clear_cell` | Clear a single cell |
+| `aha_table_add_column` | Add a column (text/number/date/checkbox/select/multiselect) |
+| `aha_table_add_row` | Add a row with cell values keyed by column name |
+| `aha_table_update_row` | Update cells in a row by column name |
+| `aha_table_delete_row` | Soft-delete a row |
 | `aha_links_get` | Get links for a ref |
 | `aha_links_create` | Link two records |
 | `aha_links_traverse` | Traverse the link graph |
