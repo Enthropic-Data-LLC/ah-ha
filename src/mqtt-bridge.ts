@@ -1,9 +1,11 @@
 /**
  * MQTT Bridge — subscribes to broker topics and appends to Trail spaces.
  *
- * Two modes:
- *   Canonical:  aha/trail/{username}/{slug}  payload {text, tone?, tags?, meta?} or plain string
- *   Mapped:     any topic pattern → Trail via mqtt_subscriptions collection
+ * Canonical topics:
+ *   aha/trail/{username}/{slug}     payload {text, tone?, tags?, meta?} or plain string
+ *   aha/presence/{username}/state   payload {state: "home"|"away", location?}
+ *
+ * Mapped:  any topic pattern → Trail via mqtt_subscriptions collection
  *
  * Reloads subscriptions live on Redis pub/sub message: mqtt-bridge:reload
  */
@@ -35,7 +37,6 @@ interface Subscription {
 }
 
 // ── Template engine ────────────────────────────────────────────────────────
-// Supports {{payload.field}}, {{payload.nested.field}}, {{topic.0}}, {{ts}}
 
 function resolvePath(obj: unknown, path: string): string {
   const parts = path.split('.')
@@ -53,11 +54,7 @@ function resolvePath(obj: unknown, path: string): string {
   return cur === undefined || cur === null ? '' : JSON.stringify(cur).replace(/^"|"$/g, '')
 }
 
-function renderTemplate(
-  template: string,
-  payload: unknown,
-  topicParts: string[],
-): string {
+function renderTemplate(template: string, payload: unknown, topicParts: string[]): string {
   return template.replace(/\{\{([^}]+)\}\}/g, (_, expr: string) => {
     const e = expr.trim()
     if (e === 'ts') return new Date().toISOString()
@@ -110,6 +107,9 @@ async function main() {
   await mongoClient.connect()
   const db: Db = mongoClient.db()
 
+  // Redis pub client — for publishing presence events to notifier
+  const redisPub = new Redis(REDIS_URL!)
+
   let subscriptions: Subscription[] = []
 
   async function loadSubscriptions() {
@@ -138,7 +138,6 @@ async function main() {
   redisSub.on('message', async (channel: string) => {
     if (channel === 'mqtt-bridge:reload') {
       await loadSubscriptions()
-      // Re-subscribe to new patterns
       resubscribe()
     }
   })
@@ -151,11 +150,12 @@ async function main() {
   })
 
   function resubscribe() {
-    // Always subscribe to canonical pattern
     client.subscribe('aha/trail/+/+', { qos: 1 }, (err) => {
-      if (err) console.error('[mqtt-bridge] subscribe error (canonical):', err)
+      if (err) console.error('[mqtt-bridge] subscribe error (canonical trail):', err)
     })
-    // Subscribe to all mapped patterns
+    client.subscribe('aha/presence/+/state', { qos: 1 }, (err) => {
+      if (err) console.error('[mqtt-bridge] subscribe error (canonical presence):', err)
+    })
     const patterns = [...new Set(subscriptions.map(s => s.topic_pattern))]
     for (const pattern of patterns) {
       client.subscribe(pattern, { qos: 1 }, (err) => {
@@ -177,14 +177,14 @@ async function main() {
     const topicParts = topic.split('/')
 
     // ── Canonical: aha/trail/{username}/{slug}
-    const canonicalMatch = topic.match(/^aha\/trail\/([^/]+)\/([^/]+)$/)
-    if (canonicalMatch) {
-      const slug = canonicalMatch[2]!
+    const trailMatch = topic.match(/^aha\/trail\/([^/]+)\/([^/]+)$/)
+    if (trailMatch) {
+      const slug = trailMatch[2]!
       let parsed: { text?: string; tone?: string; tags?: string[]; meta?: Record<string, unknown> }
       try { parsed = JSON.parse(raw) } catch { parsed = { text: raw } }
 
       if (!parsed.text?.trim()) {
-        console.warn(`[mqtt-bridge] canonical message on ${topic} has no text, skipping`)
+        console.warn(`[mqtt-bridge] canonical trail on ${topic} has no text, skipping`)
         return
       }
       try {
@@ -198,6 +198,31 @@ async function main() {
         console.log(`[mqtt-bridge] ✓ appended to trail/${slug} from ${topic}`)
       } catch (err) {
         console.error(`[mqtt-bridge] ✗ failed trail/${slug}:`, err)
+      }
+      return
+    }
+
+    // ── Canonical: aha/presence/{username}/state
+    const presenceMatch = topic.match(/^aha\/presence\/([^/]+)\/state$/)
+    if (presenceMatch) {
+      const username = presenceMatch[1]!
+      let parsed: { state?: string; location?: string }
+      try { parsed = JSON.parse(raw) } catch { parsed = {} }
+
+      const state = parsed.state === 'home' ? 'home' : parsed.state === 'away' ? 'away' : null
+      if (!state) {
+        console.warn(`[mqtt-bridge] presence on ${topic} missing valid state, skipping`)
+        return
+      }
+
+      try {
+        await redisPub.publish(
+          `aha:presence:${username}`,
+          JSON.stringify({ state, location: parsed.location, ts: new Date().toISOString() })
+        )
+        console.log(`[mqtt-bridge] ✓ presence ${username} → ${state}`)
+      } catch (err) {
+        console.error(`[mqtt-bridge] ✗ failed presence publish for ${username}:`, err)
       }
       return
     }
@@ -229,6 +254,7 @@ async function main() {
   process.on('SIGTERM', async () => {
     client.end()
     redisSub.disconnect()
+    redisPub.disconnect()
     await mongoClient.close()
     process.exit(0)
   })

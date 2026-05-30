@@ -6,6 +6,7 @@ import staticFiles from '@fastify/static'
 import cookie from '@fastify/cookie'
 import cors from '@fastify/cors'
 import sensible from '@fastify/sensible'
+import rateLimit from '@fastify/rate-limit'
 
 import dbPlugin from './plugins/db.js'
 import redisPlugin from './plugins/redis.js'
@@ -22,6 +23,7 @@ import searchRoutes from './routes/search.js'
 import keysRoutes from './routes/keys.js'
 import tableRoutes from './routes/table.js'
 import mqttRoutes from './routes/mqtt.js'
+import notificationsRoutes from './routes/notifications.js'
 import { setupTrailSchema, closePool } from './lib/timescale.js'
 
 const isProd = process.env['NODE_ENV'] === 'production'
@@ -45,17 +47,53 @@ await fastify.register(dbPlugin)
 await fastify.register(redisPlugin)
 await fastify.register(authPlugin)
 
-await fastify.register(authRoutes)
-await fastify.register(spacesRoutes)
-await fastify.register(boardRoutes)
-await fastify.register(trailRoutes)
-await fastify.register(noteRoutes)
-await fastify.register(listRoutes)
-await fastify.register(linksRoutes)
-await fastify.register(searchRoutes)
-await fastify.register(keysRoutes)
-await fastify.register(tableRoutes)
-await fastify.register(mqttRoutes)
+// ── Rate limiting ──────────────────────────────────────────────────────────
+// Key: org_id for authenticated routes, IP for public routes
+// redis store shared across instances
+
+await fastify.register(rateLimit, {
+  global: false,   // opt-in per route/group
+  redis: fastify.redis,
+  keyGenerator: (req) => {
+    // Use org_id if authenticated, else IP
+    return req.user?.orgId?.toString() ?? req.ip
+  },
+  errorResponseBuilder: (_req, context) => ({
+    error: 'Too many requests',
+    retryAfter: context.after,
+  }),
+})
+
+// Auth endpoints — tight: 10/min by IP
+await fastify.register(async (sub) => {
+  sub.addHook('onRoute', (route) => {
+    route.config = {
+      ...route.config,
+      rateLimit: { max: 10, timeWindow: '1 minute', keyGenerator: (req) => req.ip },
+    }
+  })
+  await sub.register(authRoutes)
+})
+
+// Reads — 200/min by org_id
+await fastify.register(async (sub) => {
+  sub.addHook('onRoute', (route) => {
+    if (['GET', 'HEAD'].includes(route.method as string)) {
+      route.config = { ...route.config, rateLimit: { max: 200, timeWindow: '1 minute' } }
+    }
+  })
+  await sub.register(spacesRoutes)
+  await sub.register(boardRoutes)
+  await sub.register(trailRoutes)
+  await sub.register(noteRoutes)
+  await sub.register(listRoutes)
+  await sub.register(linksRoutes)
+  await sub.register(searchRoutes)
+  await sub.register(keysRoutes)
+  await sub.register(tableRoutes)
+  await sub.register(mqttRoutes)
+  await sub.register(notificationsRoutes)
+})
 
 fastify.get('/healthz', async () => ({ ok: true, ts: new Date().toISOString() }))
 

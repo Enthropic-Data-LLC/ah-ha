@@ -5,9 +5,7 @@ module.exports = {
       script: 'dist/api.js',
       cwd: '/home/pi/projects/ah-ha',
       interpreter: 'node',
-      env: {
-        NODE_ENV: 'development',
-      },
+      env: { NODE_ENV: 'development' },
       log_file: '/home/pi/logs/ah-ha-api.log',
       error_file: '/home/pi/logs/ah-ha-api-error.log',
       time: true,
@@ -24,8 +22,17 @@ module.exports = {
       time: true,
       restart_delay: 5000,
       max_restarts: 10,
-      // Wait for API to be up before bridge starts appending
-      wait_ready: false,
+    },
+    {
+      name: 'ah-ha-notifier',
+      script: 'dist/notifier.js',
+      cwd: '/home/pi/projects/ah-ha',
+      interpreter: 'node',
+      log_file: '/home/pi/logs/ah-ha-notifier.log',
+      error_file: '/home/pi/logs/ah-ha-notifier-error.log',
+      time: true,
+      restart_delay: 5000,
+      max_restarts: 10,
     },
   ],
 }
