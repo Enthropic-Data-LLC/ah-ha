@@ -40,6 +40,8 @@ async function ensureIndexes(db: Db) {
     db.collection('api_keys').createIndex({ user_id: 1, org_id: 1 }),
     db.collection('audit_log').createIndex({ seq: 1 }, { unique: true }),
     db.collection('audit_log').createIndex({ org_id: 1, ts: -1 }),
+    db.collection('table_columns').createIndex({ space_id: 1, position: 1 }),
+    db.collection('table_rows').createIndex({ space_id: 1, org_id: 1, position: 1 }),
   ])
 }
 

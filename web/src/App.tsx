@@ -8,6 +8,7 @@ import BoardPage from './pages/BoardPage'
 import TrailPage from './pages/TrailPage'
 import NotePage from './pages/NotePage'
 import ListPage from './pages/ListPage'
+import TablePage from './pages/TablePage'
 import KeysPage from './pages/KeysPage'
 import SearchPage from './pages/SearchPage'
 
@@ -126,6 +127,7 @@ export default function App() {
     if (type === 'trail') return <Shell><TrailPage slug={slug} /></Shell>
     if (type === 'note')  return <Shell><NotePage slug={slug} /></Shell>
     if (type === 'list')  return <Shell><ListPage slug={slug} /></Shell>
+    if (type === 'table') return <Shell><TablePage slug={slug} /></Shell>
   }
 
   // Legacy redirect: /spaces/:username/:type/:slug → /:username/spaces/:type/:slug

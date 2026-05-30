@@ -2,12 +2,14 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
 import { get, post, patch, del } from '../client.js'
 
+const SPACE_TYPES = ['board', 'trail', 'note', 'list', 'table'] as const
+
 export function registerSpacesTools(server: McpServer) {
   server.tool(
     'aha_spaces_list',
     'List all spaces accessible to the current user, optionally filtered by type',
     {
-      type: z.enum(['board', 'trail', 'note', 'list']).optional().describe('Filter by space type'),
+      type: z.enum(SPACE_TYPES).optional().describe('Filter by space type'),
     },
     async ({ type }) => {
       const data = await get('/api/spaces', type ? { type } : undefined)
@@ -17,9 +19,9 @@ export function registerSpacesTools(server: McpServer) {
 
   server.tool(
     'aha_spaces_create',
-    'Create a new space (board, trail, note, or list)',
+    'Create a new space (board, trail, note, list, or table)',
     {
-      type: z.enum(['board', 'trail', 'note', 'list']).describe('Space type'),
+      type: z.enum(SPACE_TYPES).describe('Space type'),
       name: z.string().min(1).max(100).describe('Display name'),
       slug: z.string().min(1).max(60).optional().describe('URL-safe slug (auto-generated from name if omitted)'),
       description: z.string().optional().describe('Short description'),

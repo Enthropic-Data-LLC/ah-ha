@@ -27,6 +27,7 @@ import { registerListTools } from './tools/list.js'
 import { registerLinksTools } from './tools/links.js'
 import { registerSearchTools } from './tools/search.js'
 import { registerSpacesTools } from './tools/spaces.js'
+import { registerTableTools } from './tools/table.js'
 
 if (!process.env['AHA_API_KEY']) {
   process.stderr.write('AHA_API_KEY is required\n')
@@ -45,6 +46,7 @@ registerNoteTools(server)
 registerListTools(server)
 registerLinksTools(server)
 registerSearchTools(server)
+registerTableTools(server)
 
 const transport = new StdioServerTransport()
 await server.connect(transport)
