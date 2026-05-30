@@ -21,6 +21,7 @@ import linksRoutes from './routes/links.js'
 import searchRoutes from './routes/search.js'
 import keysRoutes from './routes/keys.js'
 import tableRoutes from './routes/table.js'
+import mqttRoutes from './routes/mqtt.js'
 import { setupTrailSchema, closePool } from './lib/timescale.js'
 
 const isProd = process.env['NODE_ENV'] === 'production'
@@ -54,6 +55,7 @@ await fastify.register(linksRoutes)
 await fastify.register(searchRoutes)
 await fastify.register(keysRoutes)
 await fastify.register(tableRoutes)
+await fastify.register(mqttRoutes)
 
 fastify.get('/healthz', async () => ({ ok: true, ts: new Date().toISOString() }))
 

@@ -42,6 +42,8 @@ async function ensureIndexes(db: Db) {
     db.collection('audit_log').createIndex({ org_id: 1, ts: -1 }),
     db.collection('table_columns').createIndex({ space_id: 1, position: 1 }),
     db.collection('table_rows').createIndex({ space_id: 1, org_id: 1, position: 1 }),
+    db.collection('mqtt_subscriptions').createIndex({ org_id: 1, enabled: 1 }),
+    db.collection('mqtt_subscriptions').createIndex({ topic_pattern: 1 }),
   ])
 }
 

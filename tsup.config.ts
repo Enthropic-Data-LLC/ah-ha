@@ -1,7 +1,7 @@
 import { defineConfig } from 'tsup'
 
 export default defineConfig({
-  entry: ['src/api.ts', 'src/ws.ts', 'src/presence.ts'],
+  entry: ['src/api.ts', 'src/ws.ts', 'src/presence.ts', 'src/mqtt-bridge.ts'],
   format: ['esm'],
   target: 'node22',
   outDir: 'dist',
