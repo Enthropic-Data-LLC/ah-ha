@@ -131,13 +131,13 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get('/auth/me', { preHandler: fastify.authenticate }, async (req) => {
     const user = await fastify.mongo.collection('users').findOne({ _id: req.user!.id })
     if (!user) return { error: 'Not found' }
-    return {
+    return { data: {
       id: user._id,
       username: user['username'],
       email: user['email'],
       plan: user['plan'],
       onboarding_completed: user['onboarding_completed'],
-    }
+    }}
   })
 }
 
