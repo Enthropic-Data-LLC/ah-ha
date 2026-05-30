@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { api, ApiError } from '../lib/api'
 
 export default function VerifyPage() {
   const [status, setStatus] = useState<'checking' | 'error'>('checking')
@@ -11,8 +12,14 @@ export default function VerifyPage() {
       setMessage('Missing token.')
       return
     }
-    // The server redirects on verify — just follow it
-    window.location.href = `/auth/verify?token=${token}`
+    api.post<{ ok: boolean; username: string | null }>('/api/auth/verify', { token })
+      .then(res => {
+        window.location.replace(res.username ? `/${res.username}` : '/onboarding')
+      })
+      .catch(err => {
+        setStatus('error')
+        setMessage(err instanceof ApiError ? err.message : 'Sign-in failed. The link may have expired.')
+      })
   }, [])
 
   if (status === 'error') {
@@ -20,8 +27,8 @@ export default function VerifyPage() {
       <div className="min-h-screen flex items-center justify-center px-4">
         <div className="text-center space-y-3">
           <p className="text-red-400">{message}</p>
-          <a href="/" className="text-sm text-slate-400 hover:text-slate-200 underline">
-            Back to sign in
+          <a href="/auth" className="text-sm text-slate-400 hover:text-slate-200 underline">
+            Request a new sign-in link
           </a>
         </div>
       </div>

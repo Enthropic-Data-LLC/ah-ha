@@ -27,9 +27,9 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
     return { ok: true }
   })
 
-  // GET /auth/verify?token= — consume magic link, create session
-  fastify.get<{ Querystring: { token: string } }>('/auth/verify', async (req, reply) => {
-    const { token } = req.query
+  // POST /api/auth/verify — consume magic link, create session, return JSON
+  fastify.post<{ Body: { token: string } }>('/api/auth/verify', async (req, reply) => {
+    const { token } = req.body ?? {}
     if (!token) return reply.status(400).send({ error: 'Missing token' })
 
     const email = await consumeMagicToken(fastify.redis, token)
@@ -40,7 +40,6 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
     let user = await db.collection('users').findOne({ email })
 
     if (!user) {
-      // New user — needs username claim
       const id = new ObjectId()
       await db.collection('users').insertOne({
         _id: id,
@@ -58,7 +57,7 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
 
     const jwt = await signJWT({
       id: user!._id as ObjectId,
-      orgId: user!._id as ObjectId, // org_id = user._id for personal plan
+      orgId: user!._id as ObjectId,
       plan: user!['plan'] as 'free',
       username: user!['username'] as string ?? '',
     })
@@ -71,10 +70,10 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
       maxAge: 30 * 24 * 60 * 60,
     })
 
-    if (!user!['username']) {
-      return reply.redirect('/onboarding')
+    return {
+      ok: true,
+      username: (user!['username'] as string) ?? null,
     }
-    return reply.redirect('/')
   })
 
   // POST /auth/claim-username

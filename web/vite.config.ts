@@ -29,7 +29,6 @@ export default defineConfig({
     proxy: {
       '/api': 'http://localhost:3100',
       '/auth/magic-link': 'http://localhost:3100',
-      '/auth/verify': 'http://localhost:3100',
       '/auth/claim-username': 'http://localhost:3100',
       '/auth/dev-link': 'http://localhost:3100',
       '/auth/logout': 'http://localhost:3100',

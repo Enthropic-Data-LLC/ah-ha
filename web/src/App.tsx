@@ -26,10 +26,11 @@ function Shell({ children }: { children: React.ReactNode }) {
     <div className="flex flex-col min-h-screen">
       <header className="border-b border-slate-800 px-4 h-12 flex items-center justify-between flex-shrink-0">
         <div className="flex items-center gap-5">
-          <a href={user ? `/${user.username}` : '/auth'} className="font-bold text-sm tracking-tight">Ah-Ha</a>
+          <a href={user ? `/${user.username}/spaces` : '/auth'} className="font-bold text-sm tracking-tight">Ah-Ha</a>
           {user && (
             <>
-              {navLink(`/${user.username}`, 'Spaces')}
+              <span className="text-xs font-mono text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded-full">@{user.username}</span>
+              {navLink(`/${user.username}/spaces`, 'Spaces')}
               {navLink('/search', 'Search')}
             </>
           )}
@@ -37,7 +38,6 @@ function Shell({ children }: { children: React.ReactNode }) {
         {user && (
           <div className="flex items-center gap-3">
             {navLink('/keys', 'API Keys')}
-            <span className="text-xs text-slate-600">{user.username}</span>
           </div>
         )}
       </header>
@@ -56,14 +56,14 @@ export default function App() {
   }
   if (path === '/') {
     if (!isLoading && user?.username) {
-      window.location.replace(`/${user.username}`)
+      window.location.replace(`/${user.username}/spaces`)
       return null
     }
     return <LandingPage />
   }
   if (path === '/auth') {
     if (!isLoading && user?.username) {
-      window.location.replace(`/${user.username}`)
+      window.location.replace(`/${user.username}/spaces`)
       return null
     }
     return <AuthPage />
@@ -89,9 +89,9 @@ export default function App() {
     return <OnboardingPage />
   }
 
-  // /spaces → redirect to /:username
+  // /spaces → redirect to /:username/spaces
   if (path === '/spaces') {
-    if (user?.username) { window.location.replace(`/${user.username}`); return null }
+    if (user?.username) { window.location.replace(`/${user.username}/spaces`); return null }
     return <Shell><SpacesPage /></Shell>
   }
 
@@ -105,9 +105,16 @@ export default function App() {
     return <Shell><KeysPage /></Shell>
   }
 
-  // /:username — spaces list (user home)
+  // /:username — redirect to /:username/spaces
   const userHomeMatch = path.match(/^\/([^/]+)$/)
   if (userHomeMatch) {
+    window.location.replace(`/${userHomeMatch[1]}/spaces`)
+    return null
+  }
+
+  // /:username/spaces — spaces list
+  const spacesHomeMatch = path.match(/^\/([^/]+)\/spaces$/)
+  if (spacesHomeMatch) {
     return <Shell><SpacesPage /></Shell>
   }
 
@@ -126,12 +133,6 @@ export default function App() {
   if (legacyMatch) {
     const [, username, type, slug] = legacyMatch
     window.location.replace(`/${username}/spaces/${type}/${slug}`)
-    return null
-  }
-  // Legacy redirect: /:username/spaces → /:username
-  const spacesHomeMatch = path.match(/^\/([^/]+)\/spaces$/)
-  if (spacesHomeMatch) {
-    window.location.replace(`/${spacesHomeMatch[1]}`)
     return null
   }
 
