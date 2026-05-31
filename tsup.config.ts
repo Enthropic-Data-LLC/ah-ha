@@ -7,4 +7,5 @@ export default defineConfig({
   outDir: 'dist',
   sourcemap: true,
   clean: true,
+  external: ["ical.js"],
 })
