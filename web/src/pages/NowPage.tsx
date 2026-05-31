@@ -1,6 +1,7 @@
 import useSWR from 'swr'
 import { fetcher, api } from '../lib/api'
 import { useState } from 'react'
+import { useMe } from '../hooks/useMe'
 
 interface NowCard { _id: string; title: string; due_date?: string; priority?: string; ref?: string; created_at?: string; recurrence?: { archetype: string; streak_count?: number; time_anchor?: string; interval_days?: number; last_completed_at?: string | null } }
 interface NowItem { _id: string; title: string; due_at?: string }
@@ -148,6 +149,8 @@ export default function NowPage() {
     fetcher,
     { refreshInterval: 60_000 }
   )
+  const { user } = useMe()
+  const entitiesHref = user ? `/${user.username}/entities` : '/entities'
   const [deferring, setDeferring] = useState<string | null>(null)
 
   const now = data?.data
@@ -185,7 +188,7 @@ export default function NowPage() {
           {now.context.presence_entity ? (
             <>
               <span className="text-slate-700">·</span>
-              <a href="/entities" className="flex items-center gap-1 text-xs text-indigo-400 hover:text-indigo-300 transition">
+              <a href={entitiesHref} className="flex items-center gap-1 text-xs text-indigo-400 hover:text-indigo-300 transition">
                 <span>{now.context.presence_entity.icon}</span>
                 <span>{now.context.presence_entity.name}</span>
               </a>
@@ -199,7 +202,7 @@ export default function NowPage() {
         </div>
         <div className="flex items-center gap-3">
           {!now.context.presence_entity && (
-            <a href="/entities" className="text-xs text-slate-700 hover:text-indigo-400 transition">
+            <a href={entitiesHref} className="text-xs text-slate-700 hover:text-indigo-400 transition">
               📍 Check in
             </a>
           )}

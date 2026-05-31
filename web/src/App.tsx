@@ -65,7 +65,8 @@ function Shell({ children }: { children: React.ReactNode }) {
     </a>
   )
 
-  const spacesHref = user ? `/${user.username}/spaces` : '/auth'
+  const spacesHref  = user ? `/${user.username}/spaces`   : '/auth'
+  const entitiesHref = user ? `/${user.username}/entities` : '/auth'
 
   return (
     <div className="flex flex-col min-h-screen">
@@ -78,7 +79,7 @@ function Shell({ children }: { children: React.ReactNode }) {
               <span className="text-xs font-mono text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded-full hidden sm:inline">@{user.username}</span>
               {navLink('/now', 'Now')}
               {navLink(spacesHref, 'Spaces')}
-              {navLink('/entities', 'Entities')}
+              {navLink(entitiesHref, 'Entities')}
               {navLink('/search', 'Search')}
               {navLink('/audit', 'Audit')}
             </>
@@ -173,8 +174,9 @@ export default function App() {
     return <Shell><NowPage /></Shell>
   }
 
-  // Entities
-  if (path === '/entities') {
+  // /:username/entities
+  const entitiesMatch = path.match(/^\/([^/]+)\/entities$/)
+  if (entitiesMatch) {
     return <Shell><EntityPage /></Shell>
   }
 
