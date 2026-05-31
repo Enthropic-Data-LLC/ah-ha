@@ -65,7 +65,7 @@ export default function AuthPage() {
     <div className="min-h-screen flex items-center justify-center px-4">
       <div className="max-w-sm w-full space-y-8">
         <div className="text-center space-y-2">
-          <h1 className="text-3xl font-bold tracking-tight">Ah-Ha</h1>
+          <h1 className="text-3xl font-bold tracking-tight">aH-Ha</h1>
           <p className="text-slate-400 text-sm">Your personal knowledge space</p>
         </div>
 

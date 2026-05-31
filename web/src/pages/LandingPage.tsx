@@ -25,7 +25,7 @@ export default function LandingPage() {
   return (
     <div className="min-h-screen flex flex-col bg-slate-950 text-slate-100">
       <header className="border-b border-slate-800 px-6 h-14 flex items-center justify-between">
-        <span className="font-bold tracking-tight">Ah-Ha</span>
+        <span className="font-bold tracking-tight">aH-Ha</span>
         <a
           href="/auth"
           className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-sm font-medium rounded-lg transition"
@@ -66,7 +66,7 @@ export default function LandingPage() {
       </main>
 
       <footer className="border-t border-slate-800 px-6 py-4 text-center text-xs text-slate-600">
-        Ah-Ha — open core personal knowledge platform
+        aH-Ha — open core personal knowledge platform
       </footer>
     </div>
   )

@@ -27,7 +27,7 @@ function Shell({ children }: { children: React.ReactNode }) {
     <div className="flex flex-col min-h-screen">
       <header className="border-b border-slate-800 px-4 h-12 flex items-center justify-between flex-shrink-0">
         <div className="flex items-center gap-5">
-          <a href={user ? `/${user.username}/spaces` : '/auth'} className="font-bold text-sm tracking-tight">Ah-Ha</a>
+          <a href={user ? `/${user.username}/spaces` : '/auth'} className="font-bold text-sm tracking-tight">aH-Ha</a>
           {user && (
             <>
               <span className="text-xs font-mono text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded-full">@{user.username}</span>
