@@ -346,5 +346,6 @@ export default function TrailPage({ slug }: { slug: string }) {
         deleting={deleting}
       />
     )}
+    </>
   )
 }
