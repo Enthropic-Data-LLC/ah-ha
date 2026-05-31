@@ -14,6 +14,7 @@ import SearchPage from './pages/SearchPage'
 import AuditPage from './pages/AuditPage'
 import MqttPage from './pages/MqttPage'
 import WebhooksPage from './pages/WebhooksPage'
+import CalendarPage from './pages/CalendarPage'
 import NotificationsPage from './pages/NotificationsPage'
 import SharePage from './pages/SharePage'
 import NowPage from './pages/NowPage'
@@ -88,6 +89,7 @@ function Shell({ children }: { children: React.ReactNode }) {
         {user && (
           <div className="flex items-center gap-3">
             {navLink('/keys', 'API Keys')}
+            {navLink('/calendar', 'Calendar')}
             {navLink('/settings', 'Settings')}
           </div>
         )}
@@ -188,6 +190,11 @@ export default function App() {
   // Webhooks
   if (path === '/webhooks') {
     return <Shell><WebhooksPage /></Shell>
+  }
+
+  // Calendar sources
+  if (path === '/calendar') {
+    return <Shell><CalendarPage /></Shell>
   }
 
   // Notification settings

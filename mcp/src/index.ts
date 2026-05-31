@@ -30,6 +30,7 @@ import { registerSpacesTools } from './tools/spaces.js'
 import { registerTableTools } from './tools/table.js'
 import { registerWebhooksTools } from './tools/webhooks.js'
 import { registerNotificationsTools } from './tools/notifications.js'
+import { registerCalendarTools } from './tools/calendar.js'
 
 if (!process.env['AHA_API_KEY']) {
   process.stderr.write('AHA_API_KEY is required\n')
@@ -51,6 +52,7 @@ registerSearchTools(server)
 registerTableTools(server)
 registerWebhooksTools(server)
 registerNotificationsTools(server)
+registerCalendarTools(server)
 
 const transport = new StdioServerTransport()
 await server.connect(transport)
