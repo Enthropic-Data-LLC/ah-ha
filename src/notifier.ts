@@ -307,11 +307,11 @@ async function main() {
       const channels = (pref?.['channels'] as { telegram_chat_id?: string; email?: string } | undefined) ?? {}
 
       const daysOver = Math.floor((now.getTime() - (card['due_date'] as Date).getTime()) / 86400000)
-      const msg = `⚠️ Overdue ${daysOver > 1 ? daysOver + ' days' : 'since yesterday'}: ${card['title'] as string}`
+      const msg = `⏰ Still on your list: "${card['title'] as string}" — ${daysOver > 1 ? daysOver + ' days since the target date' : 'since yesterday'}`
 
       if (channels.telegram_chat_id || channels.email) {
         await postToNodeRed('date_engine', user['username'] as string, { message: msg, telegram_chat_id: channels.telegram_chat_id })
-        if (channels.email) await sendEmail(channels.email, `Overdue: ${card['title'] as string}`, msg)
+        if (channels.email) await sendEmail(channels.email, `Still on your list: ${card['title'] as string}`, msg)
       }
       await db.collection('board_cards').updateOne({ _id: card['_id'] }, { $set: { overdue_notified: true } })
     }
@@ -333,13 +333,13 @@ async function main() {
         const channels = (pref?.['channels'] as { telegram_chat_id?: string; email?: string } | undefined) ?? {}
 
         const suffix = level.days === 7
-          ? '\n\nThis has been open a week. Worth asking: is it still relevant?'
+          ? '\n\nThis one has been sitting a week — still relevant? No shame in letting it go.'
           : ''
-        const msg = `🔴 ${level.days} days overdue: ${card['title'] as string}${suffix}`
+        const msg = `📌 Still waiting on you: "${card['title'] as string}" — ${level.days} days since the target${suffix}`
 
         if (channels.telegram_chat_id || channels.email) {
           await postToNodeRed('date_engine', user['username'] as string, { message: msg, telegram_chat_id: channels.telegram_chat_id })
-          if (channels.email) await sendEmail(channels.email, `${level.days} days overdue: ${card['title'] as string}`, msg)
+          if (channels.email) await sendEmail(channels.email, `Still waiting: ${card['title'] as string}`, msg)
         }
         await db.collection('board_cards').updateOne({ _id: card['_id'] }, { $set: { [level.flag]: true } })
       }

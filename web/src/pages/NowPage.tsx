@@ -37,7 +37,7 @@ const TONE_COLOR: Record<string, string> = {
 function DaysOverdue({ due }: { due: string }) {
   const days = Math.floor((Date.now() - new Date(due).getTime()) / 86400000)
   if (days === 0) return <span className="text-xs text-amber-400">due today</span>
-  return <span className="text-xs text-red-400">{days}d overdue</span>
+  return <span className="text-xs text-amber-500">{days}d past due</span>
 }
 
 function CardRow({ card, onDefer, onComplete }: {
@@ -224,13 +224,13 @@ export default function NowPage() {
       {/* Empty state */}
       {isEmpty && (
         <div className="text-center py-16 space-y-2">
-          <p className="text-slate-400 text-lg">Nothing urgent right now.</p>
+          <p className="text-slate-400 text-lg">You're clear right now.</p>
           <p className="text-slate-600 text-sm">Enjoy it.</p>
         </div>
       )}
 
       {/* Urgent */}
-      <Section title="Overdue" count={now.urgent.length} accent="text-red-500">
+      <Section title="Needs attention" count={now.urgent.length} accent="text-amber-500">
         {now.urgent.map(c => <CardRow key={c._id} card={c} onDefer={snooze} onComplete={complete} />)}
       </Section>
 

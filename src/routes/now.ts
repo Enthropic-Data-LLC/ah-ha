@@ -167,7 +167,7 @@ const nowRoutes: FastifyPluginAsync = async (fastify) => {
               max_tokens: 100,
               messages: [{
                 role: 'user',
-                content: `Write one plain, direct sentence (no fluff, no "Hey!") summarizing what matters right now: ${context}. Time of day: ${tod}.`
+                content: `Write one plain, supportive sentence (no fluff, no "Hey!", no alarming language) that helps the person focus on what matters right now: ${context}. Time of day: ${tod}. Tone: calm, encouraging, never shame-y or urgent.`
               }]
             })
           })

@@ -122,7 +122,7 @@ export default function CardModal({ card, columns, onClose, onSave, onDelete }: 
         <div className="p-4 border-b border-slate-800 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <span className="text-xs text-slate-500">{col?.title}</span>
-            {isOverdue && <span className="text-xs text-red-400 bg-red-950/40 px-1.5 py-0.5 rounded">overdue</span>}
+            {isOverdue && <span className="text-xs text-amber-400 bg-amber-950/40 px-1.5 py-0.5 rounded">past due</span>}
             {isDeferredActive && <span className="text-xs text-amber-400 bg-amber-950/40 px-1.5 py-0.5 rounded">snoozed</span>}
             {card.recurrence?.archetype === 'habit' && card.recurrence.streak_count && card.recurrence.streak_count > 2 && (
               <span className="text-xs text-orange-400">🔥 {card.recurrence.streak_count}</span>

@@ -45,7 +45,7 @@ function formatDueLabel(card: BoardCard, state: string): string | null {
 
   if (state === 'overdue') {
     const days = Math.floor((startOfToday.getTime() - due.getTime()) / 86400000)
-    return days === 1 ? 'yesterday' : `${days}d overdue`
+    return days === 1 ? 'since yesterday' : `${days}d past due`
   }
   if (state === 'today') return 'today'
   if (state === 'week') return due.toLocaleDateString(undefined, { weekday: 'short' })
@@ -143,7 +143,7 @@ export default function BoardCardItem({ card, index, onClick, onDefer, onPickDat
           {dueLabel && (
             <div className="flex items-center gap-1.5">
               <span className={`text-xs font-medium ${t.label}`}>{dueLabel}</span>
-              {timing === 'overdue' && <span className="text-red-600 text-xs">●</span>}
+              {timing === 'overdue' && <span className="text-amber-600 text-xs">●</span>}
             </div>
           )}
 
