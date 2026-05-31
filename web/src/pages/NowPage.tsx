@@ -2,6 +2,8 @@ import useSWR from 'swr'
 import { fetcher, api } from '../lib/api'
 import { useState } from 'react'
 import { useMe } from '../hooks/useMe'
+import CardModal from '../components/CardModal'
+import type { BoardCard, BoardColumn } from '../lib/types'
 
 interface NowCard { _id: string; title: string; due_date?: string; priority?: string; ref?: string; created_at?: string; recurrence?: { archetype: string; streak_count?: number; time_anchor?: string; interval_days?: number; last_completed_at?: string | null } }
 interface NowItem { _id: string; title: string; due_at?: string }
@@ -40,16 +42,20 @@ function DaysOverdue({ due }: { due: string }) {
   return <span className="text-xs text-amber-500">{days}d past due</span>
 }
 
-function CardRow({ card, onDefer, onComplete }: {
+function CardRow({ card, onDefer, onComplete, onOpen }: {
   card: NowCard
   onDefer: (id: string) => void
   onComplete: (id: string) => void
+  onOpen: (ref: string, id: string) => void
 }) {
   const isRecurring = !!card.recurrence
   return (
     <div className="flex items-center justify-between gap-3 py-2.5 px-3 rounded-lg hover:bg-slate-800/50 transition group">
       <div className="flex-1 min-w-0">
-        <p className="text-sm text-slate-200 truncate">{card.title}</p>
+        <button
+          onClick={() => card.ref && onOpen(card.ref, card._id)}
+          className="text-sm text-slate-200 truncate text-left w-full hover:text-indigo-300 transition"
+        >{card.title}</button>
         <div className="flex items-center gap-2 mt-0.5">
           {card.due_date && <DaysOverdue due={card.due_date} />}
           {card.recurrence?.archetype === 'habit' && (card.recurrence.streak_count ?? 0) > 2 && (
@@ -86,10 +92,11 @@ function daysSince(dateStr: string | null | undefined, fallback: string | undefi
   return Math.floor((Date.now() - base.getTime()) / 86400000)
 }
 
-function NudgeRow({ card, onDefer, onComplete }: {
+function NudgeRow({ card, onDefer, onComplete, onOpen }: {
   card: NowCard
   onDefer: (id: string) => void
   onComplete: (id: string) => void
+  onOpen: (ref: string, id: string) => void
 }) {
   const rec = card.recurrence
   const days = daysSince(rec?.last_completed_at, card.created_at)
@@ -105,7 +112,10 @@ function NudgeRow({ card, onDefer, onComplete }: {
   return (
     <div className="flex items-center gap-3 py-2.5 px-3 rounded-lg hover:bg-slate-800/30 transition group">
       <div className="flex-1 min-w-0">
-        <p className="text-sm text-slate-400 truncate">{card.title}</p>
+        <button
+          onClick={() => card.ref && onOpen(card.ref, card._id)}
+          className="text-sm text-slate-400 truncate text-left w-full hover:text-indigo-300 transition"
+        >{card.title}</button>
         <div className="flex items-center gap-2 mt-1">
           <div className="w-16 h-0.5 bg-slate-800 rounded-full overflow-hidden">
             <div className="h-full bg-slate-600 rounded-full transition-all" style={{ width: `${pct * 100}%` }} />
@@ -152,6 +162,35 @@ export default function NowPage() {
   const { user } = useMe()
   const entitiesHref = user ? `/${user.username}/entities` : '/entities'
   const [deferring, setDeferring] = useState<string | null>(null)
+  const [activeCardId, setActiveCardId] = useState<string | null>(null)
+  const [activeBoardSlug, setActiveBoardSlug] = useState<string | null>(null)
+
+  const { data: activeCardData, mutate: mutateCard } = useSWR<{ data: BoardCard }>(
+    activeCardId ? `/api/cards/${activeCardId}` : null, fetcher
+  )
+  const { data: activeColsData } = useSWR<{ data: BoardColumn[] }>(
+    activeBoardSlug ? `/api/board/${activeBoardSlug}/columns` : null, fetcher
+  )
+
+  function openCard(ref: string, id: string) {
+    const slug = ref.split('/')[2]?.split('#')[0] ?? null
+    setActiveBoardSlug(slug)
+    setActiveCardId(id)
+  }
+
+  async function saveActiveCard(id: string, updates: Partial<BoardCard>) {
+    if (!activeBoardSlug) return
+    await api.patch(`/api/board/${activeBoardSlug}/cards/${id}`, updates)
+    await mutateCard()
+    await mutate()
+  }
+
+  async function deleteActiveCard(id: string) {
+    if (!activeBoardSlug) return
+    await api.delete(`/api/board/${activeBoardSlug}/cards/${id}`)
+    setActiveCardId(null)
+    await mutate()
+  }
 
   const now = data?.data
 
@@ -180,6 +219,7 @@ export default function NowPage() {
   const isEmpty = total === 0
 
   return (
+    <>
     <div className="max-w-lg mx-auto px-4 py-8 space-y-6">
       {/* Context header */}
       <div className="flex items-center justify-between">
@@ -231,17 +271,17 @@ export default function NowPage() {
 
       {/* Urgent */}
       <Section title="Needs attention" count={now.urgent.length} accent="text-amber-500">
-        {now.urgent.map(c => <CardRow key={c._id} card={c} onDefer={snooze} onComplete={complete} />)}
+        {now.urgent.map(c => <CardRow key={c._id} card={c} onDefer={snooze} onComplete={complete} onOpen={openCard} />)}
       </Section>
 
       {/* Habits now */}
       <Section title="Now" count={now.habits.length} accent="text-indigo-400">
-        {now.habits.map(c => <CardRow key={c._id} card={c} onDefer={snooze} onComplete={complete} />)}
+        {now.habits.map(c => <CardRow key={c._id} card={c} onDefer={snooze} onComplete={complete} onOpen={openCard} />)}
       </Section>
 
       {/* Due today */}
       <Section title="Today" count={now.due_today.length} accent="text-slate-400">
-        {now.due_today.map(c => <CardRow key={c._id} card={c} onDefer={snooze} onComplete={complete} />)}
+        {now.due_today.map(c => <CardRow key={c._id} card={c} onDefer={snooze} onComplete={complete} onOpen={openCard} />)}
       </Section>
 
       {/* Location context cards */}
@@ -251,13 +291,13 @@ export default function NowPage() {
           count={now.location_context.length}
           accent="text-indigo-400"
         >
-          {now.location_context.map(c => <CardRow key={c._id} card={c} onDefer={snooze} onComplete={complete} />)}
+          {now.location_context.map(c => <CardRow key={c._id} card={c} onDefer={snooze} onComplete={complete} onOpen={openCard} />)}
         </Section>
       )}
 
       {/* Resurfaced */}
       <Section title="Just resurfaced" count={now.resurfaced.length} accent="text-amber-500">
-        {now.resurfaced.map(c => <CardRow key={c._id} card={c} onDefer={snooze} onComplete={complete} />)}
+        {now.resurfaced.map(c => <CardRow key={c._id} card={c} onDefer={snooze} onComplete={complete} onOpen={openCard} />)}
       </Section>
 
       {/* List items */}
@@ -275,7 +315,7 @@ export default function NowPage() {
         <div className="space-y-1 border-t border-slate-800/60 pt-4">
           <span className="text-xs font-mono uppercase tracking-wider text-slate-600 px-1">It's been a while</span>
           {now.nudges.map(c => (
-            <NudgeRow key={c._id} card={c} onDefer={snooze} onComplete={complete} />
+            <NudgeRow key={c._id} card={c} onDefer={snooze} onComplete={complete} onOpen={openCard} />
           ))}
         </div>
       )}
@@ -285,5 +325,17 @@ export default function NowPage() {
         {deferring && ' · snoozed'}
       </p>
     </div>
+
+    {/* Card detail modal — opened by clicking any card title */}
+    {activeCardId && activeCardData?.data && activeColsData?.data && (
+      <CardModal
+        card={activeCardData.data}
+        columns={activeColsData.data}
+        onClose={() => setActiveCardId(null)}
+        onSave={saveActiveCard}
+        onDelete={deleteActiveCard}
+      />
+    )}
+    </>
   )
 }

@@ -150,6 +150,22 @@ const recurrenceRoutes: FastifyPluginAsync = async (fastify) => {
       return { ok: true }
     }
   )
+
+  // GET /api/cards/:id — fetch a single card by ID (no board slug needed)
+  fastify.get<{ Params: { id: string } }>(
+    '/api/cards/:id',
+    { preHandler: fastify.authenticate },
+    async (req, reply) => {
+      const cardId = new ObjectId(req.params.id)
+      const card = await fastify.mongo.collection('board_cards').findOne({
+        _id: cardId,
+        org_id: req.user!.orgId,
+        deleted_at: { $exists: false },
+      })
+      if (!card) return reply.status(404).send({ error: 'Not found' })
+      return { data: card }
+    }
+  )
 }
 
 export default recurrenceRoutes
