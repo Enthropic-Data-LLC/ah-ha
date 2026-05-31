@@ -28,6 +28,8 @@ import { registerLinksTools } from './tools/links.js'
 import { registerSearchTools } from './tools/search.js'
 import { registerSpacesTools } from './tools/spaces.js'
 import { registerTableTools } from './tools/table.js'
+import { registerWebhooksTools } from './tools/webhooks.js'
+import { registerNotificationsTools } from './tools/notifications.js'
 
 if (!process.env['AHA_API_KEY']) {
   process.stderr.write('AHA_API_KEY is required\n')
@@ -36,7 +38,7 @@ if (!process.env['AHA_API_KEY']) {
 
 const server = new McpServer({
   name: 'ah-ha',
-  version: '0.1.0',
+  version: '0.2.1',
 })
 
 registerSpacesTools(server)
@@ -47,6 +49,8 @@ registerListTools(server)
 registerLinksTools(server)
 registerSearchTools(server)
 registerTableTools(server)
+registerWebhooksTools(server)
+registerNotificationsTools(server)
 
 const transport = new StdioServerTransport()
 await server.connect(transport)

@@ -1,8 +1,10 @@
 const BASE = import.meta.env['VITE_API_URL'] ?? ''
 
 export class ApiError extends Error {
-  constructor(public status: number, message: string) {
+  retryAfter?: string
+  constructor(public status: number, message: string, retryAfter?: string) {
     super(message)
+    this.retryAfter = retryAfter
   }
 }
 
@@ -15,6 +17,13 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   })
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText }))
+    if (res.status === 429) {
+      const retryAfter = err.retryAfter ?? res.headers.get('Retry-After') ?? undefined
+      const msg = retryAfter
+        ? `Too many requests — try again in ${retryAfter}`
+        : 'Too many requests — please slow down'
+      throw new ApiError(res.status, msg, retryAfter)
+    }
     throw new ApiError(res.status, err.error ?? res.statusText)
   }
   return res.json()

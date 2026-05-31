@@ -30,6 +30,8 @@ export default function SpacesPage() {
   const [type, setType] = useState<Space['type']>('board')
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState(false)
 
   async function createSpace(e: React.FormEvent) {
     e.preventDefault()
@@ -43,9 +45,23 @@ export default function SpacesPage() {
       setCreating(false)
       await mutate()
     } catch (err: any) {
-      setError(err?.response?.data?.error ?? 'Failed to create space')
+      setError(err?.message ?? 'Failed to create space')
     } finally {
       setSubmitting(false)
+    }
+  }
+
+  async function deleteSpace(ref: string) {
+    setDeleting(true)
+    try {
+      await api.delete(`/api/spaces/${encodeURIComponent(ref)}`)
+      setDeleteConfirm(null)
+      await mutate()
+    } catch (err: any) {
+      setError(err?.message ?? 'Failed to delete space')
+      setDeleteConfirm(null)
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -106,6 +122,10 @@ export default function SpacesPage() {
         </form>
       )}
 
+      {error && !creating && (
+        <p className="text-sm text-red-400">{error}</p>
+      )}
+
       {spaces.length === 0 && !creating ? (
         <div className="text-center py-16 space-y-3">
           <p className="text-slate-500 text-sm">No spaces yet.</p>
@@ -116,20 +136,57 @@ export default function SpacesPage() {
       ) : (
         <div className="space-y-2">
           {spaces.map(space => (
-            <a
-              key={space._id}
-              href={`/${user?.username ?? space.ref.split('/')[0]}/spaces/${space.type}/${space.slug}`}
-              className="flex items-center gap-3 px-4 py-3 bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-xl transition group"
-            >
-              <span className="text-xl">{TYPE_ICONS[space.type]}</span>
-              <div className="flex-1 min-w-0">
-                <p className="font-medium text-sm truncate">{space.name}</p>
-                {space.description && (
-                  <p className="text-xs text-slate-500 truncate">{space.description}</p>
-                )}
-              </div>
-              <span className="text-xs text-slate-600 group-hover:text-slate-400 transition">{TYPE_LABELS[space.type]}</span>
-            </a>
+            <div key={space._id}>
+              {deleteConfirm === space.ref ? (
+                <div className="flex items-center gap-3 px-4 py-3 bg-red-950 border border-red-800 rounded-xl">
+                  <span className="text-xl">{TYPE_ICONS[space.type]}</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-red-300">Delete "{space.name}"?</p>
+                    <p className="text-xs text-red-500/80">This cannot be undone.</p>
+                  </div>
+                  <div className="flex gap-2 shrink-0">
+                    <button
+                      onClick={() => setDeleteConfirm(null)}
+                      className="px-3 py-1.5 text-sm text-slate-400 hover:text-slate-200 transition"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={() => deleteSpace(space.ref)}
+                      disabled={deleting}
+                      className="px-3 py-1.5 bg-red-700 hover:bg-red-600 disabled:opacity-50 text-sm font-medium rounded-lg transition"
+                    >
+                      {deleting ? 'Deleting…' : 'Delete'}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center gap-1 bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-xl transition group">
+                  <a
+                    href={`/${user?.username ?? space.ref.split('/')[0]}/spaces/${space.type}/${space.slug}`}
+                    className="flex items-center gap-3 flex-1 min-w-0 px-4 py-3"
+                  >
+                    <span className="text-xl">{TYPE_ICONS[space.type]}</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-sm truncate">{space.name}</p>
+                      {space.description && (
+                        <p className="text-xs text-slate-500 truncate">{space.description}</p>
+                      )}
+                    </div>
+                    <span className="text-xs text-slate-600 group-hover:text-slate-400 transition">{TYPE_LABELS[space.type]}</span>
+                  </a>
+                  <button
+                    onClick={() => { setError(''); setDeleteConfirm(space.ref) }}
+                    className="opacity-0 group-hover:opacity-100 mr-2 p-1.5 text-slate-600 hover:text-red-400 transition rounded shrink-0"
+                    title="Delete space"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
+                    </svg>
+                  </button>
+                </div>
+              )}
+            </div>
           ))}
         </div>
       )}
