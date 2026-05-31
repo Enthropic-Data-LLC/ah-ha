@@ -67,4 +67,31 @@ export interface BoardCard {
   escalated_day_1?: boolean
   escalated_day_3?: boolean
   escalated_day_7?: boolean
+  // location context
+  contexts?: string[]
+}
+
+export interface LocationSignature {
+  kind: 'gps' | 'network' | 'bluetooth_le'
+  // gps
+  lat?: number
+  lng?: number
+  radius_m?: number
+  // network
+  external_ip?: string
+  // bluetooth_le
+  local_name?: string
+  uuid?: string
+}
+
+export interface Entity {
+  _id: string
+  name: string
+  icon: string
+  entity_type: 'place' | 'person'
+  color: string
+  signatures: LocationSignature[]
+  presence_token: string
+  created_at: string
+  updated_at: string
 }

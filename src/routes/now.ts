@@ -1,4 +1,5 @@
 import type { FastifyPluginAsync } from 'fastify'
+import { ObjectId } from 'mongodb'
 import { getPool } from '../lib/timescale.js'
 
 const TIME_OF_DAY = (h: number) => {
@@ -7,6 +8,8 @@ const TIME_OF_DAY = (h: number) => {
   if (h >= 17 && h < 21) return 'evening'
   return 'night'
 }
+
+const OID_RE = /^[0-9a-f]{24}$/i
 
 const nowRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get<{ Querystring: { presence?: string; tz?: string } }>(
@@ -21,14 +24,23 @@ const nowRoutes: FastifyPluginAsync = async (fastify) => {
       const tod = TIME_OF_DAY(localHour)
 
       // Presence: query param override > Redis
-      let presence = req.query.presence as string | undefined
-      if (!presence) {
+      let presenceRaw = req.query.presence as string | undefined
+      if (!presenceRaw) {
         const user = await fastify.mongo.collection('users').findOne({ _id: req.user!.id })
         const username = user?.['username'] as string | undefined
         if (username) {
           const raw = await fastify.redis.get(`aha:presence:state:${username}`)
-          presence = raw ?? 'unknown'
+          presenceRaw = raw ?? 'unknown'
         }
+      }
+
+      // Resolve entity if presence looks like an ObjectId
+      let presenceEntity: { _id: string; name: string; icon: string } | null = null
+      if (presenceRaw && OID_RE.test(presenceRaw)) {
+        try {
+          const ent = await fastify.mongo.collection('entities').findOne({ _id: new ObjectId(presenceRaw) })
+          if (ent) presenceEntity = { _id: ent['_id'].toString(), name: ent['name'] as string, icon: ent['icon'] as string }
+        } catch { /* entity not found */ }
       }
 
       const orgId = req.user!.orgId
@@ -96,6 +108,19 @@ const nowRoutes: FastifyPluginAsync = async (fastify) => {
         $or: [{ defer_until: null }, { defer_until: { $lte: now } }],
       }).limit(5).toArray()
 
+      // Location-context cards — only when checked in to an entity
+      let locationCards: Array<{ _id: string; title: string; ref?: string }> = []
+      if (presenceRaw && OID_RE.test(presenceRaw)) {
+        const raw = await fastify.mongo.collection('board_cards').find({
+          org_id: orgId,
+          done: { $ne: true },
+          deleted_at: { $exists: false },
+          contexts: presenceRaw,
+          $or: [{ defer_until: null }, { defer_until: { $lte: now } }],
+        }).limit(8).toArray()
+        locationCards = raw.map(c => ({ _id: c['_id'].toString(), title: c['title'] as string, ref: c['ref'] as string | undefined }))
+      }
+
       // Trail pulse — last entry tone
       let trailPulse: { recent_tone: string; total_today: number } | null = null
       try {
@@ -115,7 +140,7 @@ const nowRoutes: FastifyPluginAsync = async (fastify) => {
         }
       } catch { /* trail unavailable */ }
 
-      // AI briefing — user BYOK or server key
+      // AI briefing
       let briefing: string | null = null
       const settings = await fastify.mongo.collection('user_settings').findOne({ user_id: req.user!.id })
       const apiKey = (settings?.['anthropic_api_key'] as string | null) ?? process.env['ANTHROPIC_API_KEY']
@@ -126,6 +151,7 @@ const nowRoutes: FastifyPluginAsync = async (fastify) => {
             urgent.length > 0 ? `${urgent.length} overdue: ${urgent.map(c => c['title']).join(', ')}` : '',
             dueToday.length > 0 ? `${dueToday.length} due today: ${dueToday.map(c => c['title']).join(', ')}` : '',
             habits.length > 0 ? `habits now: ${habits.map(c => `${c['title']} (streak: ${(c['recurrence'] as Record<string, unknown>)?.['streak_count'] ?? 0})`).join(', ')}` : '',
+            presenceEntity ? `currently at: ${presenceEntity.name}` : '',
           ].filter(Boolean).join('. ')
 
           const res = await fetch('https://api.anthropic.com/v1/messages', {
@@ -149,13 +175,19 @@ const nowRoutes: FastifyPluginAsync = async (fastify) => {
 
       return {
         data: {
-          context: { time_of_day: tod, presence: presence ?? 'unknown', generated_at: now.toISOString() },
-          urgent: urgent.map(c => ({ _id: c['_id'], title: c['title'], due_date: c['due_date'], column_id: c['column_id'], ref: c['ref'] })),
+          context: {
+            time_of_day:    tod,
+            presence:       presenceRaw ?? 'unknown',
+            presence_entity: presenceEntity,
+            generated_at:   now.toISOString(),
+          },
+          urgent:    urgent.map(c => ({ _id: c['_id'], title: c['title'], due_date: c['due_date'], column_id: c['column_id'], ref: c['ref'] })),
           due_today: dueToday.map(c => ({ _id: c['_id'], title: c['title'], due_date: c['due_date'], priority: c['priority'], column_id: c['column_id'], ref: c['ref'] })),
-          habits: habits.map(c => ({ _id: c['_id'], title: c['title'], recurrence: c['recurrence'], ref: c['ref'] })),
+          habits:    habits.map(c => ({ _id: c['_id'], title: c['title'], recurrence: c['recurrence'], ref: c['ref'] })),
           resurfaced: resurfaced.map(c => ({ _id: c['_id'], title: c['title'], ref: c['ref'] })),
-          nudges: nudges.map(c => ({ _id: c['_id'], title: c['title'], recurrence: c['recurrence'], ref: c['ref'] })),
+          nudges:     nudges.map(c => ({ _id: c['_id'], title: c['title'], recurrence: c['recurrence'], ref: c['ref'] })),
           list_items: listItems.map(i => ({ _id: i['_id'], title: i['title'], due_at: i['due_at'] })),
+          location_context: locationCards,
           trail_pulse: trailPulse,
           briefing,
         }

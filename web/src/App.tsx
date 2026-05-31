@@ -17,6 +17,7 @@ import WebhooksPage from './pages/WebhooksPage'
 import NotificationsPage from './pages/NotificationsPage'
 import SharePage from './pages/SharePage'
 import NowPage from './pages/NowPage'
+import EntityPage from './pages/EntityPage'
 
 // SVG icons for bottom nav
 const Icons = {
@@ -77,6 +78,7 @@ function Shell({ children }: { children: React.ReactNode }) {
               <span className="text-xs font-mono text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded-full hidden sm:inline">@{user.username}</span>
               {navLink('/now', 'Now')}
               {navLink(spacesHref, 'Spaces')}
+              {navLink('/entities', 'Entities')}
               {navLink('/search', 'Search')}
               {navLink('/audit', 'Audit')}
             </>
@@ -169,6 +171,11 @@ export default function App() {
   // Now view
   if (path === '/now') {
     return <Shell><NowPage /></Shell>
+  }
+
+  // Entities
+  if (path === '/entities') {
+    return <Shell><EntityPage /></Shell>
   }
 
   // MQTT subscriptions

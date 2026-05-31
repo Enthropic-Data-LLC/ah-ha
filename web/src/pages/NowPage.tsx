@@ -6,13 +6,19 @@ interface NowCard { _id: string; title: string; due_date?: string; priority?: st
 interface NowItem { _id: string; title: string; due_at?: string }
 
 interface NowData {
-  context: { time_of_day: string; presence: string; generated_at: string }
+  context: {
+    time_of_day: string
+    presence: string
+    presence_entity: { _id: string; name: string; icon: string } | null
+    generated_at: string
+  }
   urgent: NowCard[]
   due_today: NowCard[]
   habits: NowCard[]
   resurfaced: NowCard[]
   nudges: NowCard[]
   list_items: NowItem[]
+  location_context: NowCard[]
   trail_pulse: { recent_tone: string; total_today: number } | null
   briefing: string | null
 }
@@ -103,18 +109,33 @@ export default function NowPage() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <span className="text-xs text-slate-500">{TOD_LABEL[now.context.time_of_day]}</span>
-          {now.context.presence !== 'unknown' && (
+          {now.context.presence_entity ? (
+            <>
+              <span className="text-slate-700">·</span>
+              <a href="/entities" className="flex items-center gap-1 text-xs text-indigo-400 hover:text-indigo-300 transition">
+                <span>{now.context.presence_entity.icon}</span>
+                <span>{now.context.presence_entity.name}</span>
+              </a>
+            </>
+          ) : now.context.presence !== 'unknown' && (
             <>
               <span className="text-slate-700">·</span>
               <span className="text-xs text-slate-500">{PRESENCE_LABEL[now.context.presence]}</span>
             </>
           )}
         </div>
-        {now.trail_pulse && now.trail_pulse.total_today > 0 && (
-          <span className={`text-xs ${TONE_COLOR[now.trail_pulse.recent_tone] ?? 'text-slate-500'}`}>
-            {now.trail_pulse.total_today} trail entries today
-          </span>
-        )}
+        <div className="flex items-center gap-3">
+          {!now.context.presence_entity && (
+            <a href="/entities" className="text-xs text-slate-700 hover:text-indigo-400 transition">
+              📍 Check in
+            </a>
+          )}
+          {now.trail_pulse && now.trail_pulse.total_today > 0 && (
+            <span className={`text-xs ${TONE_COLOR[now.trail_pulse.recent_tone] ?? 'text-slate-500'}`}>
+              {now.trail_pulse.total_today} trail entries today
+            </span>
+          )}
+        </div>
       </div>
 
       {/* AI briefing */}
@@ -146,6 +167,17 @@ export default function NowPage() {
       <Section title="Today" count={now.due_today.length} accent="text-slate-400">
         {now.due_today.map(c => <CardRow key={c._id} card={c} onDefer={snooze} />)}
       </Section>
+
+      {/* Location context cards */}
+      {now.context.presence_entity && now.location_context.length > 0 && (
+        <Section
+          title={`${now.context.presence_entity.icon} ${now.context.presence_entity.name}`}
+          count={now.location_context.length}
+          accent="text-indigo-400"
+        >
+          {now.location_context.map(c => <CardRow key={c._id} card={c} onDefer={snooze} />)}
+        </Section>
+      )}
 
       {/* Resurfaced */}
       <Section title="Just resurfaced" count={now.resurfaced.length} accent="text-amber-500">

@@ -1,6 +1,10 @@
 import { useState, useEffect } from 'react'
+import useSWR from 'swr'
 import type { BoardCard, BoardColumn, Recurrence, RecurrenceArchetype } from '../lib/types'
 import DeferMenu from './DeferMenu'
+import { fetcher } from '../lib/api'
+
+interface EntityOption { _id: string; name: string; icon: string }
 
 interface Props {
   card: BoardCard
@@ -50,9 +54,11 @@ export default function CardModal({ card, columns, onClose, onSave, onDelete }: 
   const [timeAnchor, setTimeAnchor] = useState(card.recurrence?.time_anchor ?? 'morning')
   const [dayOfWeek, setDayOfWeek] = useState(card.recurrence?.day_of_week ?? 1)
   const [intervalDays, setIntervalDays] = useState(card.recurrence?.interval_days ?? 7)
+  const [contexts, setContexts]   = useState<string[]>(card.contexts ?? [])
   const [saving, setSaving]       = useState(false)
   const [showDefer, setShowDefer] = useState(false)
   const [activeTab, setActiveTab] = useState<'details' | 'dates' | 'repeat'>('details')
+  const { data: entityData } = useSWR<{ data: EntityOption[] }>('/api/entities', fetcher)
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
@@ -80,6 +86,7 @@ export default function CardModal({ card, columns, onClose, onSave, onDelete }: 
       start_date: fromDateInput(startDate),
       defer_until: fromDateInput(deferUntil),
       recurrence: buildRecurrence(),
+      contexts,
     })
     setSaving(false)
     onClose()
@@ -188,6 +195,35 @@ export default function CardModal({ card, columns, onClose, onSave, onDelete }: 
                   />
                 </div>
               </div>
+
+              {/* Entity contexts */}
+              {entityData && entityData.data.length > 0 && (
+                <div className="space-y-1.5">
+                  <label className="text-xs text-slate-500 font-medium uppercase tracking-wide">Surface when at</label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {entityData.data.map(e => {
+                      const active = contexts.includes(e._id)
+                      return (
+                        <button
+                          key={e._id}
+                          type="button"
+                          onClick={() => setContexts(prev =>
+                            active ? prev.filter(id => id !== e._id) : [...prev, e._id]
+                          )}
+                          className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs border transition ${
+                            active
+                              ? 'border-indigo-500 bg-indigo-500/10 text-indigo-300'
+                              : 'border-slate-700 text-slate-500 hover:border-slate-500'
+                          }`}
+                        >
+                          <span>{e.icon}</span>
+                          <span>{e.name}</span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
             </>
           )}
 
