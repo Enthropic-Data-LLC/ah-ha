@@ -193,7 +193,6 @@ const boardRoutes: FastifyPluginAsync = async (fastify) => {
       return { ok: true }
     }
   )
-}
 
   // PATCH /api/board/:slug/columns/:id/move — shift column left or right
   fastify.patch<{ Params: { slug: string; id: string } }>(
@@ -229,7 +228,7 @@ const boardRoutes: FastifyPluginAsync = async (fastify) => {
       return { ok: true }
     }
   )
-
+}
 
 async function getSpace(fastify: { mongo: import('mongodb').Db }, slug: string, orgId: ObjectId) {
   return fastify.mongo.collection('spaces').findOne({
