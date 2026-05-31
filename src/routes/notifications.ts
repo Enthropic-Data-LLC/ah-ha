@@ -96,11 +96,8 @@ const notificationsRoutes: FastifyPluginAsync = async (fastify) => {
       return { ok: true, state }
     }
   )
-}
 
-void TIMEZONES  // suppress unused warning
-
-  // GET /api/presence/:username — read current presence state
+  // GET /api/presence/:username — read current presence state (public)
   fastify.get<{ Params: { username: string } }>(
     '/api/presence/:username',
     async (req, reply) => {
@@ -110,5 +107,8 @@ void TIMEZONES  // suppress unused warning
       return { data: { username: req.params.username, state: raw ?? 'unknown', last_seen: state } }
     }
   )
+}
+
+void TIMEZONES  // suppress unused warning
 
 export default notificationsRoutes
