@@ -249,36 +249,47 @@ export default function BoardPage({ slug }: Props) {
         )}
 
         {/* Date range filter */}
-        <div className="px-4 pb-3 flex items-center gap-3">
-          <div className="flex-1 flex items-center gap-3 min-w-0">
-            <span className="text-xs text-slate-600 flex-shrink-0">Due</span>
-            <input
-              type="range"
-              min={0}
-              max={5}
-              step={1}
-              value={sliderStep}
-              onChange={e => {
-                const v = Number(e.target.value)
-                if (v !== sliderStep) haptic(6)
-                setSliderStep(v)
-              }}
-              className="flex-1 h-1 accent-indigo-500 cursor-pointer"
-            />
-            <span className={`text-xs w-14 text-right flex-shrink-0 tabular-nums ${sliderStep < 5 ? 'text-indigo-400' : 'text-slate-600'}`}>
-              {SLIDER_LABELS[sliderStep]}
-            </span>
-          </div>
+        <div className="px-4 pb-3 flex items-center gap-2">
+          {/* Calendar-check icon — dated filter label */}
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"
+            className={`w-4 h-4 flex-shrink-0 ${sliderStep < 5 ? 'text-indigo-400' : 'text-slate-600'}`}>
+            <rect x="1.5" y="2.5" width="13" height="12" rx="1.5"/>
+            <line x1="5" y1="1" x2="5" y2="4"/>
+            <line x1="11" y1="1" x2="11" y2="4"/>
+            <line x1="1.5" y1="6" x2="14.5" y2="6"/>
+            <polyline points="5.5 10 7 11.5 10.5 8.5"/>
+          </svg>
+          <input
+            type="range"
+            min={0}
+            max={5}
+            step={1}
+            value={sliderStep}
+            onChange={e => {
+              const v = Number(e.target.value)
+              if (v !== sliderStep) haptic(6)
+              setSliderStep(v)
+            }}
+            className="flex-1 h-1 accent-indigo-500 cursor-pointer"
+          />
+          <span className={`text-xs w-12 text-right flex-shrink-0 tabular-nums ${sliderStep < 5 ? 'text-indigo-400' : 'text-slate-600'}`}>
+            {SLIDER_LABELS[sliderStep]}
+          </span>
+          {/* Calendar-no icon — undated toggle */}
           <button
             type="button"
             onClick={() => { haptic(10); setShowUndated(v => !v) }}
-            className={`text-xs px-2 py-1 rounded-lg border transition flex-shrink-0 ${
-              showUndated
-                ? 'border-slate-700 text-slate-500'
-                : 'border-slate-800 text-slate-700'
-            }`}
+            className={`p-1 rounded-lg transition flex-shrink-0 ${showUndated ? 'text-slate-500' : 'text-slate-700'}`}
+            title={showUndated ? 'Hide undated' : 'Show undated'}
           >
-            {showUndated ? 'undated ✓' : 'undated ✗'}
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-4 h-4">
+              <rect x="1.5" y="2.5" width="13" height="12" rx="1.5"/>
+              <line x1="5" y1="1" x2="5" y2="4"/>
+              <line x1="11" y1="1" x2="11" y2="4"/>
+              <line x1="1.5" y1="6" x2="14.5" y2="6"/>
+              <circle cx="8" cy="10" r="3.5"/>
+              <line x1="5.5" y1="7.5" x2="10.5" y2="12.5" strokeLinecap="round"/>
+            </svg>
           </button>
         </div>
       </div>
