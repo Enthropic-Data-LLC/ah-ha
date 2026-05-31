@@ -69,6 +69,8 @@ export interface BoardCard {
   escalated_day_7?: boolean
   // location context
   contexts?: string[]
+  // time windows — card floats to top of Now sections when active
+  time_chunks?: string[]
 }
 
 export interface LocationSignature {

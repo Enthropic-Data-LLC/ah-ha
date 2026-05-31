@@ -16,6 +16,17 @@ interface Props {
 
 const PRIORITY_OPTS = ['none', 'low', 'medium', 'high'] as const
 
+const TIME_CHUNK_OPTS = [
+  { value: 'wakeup',         label: 'Wake up',    sub: '5–8am' },
+  { value: 'morning',        label: 'Morning',    sub: '6–10am' },
+  { value: 'midday',         label: 'Midday',     sub: '10am–5pm' },
+  { value: 'evening',        label: 'Evening',    sub: '5–9pm' },
+  { value: 'night',          label: 'Night',      sub: '9pm–2am' },
+  { value: 'bedtime',        label: 'Bedtime',    sub: '9pm–1am' },
+  { value: 'weekend',        label: 'Weekend',    sub: 'Sat+Sun' },
+  { value: 'monday_evening', label: 'Mon evening',sub: 'Mon 5–9pm' },
+]
+
 const ARCHETYPE_LABELS: Record<RecurrenceArchetype, string> = {
   habit:    'Every day at the same time',
   schedule: 'On a specific day of the week',
@@ -55,6 +66,7 @@ export default function CardModal({ card, columns, onClose, onSave, onDelete }: 
   const [dayOfWeek, setDayOfWeek] = useState(card.recurrence?.day_of_week ?? 1)
   const [intervalDays, setIntervalDays] = useState(card.recurrence?.interval_days ?? 7)
   const [contexts, setContexts]   = useState<string[]>(card.contexts ?? [])
+  const [timeChunks, setTimeChunks] = useState<string[]>(card.time_chunks ?? [])
   const [saving, setSaving]       = useState(false)
   const [showDefer, setShowDefer] = useState(false)
   const [activeTab, setActiveTab] = useState<'details' | 'dates' | 'repeat'>('details')
@@ -85,8 +97,9 @@ export default function CardModal({ card, columns, onClose, onSave, onDelete }: 
       due_date: fromDateInput(dueDate),
       start_date: fromDateInput(startDate),
       defer_until: fromDateInput(deferUntil),
-      recurrence: buildRecurrence(),
+      recurrence:  buildRecurrence(),
       contexts,
+      time_chunks: timeChunks,
     })
     setSaving(false)
     onClose()
@@ -277,6 +290,35 @@ export default function CardModal({ card, columns, onClose, onSave, onDelete }: 
                   />
                 )}
               </div>
+              {/* Time windows — when to float this card to the top */}
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-1.5">
+                  <label className="text-xs text-slate-500 font-medium uppercase tracking-wide">Best time</label>
+                  <span className="text-xs text-slate-700">— card rises to top of Now during these windows</span>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {TIME_CHUNK_OPTS.map(tc => {
+                    const active = timeChunks.includes(tc.value)
+                    return (
+                      <button
+                        key={tc.value}
+                        type="button"
+                        onClick={() => setTimeChunks(prev =>
+                          active ? prev.filter(c => c !== tc.value) : [...prev, tc.value]
+                        )}
+                        className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs border transition ${
+                          active
+                            ? 'border-indigo-500 bg-indigo-500/10 text-indigo-300'
+                            : 'border-slate-700 text-slate-500 hover:border-slate-500'
+                        }`}
+                      >
+                        {tc.label} <span className="text-slate-600">{tc.sub}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
               {(dueDate || deferUntil || startDate) && (
                 <button
                   type="button"

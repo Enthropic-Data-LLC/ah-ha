@@ -18,6 +18,14 @@ function matchesTimeChunks(chunks: string[], hour: number, dow: number): boolean
   return chunks.some(c => (TIME_CHUNKS[c] ?? (() => true))(hour, dow))
 }
 
+function sortByTimeChunk(cards: Array<Record<string, unknown>>, hour: number, dow: number) {
+  return [...cards].sort((a, b) => {
+    const aMatch = matchesTimeChunks((a['time_chunks'] as string[] | undefined) ?? [], hour, dow) && (a['time_chunks'] as string[] | undefined)?.length ? 1 : 0
+    const bMatch = matchesTimeChunks((b['time_chunks'] as string[] | undefined) ?? [], hour, dow) && (b['time_chunks'] as string[] | undefined)?.length ? 1 : 0
+    return bMatch - aMatch  // matched cards (1) sort before unmatched (0)
+  })
+}
+
 const TIME_OF_DAY = (h: number) => {
   if (h >= 5  && h < 10) return 'morning'
   if (h >= 10 && h < 17) return 'active'
@@ -208,11 +216,12 @@ const nowRoutes: FastifyPluginAsync = async (fastify) => {
             presence_entity: presenceEntity,
             generated_at:   now.toISOString(),
           },
-          urgent:    urgent.map(c => ({ _id: c['_id'], title: c['title'], due_date: c['due_date'], column_id: c['column_id'], ref: c['ref'] })),
-          due_today: dueToday.map(c => ({ _id: c['_id'], title: c['title'], due_date: c['due_date'], priority: c['priority'], column_id: c['column_id'], ref: c['ref'] })),
-          habits:    habits.map(c => ({ _id: c['_id'], title: c['title'], recurrence: c['recurrence'], ref: c['ref'] })),
-          resurfaced: resurfaced.map(c => ({ _id: c['_id'], title: c['title'], ref: c['ref'] })),
-          nudges:     nudges.map(c => ({ _id: c['_id'], title: c['title'], ref: c['ref'], recurrence: c['recurrence'], created_at: c['created_at'] })),
+          // Sort each section: time-chunk-matched cards float first
+          urgent:    sortByTimeChunk(urgent,    localHour, localDow).map(c => ({ _id: c['_id'], title: c['title'], due_date: c['due_date'], column_id: c['column_id'], ref: c['ref'], time_chunks: c['time_chunks'] })),
+          due_today: sortByTimeChunk(dueToday,  localHour, localDow).map(c => ({ _id: c['_id'], title: c['title'], due_date: c['due_date'], priority: c['priority'], column_id: c['column_id'], ref: c['ref'], time_chunks: c['time_chunks'] })),
+          habits:    sortByTimeChunk(habits,    localHour, localDow).map(c => ({ _id: c['_id'], title: c['title'], recurrence: c['recurrence'], ref: c['ref'], time_chunks: c['time_chunks'] })),
+          resurfaced: sortByTimeChunk(resurfaced, localHour, localDow).map(c => ({ _id: c['_id'], title: c['title'], ref: c['ref'], time_chunks: c['time_chunks'] })),
+          nudges:     nudges.map(c => ({ _id: c['_id'], title: c['title'], ref: c['ref'], recurrence: c['recurrence'], created_at: c['created_at'], time_chunks: c['time_chunks'] })),
           list_items: listItems.map(i => ({ _id: i['_id'], title: i['title'], due_at: i['due_at'] })),
           location_context: locationCards,
           trail_pulse: trailPulse,

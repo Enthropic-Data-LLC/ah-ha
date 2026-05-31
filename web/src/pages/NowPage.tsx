@@ -5,7 +5,7 @@ import { useMe } from '../hooks/useMe'
 import CardModal from '../components/CardModal'
 import type { BoardCard, BoardColumn } from '../lib/types'
 
-interface NowCard { _id: string; title: string; due_date?: string; priority?: string; ref?: string; created_at?: string; recurrence?: { archetype: string; streak_count?: number; time_anchor?: string; interval_days?: number; last_completed_at?: string | null } }
+interface NowCard { _id: string; title: string; due_date?: string; priority?: string; ref?: string; created_at?: string; time_chunks?: string[]; recurrence?: { archetype: string; streak_count?: number; time_anchor?: string; interval_days?: number; last_completed_at?: string | null } }
 interface NowItem { _id: string; title: string; due_at?: string }
 
 interface NowData {
@@ -63,6 +63,9 @@ function CardRow({ card, onDefer, onComplete, onOpen }: {
           )}
           {isRecurring && (
             <span className="text-xs text-slate-700 capitalize">{card.recurrence?.archetype}</span>
+          )}
+          {(card.time_chunks?.length ?? 0) > 0 && (
+            <span className="text-xs text-indigo-500" title={card.time_chunks?.join(', ')}>◈</span>
           )}
         </div>
       </div>

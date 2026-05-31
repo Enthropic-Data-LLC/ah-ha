@@ -110,6 +110,9 @@ export default function BoardCardItem({ card, index, onClick, onDefer, onPickDat
               {streak && (
                 <span className="text-xs text-orange-400">🔥{streak}</span>
               )}
+              {(card.time_chunks?.length ?? 0) > 0 && (
+                <span className="text-xs text-indigo-600" title={card.time_chunks?.join(', ')}>◈</span>
+              )}
               {onComplete && isRecurring && (
                 <button
                   onClick={async e => {

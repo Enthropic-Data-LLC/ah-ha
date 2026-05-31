@@ -165,7 +165,9 @@ const boardRoutes: FastifyPluginAsync = async (fastify) => {
         due_date: z.string().datetime().nullable().optional(),
         start_date: z.string().datetime().nullable().optional(),
         defer_until: z.string().datetime().nullable().optional(),
-        recurrence: z.unknown().optional(),
+        recurrence:   z.unknown().optional(),
+        contexts:     z.array(z.string()).optional(),
+        time_chunks:  z.array(z.string()).optional(),
       }).parse(req.body)
 
       const update: Record<string, unknown> = { updated_at: new Date() }
@@ -178,6 +180,8 @@ const boardRoutes: FastifyPluginAsync = async (fastify) => {
       if (body.start_date !== undefined) update['start_date'] = body.start_date ? new Date(body.start_date) : null
       if (body.defer_until !== undefined) update['defer_until'] = body.defer_until ? new Date(body.defer_until) : null
       if (body.recurrence !== undefined) update['recurrence'] = body.recurrence
+      if (body.contexts !== undefined) update['contexts'] = body.contexts
+      if (body.time_chunks !== undefined) update['time_chunks'] = body.time_chunks
 
       const result = await fastify.mongo.collection('board_cards').updateOne(
         { _id: new ObjectId(req.params.id), org_id: req.user!.orgId, deleted_at: { $exists: false } },
