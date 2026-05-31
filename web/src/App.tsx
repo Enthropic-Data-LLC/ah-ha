@@ -16,6 +16,7 @@ import MqttPage from './pages/MqttPage'
 import WebhooksPage from './pages/WebhooksPage'
 import NotificationsPage from './pages/NotificationsPage'
 import SharePage from './pages/SharePage'
+import NowPage from './pages/NowPage'
 
 function Shell({ children }: { children: React.ReactNode }) {
   const { user } = useMe()
@@ -36,6 +37,7 @@ function Shell({ children }: { children: React.ReactNode }) {
           {user && (
             <>
               <span className="text-xs font-mono text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded-full">@{user.username}</span>
+              {navLink('/now', 'Now')}
               {navLink(`/${user.username}/spaces`, 'Spaces')}
               {navLink('/search', 'Search')}
               {navLink('/audit', 'Audit')}
@@ -111,6 +113,11 @@ export default function App() {
   // Search
   if (path === '/search') {
     return <Shell><SearchPage /></Shell>
+  }
+
+  // Now view
+  if (path === '/now') {
+    return <Shell><NowPage /></Shell>
   }
 
   // MQTT subscriptions

@@ -253,6 +253,136 @@ async function main() {
   setInterval(() => { checkBriefings().catch(console.error) }, 60_000)
   console.log('[notifier] daily briefing cron started')
 
+
+  // ── Date engine (runs every 5 minutes) ────────────────────────────────
+  async function runDateEngine() {
+    const now = new Date()
+    const todayStart = new Date(now); todayStart.setHours(0, 0, 0, 0)
+    const todayEnd   = new Date(now); todayEnd.setHours(23, 59, 59, 999)
+
+    // 1. Cards due today — notify once per day (checked every 5 min)
+    const dueToday = await db.collection('board_cards').find({
+      done: { $ne: true },
+      deleted_at: { $exists: false },
+      due_date: { $gte: todayStart, $lte: todayEnd },
+      due_today_notified: { $ne: true },
+    }).toArray()
+
+    for (const card of dueToday) {
+      const user = await db.collection('users').findOne({ _id: card['created_by'] })
+      if (!user) continue
+      const pref = await db.collection('notification_prefs').findOne({ user_id: user._id })
+      const channels = (pref?.['channels'] as { telegram_chat_id?: string; email?: string } | undefined) ?? {}
+      if (!channels.telegram_chat_id && !channels.email) continue
+
+      const msg = `📋 Due today: ${card['title'] as string}`
+      await postToNodeRed('date_engine', user['username'] as string, { message: msg, telegram_chat_id: channels.telegram_chat_id })
+      if (channels.email) await sendEmail(channels.email, `Due today: ${card['title'] as string}`, msg)
+
+      await db.collection('board_cards').updateOne({ _id: card['_id'] }, { $set: { due_today_notified: true } })
+    }
+
+    // 2. Newly overdue cards (due before today, not done, not yet flagged)
+    const newlyOverdue = await db.collection('board_cards').find({
+      done: { $ne: true },
+      deleted_at: { $exists: false },
+      due_date: { $lt: todayStart },
+      overdue_notified: { $ne: true },
+    }).toArray()
+
+    for (const card of newlyOverdue) {
+      const user = await db.collection('users').findOne({ _id: card['created_by'] })
+      if (!user) continue
+      const pref = await db.collection('notification_prefs').findOne({ user_id: user._id })
+      const channels = (pref?.['channels'] as { telegram_chat_id?: string; email?: string } | undefined) ?? {}
+
+      const daysOver = Math.floor((now.getTime() - (card['due_date'] as Date).getTime()) / 86400000)
+      const msg = `⚠️ Overdue ${daysOver > 1 ? daysOver + ' days' : 'since yesterday'}: ${card['title'] as string}`
+
+      if (channels.telegram_chat_id || channels.email) {
+        await postToNodeRed('date_engine', user['username'] as string, { message: msg, telegram_chat_id: channels.telegram_chat_id })
+        if (channels.email) await sendEmail(channels.email, `Overdue: ${card['title'] as string}`, msg)
+      }
+      await db.collection('board_cards').updateOne({ _id: card['_id'] }, { $set: { overdue_notified: true } })
+    }
+
+    // 3. Escalation — day 3 and day 7
+    for (const level of [{ days: 3, flag: 'escalated_day_3' }, { days: 7, flag: 'escalated_day_7' }] as const) {
+      const cutoff = new Date(now.getTime() - level.days * 86400000)
+      const escalating = await db.collection('board_cards').find({
+        done: { $ne: true },
+        deleted_at: { $exists: false },
+        due_date: { $lt: cutoff },
+        [level.flag]: { $ne: true },
+      }).toArray()
+
+      for (const card of escalating) {
+        const user = await db.collection('users').findOne({ _id: card['created_by'] })
+        if (!user) continue
+        const pref = await db.collection('notification_prefs').findOne({ user_id: user._id })
+        const channels = (pref?.['channels'] as { telegram_chat_id?: string; email?: string } | undefined) ?? {}
+
+        const suffix = level.days === 7
+          ? '\n\nThis has been open a week. Worth asking: is it still relevant?'
+          : ''
+        const msg = `🔴 ${level.days} days overdue: ${card['title'] as string}${suffix}`
+
+        if (channels.telegram_chat_id || channels.email) {
+          await postToNodeRed('date_engine', user['username'] as string, { message: msg, telegram_chat_id: channels.telegram_chat_id })
+          if (channels.email) await sendEmail(channels.email, `${level.days} days overdue: ${card['title'] as string}`, msg)
+        }
+        await db.collection('board_cards').updateOne({ _id: card['_id'] }, { $set: { [level.flag]: true } })
+      }
+    }
+
+    // 4. Resurface deferred cards (defer_until just expired in last 5 min)
+    const fiveMinAgo = new Date(now.getTime() - 5 * 60_000)
+    const resurfacing = await db.collection('board_cards').find({
+      done: { $ne: true },
+      deleted_at: { $exists: false },
+      defer_until: { $gte: fiveMinAgo, $lte: now },
+    }).toArray()
+
+    for (const card of resurfacing) {
+      await redis.publish(`ws:${card['ref'] as string}`.split('#')[0]!, JSON.stringify({
+        op: 'card.resurfaced', ref: card['ref'], title: card['title'],
+      }))
+    }
+
+    // 5. Habit streak maintenance — miss detection
+    const midnightCutoff = new Date(now)
+    midnightCutoff.setHours(0, 0, 0, 0)
+
+    const habitCards = await db.collection('board_cards').find({
+      done: { $ne: true },
+      deleted_at: { $exists: false },
+      'recurrence.archetype': 'habit',
+      'recurrence.streak_count': { $gt: 0 },
+    }).toArray()
+
+    for (const card of habitCards) {
+      const rec = card['recurrence'] as { archetype: string; last_completed_at?: Date; streak_count?: number }
+      if (!rec.last_completed_at) continue
+      const lastDone = new Date(rec.last_completed_at)
+      const daysSince = Math.floor((midnightCutoff.getTime() - lastDone.getTime()) / 86400000)
+      if (daysSince > 1) {
+        // Streak broken — reset
+        await db.collection('board_cards').updateOne(
+          { _id: card['_id'] },
+          { $set: { 'recurrence.streak_count': 0 } }
+        )
+        console.log(`[date-engine] streak reset for: ${card['title'] as string}`)
+      }
+    }
+
+    if (dueToday.length + newlyOverdue.length + resurfacing.length > 0) {
+      console.log(`[date-engine] processed: ${dueToday.length} due today, ${newlyOverdue.length} newly overdue, ${resurfacing.length} resurfaced`)
+    }
+  }
+
+  setInterval(() => { runDateEngine().catch(console.error) }, 5 * 60_000)
+  console.log('[notifier] date engine started')
+
   // ── Presence listener ──────────────────────────────────────────────────
   await redisSub.psubscribe('aha:presence:*')
 
