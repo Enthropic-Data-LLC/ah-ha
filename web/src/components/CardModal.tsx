@@ -85,7 +85,7 @@ export default function CardModal({ card, columns, onClose, onSave, onDelete }: 
     onClose()
   }
 
-  async function handleDefer(until: Date | null) {
+  async function handleDefer(until: Date | null, _label: string) {
     const iso = until ? until.toISOString() : null
     setDeferUntil(toDateInput(iso))
     await onSave(card._id, { defer_until: iso, due_date: until ? null : fromDateInput(dueDate) })

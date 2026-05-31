@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { DragDropContext, Droppable, type DropResult } from '@hello-pangea/dnd'
 import { useBoardColumns, useBoardCards, useBoardActions } from '../hooks/useBoard'
 import { useMe } from '../hooks/useMe'
@@ -66,6 +66,8 @@ export default function BoardPage({ slug }: Props) {
   const [activeCard, setActiveCard] = useState<BoardCard | null>(null)
   const [showDelete, setShowDelete] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [toastMsg, setToastMsg] = useState<string | null>(null)
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const columns: BoardColumn[] = colData?.data ?? []
   const cards: BoardCard[] = cardData?.data ?? []
@@ -107,6 +109,14 @@ export default function BoardPage({ slug }: Props) {
   async function deleteCard(id: string) {
     await actions.deleteCard(id)
     await mutateCards()
+  }
+
+  async function deferCard(card: BoardCard, until: Date | null, label: string) {
+    await saveCard(card._id, { defer_until: until?.toISOString() ?? null })
+    const msg = label === 'Someday' ? 'Moved to someday' : `Snoozed — ${label.toLowerCase()}`
+    setToastMsg(msg)
+    if (toastTimer.current) clearTimeout(toastTimer.current)
+    toastTimer.current = setTimeout(() => setToastMsg(null), 2500)
   }
 
   async function addColumn() {
@@ -348,6 +358,8 @@ export default function BoardPage({ slug }: Props) {
                           card={card}
                           index={index}
                           onClick={setActiveCard}
+                          onDefer={(until, label) => deferCard(card, until, label)}
+                          onPickDate={setActiveCard}
                         />
                       ))}
                       {provided.placeholder}
@@ -391,6 +403,13 @@ export default function BoardPage({ slug }: Props) {
           onCancel={() => setShowDelete(false)}
           deleting={deleting}
         />
+      )}
+
+      {/* Snooze toast */}
+      {toastMsg && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-4 py-2.5 bg-slate-800 border border-slate-700 rounded-xl text-sm text-slate-200 shadow-xl pointer-events-none whitespace-nowrap">
+          {toastMsg}
+        </div>
       )}
     </div>
   )

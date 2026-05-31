@@ -1,8 +1,9 @@
 import { useState } from 'react'
 
 interface Props {
-  onDefer: (until: Date | null) => Promise<void>
+  onDefer: (until: Date | null, label: string) => Promise<void>
   onClose: () => void
+  onPickDate?: () => void
 }
 
 function nextWeekday(dayOfWeek: number): Date {
@@ -36,12 +37,12 @@ const PRESETS = [
   { label: 'Someday',      sub: 'clear date',    value: () => null },
 ]
 
-export default function DeferMenu({ onDefer, onClose }: Props) {
+export default function DeferMenu({ onDefer, onClose, onPickDate }: Props) {
   const [loading, setLoading] = useState<string | null>(null)
 
   async function pick(label: string, value: () => Date | null) {
     setLoading(label)
-    await onDefer(value())
+    await onDefer(value(), label)
     onClose()
   }
 
@@ -62,6 +63,19 @@ export default function DeferMenu({ onDefer, onClose }: Props) {
           {loading === p.label && <span className="text-xs text-indigo-400">…</span>}
         </button>
       ))}
+      {onPickDate && (
+        <>
+          <div className="border-t border-slate-800" />
+          <button
+            disabled={loading !== null}
+            onClick={() => { onClose(); onPickDate() }}
+            className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-slate-800 transition text-left disabled:opacity-50"
+          >
+            <span className="text-sm text-slate-400">Pick a date</span>
+            <span className="text-xs text-slate-600">→</span>
+          </button>
+        </>
+      )}
     </div>
   )
 }

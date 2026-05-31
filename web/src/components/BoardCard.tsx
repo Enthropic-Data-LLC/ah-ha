@@ -1,5 +1,7 @@
+import { useState } from 'react'
 import { Draggable } from '@hello-pangea/dnd'
 import type { BoardCard } from '../lib/types'
+import DeferMenu from './DeferMenu'
 
 const PRIORITY_BADGE: Record<string, string> = {
   high:   'bg-red-500/20 text-red-400 border-red-500/30',
@@ -63,9 +65,12 @@ interface Props {
   card: BoardCard
   index: number
   onClick: (card: BoardCard) => void
+  onDefer?: (until: Date | null, label: string) => Promise<void>
+  onPickDate?: (card: BoardCard) => void
 }
 
-export default function BoardCardItem({ card, index, onClick }: Props) {
+export default function BoardCardItem({ card, index, onClick, onDefer, onPickDate }: Props) {
+  const [showDefer, setShowDefer] = useState(false)
   const timing = getTimingState(card)
   const t = TIMING_STYLES[timing]
   const dueLabel = formatDueLabel(card, timing)
@@ -81,9 +86,9 @@ export default function BoardCardItem({ card, index, onClick }: Props) {
           ref={provided.innerRef}
           {...provided.draggableProps}
           {...provided.dragHandleProps}
-          onClick={() => onClick(card)}
+          onClick={() => { if (!showDefer) onClick(card) }}
           className={`
-            px-3 py-2.5 rounded-lg bg-slate-800 border cursor-pointer select-none space-y-1.5 transition
+            relative group px-3 py-2.5 rounded-lg bg-slate-800 border cursor-pointer select-none space-y-1.5 transition
             ${t.border} ${t.bg}
             ${isDeferred ? 'opacity-50' : ''}
             ${snapshot.isDragging
@@ -94,18 +99,30 @@ export default function BoardCardItem({ card, index, onClick }: Props) {
           style={provided.draggableProps.style}
         >
           {/* Title row */}
-          <div className="flex items-start justify-between gap-2">
+          <div className="flex items-start justify-between gap-1">
             <p className={`text-sm leading-snug flex-1 ${isDeferred ? 'text-slate-400' : ''}`}>
               {card.title}
             </p>
-            {streak && (
-              <span className="text-xs text-orange-400 flex-shrink-0 mt-0.5">🔥{streak}</span>
-            )}
+            <div className="flex items-center gap-1 flex-shrink-0 mt-0.5">
+              {streak && (
+                <span className="text-xs text-orange-400">🔥{streak}</span>
+              )}
+              {onDefer && (
+                <button
+                  onClick={e => { e.stopPropagation(); setShowDefer(v => !v) }}
+                  className="opacity-0 group-hover:opacity-100 focus:opacity-100 p-0.5 text-slate-600 hover:text-slate-300 rounded transition leading-none"
+                  title="Snooze"
+                  aria-label="Snooze card"
+                >
+                  ⋯
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Timing banner — only when there's a date signal */}
           {dueLabel && (
-            <div className={`flex items-center gap-1.5`}>
+            <div className="flex items-center gap-1.5">
               <span className={`text-xs font-medium ${t.label}`}>{dueLabel}</span>
               {timing === 'overdue' && <span className="text-red-600 text-xs">●</span>}
             </div>
@@ -129,6 +146,27 @@ export default function BoardCardItem({ card, index, onClick }: Props) {
 
           {card.notes && (
             <p className="text-xs text-slate-500 line-clamp-1">{card.notes}</p>
+          )}
+
+          {/* Defer dropdown */}
+          {showDefer && onDefer && (
+            <>
+              {/* transparent click-outside layer */}
+              <div
+                className="fixed inset-0 z-40"
+                onClick={e => { e.stopPropagation(); setShowDefer(false) }}
+              />
+              <div onClick={e => e.stopPropagation()} className="relative z-50">
+                <DeferMenu
+                  onDefer={async (until, label) => {
+                    await onDefer(until, label)
+                    setShowDefer(false)
+                  }}
+                  onClose={() => setShowDefer(false)}
+                  onPickDate={onPickDate ? () => { setShowDefer(false); onPickDate(card) } : undefined}
+                />
+              </div>
+            </>
           )}
         </div>
       )}
