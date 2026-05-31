@@ -2,6 +2,22 @@ import type { FastifyPluginAsync } from 'fastify'
 import { ObjectId } from 'mongodb'
 import { getPool } from '../lib/timescale.js'
 
+const TIME_CHUNKS: Record<string, (h: number, dow: number) => boolean> = {
+  wakeup:          (h)     => h >= 5  && h < 8,
+  morning:         (h)     => h >= 6  && h < 10,
+  midday:          (h)     => h >= 10 && h < 17,
+  evening:         (h)     => h >= 17 && h < 21,
+  night:           (h)     => h >= 21 || h < 2,
+  bedtime:         (h)     => h >= 21 || h < 1,
+  weekend:         (_, d)  => d === 0 || d === 6,
+  monday_evening:  (h, d)  => d === 1 && h >= 17 && h < 21,
+}
+
+function matchesTimeChunks(chunks: string[], hour: number, dow: number): boolean {
+  if (!chunks.length) return true   // no restriction — always active
+  return chunks.some(c => (TIME_CHUNKS[c] ?? (() => true))(hour, dow))
+}
+
 const TIME_OF_DAY = (h: number) => {
   if (h >= 5  && h < 10) return 'morning'
   if (h >= 10 && h < 17) return 'active'
@@ -21,6 +37,7 @@ const nowRoutes: FastifyPluginAsync = async (fastify) => {
       const localHour = parseInt(
         new Intl.DateTimeFormat('en-US', { timeZone: tz, hour: 'numeric', hour12: false }).format(now)
       )
+      const localDow = new Date(now.toLocaleString('en-US', { timeZone: tz })).getDay()
       const tod = TIME_OF_DAY(localHour)
 
       // Presence: query param override > Redis
@@ -35,11 +52,11 @@ const nowRoutes: FastifyPluginAsync = async (fastify) => {
       }
 
       // Resolve entity if presence looks like an ObjectId
-      let presenceEntity: { _id: string; name: string; icon: string } | null = null
+      let presenceEntity: { _id: string; name: string; icon: string; time_chunks: string[] } | null = null
       if (presenceRaw && OID_RE.test(presenceRaw)) {
         try {
           const ent = await fastify.mongo.collection('entities').findOne({ _id: new ObjectId(presenceRaw) })
-          if (ent) presenceEntity = { _id: ent['_id'].toString(), name: ent['name'] as string, icon: ent['icon'] as string }
+          if (ent) presenceEntity = { _id: ent['_id'].toString(), name: ent['name'] as string, icon: ent['icon'] as string, time_chunks: (ent['time_chunks'] as string[] | undefined) ?? [] }
         } catch { /* entity not found */ }
       }
 
@@ -114,16 +131,21 @@ const nowRoutes: FastifyPluginAsync = async (fastify) => {
       }).limit(5).toArray()
 
       // Location-context cards — only when checked in to an entity
+      // If entity has time_chunks, only surface cards during matching windows
       let locationCards: Array<{ _id: string; title: string; ref?: string }> = []
-      if (presenceRaw && OID_RE.test(presenceRaw)) {
-        const raw = await fastify.mongo.collection('board_cards').find({
-          org_id: orgId,
-          done: { $ne: true },
-          deleted_at: { $exists: false },
-          contexts: presenceRaw,
-          $or: [{ defer_until: null }, { defer_until: { $lte: now } }],
-        }).limit(8).toArray()
-        locationCards = raw.map(c => ({ _id: c['_id'].toString(), title: c['title'] as string, ref: c['ref'] as string | undefined }))
+      let presenceTimeChunks: string[] = []
+      if (presenceRaw && OID_RE.test(presenceRaw) && presenceEntity) {
+        presenceTimeChunks = (presenceEntity as unknown as { time_chunks?: string[] }).time_chunks ?? []
+        if (matchesTimeChunks(presenceTimeChunks, localHour, localDow)) {
+          const raw = await fastify.mongo.collection('board_cards').find({
+            org_id: orgId,
+            done: { $ne: true },
+            deleted_at: { $exists: false },
+            contexts: presenceRaw,
+            $or: [{ defer_until: null }, { defer_until: { $lte: now } }],
+          }).limit(8).toArray()
+          locationCards = raw.map(c => ({ _id: c['_id'].toString(), title: c['title'] as string, ref: c['ref'] as string | undefined }))
+        }
       }
 
       // Trail pulse — last entry tone

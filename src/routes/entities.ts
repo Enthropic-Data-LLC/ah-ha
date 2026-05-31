@@ -34,6 +34,7 @@ const entityRoutes: FastifyPluginAsync = async (fastify) => {
       icon:        z.string().default('📍'),
       entity_type: z.enum(['place', 'person']).default('place'),
       color:       z.string().default('#818cf8'),
+      time_chunks: z.array(z.string()).default([]),
     }).parse(req.body)
 
     const now = new Date()
@@ -57,9 +58,10 @@ const entityRoutes: FastifyPluginAsync = async (fastify) => {
     '/api/entities/:id', { preHandler: fastify.authenticate }, async (req, reply) => {
       const id = new ObjectId(req.params.id)
       const body = z.object({
-        name:  z.string().min(1).max(100).optional(),
-        icon:  z.string().optional(),
-        color: z.string().optional(),
+        name:        z.string().min(1).max(100).optional(),
+        icon:        z.string().optional(),
+        color:       z.string().optional(),
+        time_chunks: z.array(z.string()).optional(),
       }).parse(req.body)
 
       const result = await fastify.mongo.collection('entities').updateOne(

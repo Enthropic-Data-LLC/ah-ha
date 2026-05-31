@@ -17,9 +17,21 @@ interface Entity {
   entity_type: 'place' | 'person'
   color: string
   signatures: LocationSignature[]
+  time_chunks: string[]
 }
 
 const ENTITY_ICONS = ['📍', '🏠', '💼', '🏪', '🚗', '☕', '🏋️', '👤', '👥', '🏫', '🏥', '🌳']
+
+const TIME_CHUNK_OPTS = [
+  { value: 'wakeup',         label: 'Wake up',       sub: '5–8am' },
+  { value: 'morning',        label: 'Morning',        sub: '6–10am' },
+  { value: 'midday',         label: 'Midday',         sub: '10am–5pm' },
+  { value: 'evening',        label: 'Evening',        sub: '5–9pm' },
+  { value: 'night',          label: 'Night',          sub: '9pm–2am' },
+  { value: 'bedtime',        label: 'Bedtime',        sub: '9pm–1am' },
+  { value: 'weekend',        label: 'Weekend',        sub: 'Sat+Sun' },
+  { value: 'monday_evening', label: 'Mon evening',    sub: 'Mon 5–9pm' },
+]
 
 function sigBadge(sig: LocationSignature) {
   if (sig.kind === 'gps') return `GPS (±${sig.radius_m ?? 100}m)`
@@ -35,7 +47,9 @@ export default function EntityPage() {
   const [name, setName] = useState('')
   const [icon, setIcon] = useState('📍')
   const [entityType, setEntityType] = useState<'place' | 'person'>('place')
+  const [timeChunks, setTimeChunks] = useState<string[]>([])
   const [submitting, setSubmitting] = useState(false)
+  const [editingChunksFor, setEditingChunksFor] = useState<string | null>(null)
   const [training, setTraining] = useState<string | null>(null)
   const [trainMsg, setTrainMsg] = useState<string | null>(null)
   const [toastMsg, setToastMsg] = useState<string | null>(null)
@@ -50,8 +64,8 @@ export default function EntityPage() {
     if (!name.trim()) return
     setSubmitting(true)
     try {
-      await api.post('/api/entities', { name: name.trim(), icon, entity_type: entityType })
-      setName(''); setIcon('📍'); setCreating(false)
+      await api.post('/api/entities', { name: name.trim(), icon, entity_type: entityType, time_chunks: timeChunks })
+      setName(''); setIcon('📍'); setTimeChunks([]); setCreating(false)
       await mutate()
     } finally { setSubmitting(false) }
   }
@@ -198,6 +212,25 @@ export default function EntityPage() {
               </button>
             ))}
           </div>
+          <div className="space-y-1.5">
+            <label className="text-xs text-slate-500 font-medium uppercase tracking-wide">Active during (optional)</label>
+            <div className="flex flex-wrap gap-1.5">
+              {TIME_CHUNK_OPTS.map(tc => {
+                const active = timeChunks.includes(tc.value)
+                return (
+                  <button
+                    key={tc.value}
+                    type="button"
+                    onClick={() => setTimeChunks(prev => active ? prev.filter(c => c !== tc.value) : [...prev, tc.value])}
+                    className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs border transition ${active ? 'border-indigo-500 bg-indigo-500/10 text-indigo-300' : 'border-slate-700 text-slate-500 hover:border-slate-500'}`}
+                  >
+                    {tc.label} <span className="text-slate-600">{tc.sub}</span>
+                  </button>
+                )
+              })}
+            </div>
+            <p className="text-xs text-slate-700">Leave empty to always surface cards for this entity.</p>
+          </div>
           <div className="flex gap-2 justify-end">
             <button type="button" onClick={() => setCreating(false)} className="px-3 py-1.5 text-sm text-slate-400">
               Cancel
@@ -241,6 +274,53 @@ export default function EntityPage() {
                         ))
                     }
                   </div>
+                  {/* Time chunks */}
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    {(entity.time_chunks ?? []).length === 0 ? (
+                      <span className="text-xs text-slate-700">Always active</span>
+                    ) : (
+                      (entity.time_chunks ?? []).map(c => {
+                        const opt = TIME_CHUNK_OPTS.find(o => o.value === c)
+                        return opt ? (
+                          <span key={c} className="text-xs text-indigo-400 bg-indigo-500/10 px-1.5 py-0.5 rounded">
+                            {opt.label}
+                          </span>
+                        ) : null
+                      })
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setEditingChunksFor(editingChunksFor === entity._id ? null : entity._id)}
+                      className="text-xs text-slate-600 hover:text-slate-400 px-1 transition"
+                      title="Edit time windows"
+                    >
+                      {editingChunksFor === entity._id ? 'done' : '✎'}
+                    </button>
+                  </div>
+                  {/* Inline time chunk editor */}
+                  {editingChunksFor === entity._id && (
+                    <div className="flex flex-wrap gap-1.5 mt-2">
+                      {TIME_CHUNK_OPTS.map(tc => {
+                        const active = (entity.time_chunks ?? []).includes(tc.value)
+                        return (
+                          <button
+                            key={tc.value}
+                            type="button"
+                            onClick={async () => {
+                              const next = active
+                                ? (entity.time_chunks ?? []).filter(c => c !== tc.value)
+                                : [...(entity.time_chunks ?? []), tc.value]
+                              await api.patch(`/api/entities/${entity._id}`, { time_chunks: next })
+                              await mutate()
+                            }}
+                            className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs border transition ${active ? 'border-indigo-500 bg-indigo-500/10 text-indigo-300' : 'border-slate-700 text-slate-500 hover:border-slate-500'}`}
+                          >
+                            {tc.label} <span className="text-slate-600">{tc.sub}</span>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  )}
                   {training === entity._id && trainMsg && (
                     <p className="text-xs text-indigo-400 mt-1">{trainMsg}</p>
                   )}
