@@ -40,6 +40,9 @@ export default function EntityPage() {
   const [training, setTraining] = useState<string | null>(null)
   const [trainMsg, setTrainMsg] = useState<string | null>(null)
   const [toastMsg, setToastMsg] = useState<string | null>(null)
+  const [editing, setEditing] = useState<string | null>(null)
+  const [editName, setEditName] = useState('')
+  const [editIcon, setEditIcon] = useState('📍')
 
   function toast(msg: string) {
     setToastMsg(msg)
@@ -110,6 +113,19 @@ export default function EntityPage() {
     await api.delete(`/api/entities/${entity._id}`)
     if (ctx.entity?._id === entity._id) await ctx.checkout()
     await mutate()
+  }
+
+  async function saveEdit(entity: Entity) {
+    if (!editName.trim()) return
+    await api.patch(`/api/entities/${entity._id}`, { name: editName.trim(), icon: editIcon })
+    setEditing(null)
+    await mutate()
+  }
+
+  function startEdit(entity: Entity) {
+    setEditName(entity.name)
+    setEditIcon(entity.icon)
+    setEditing(entity._id)
   }
 
   const entities = data?.data ?? []
@@ -223,6 +239,33 @@ export default function EntityPage() {
               key={entity._id}
               className={`bg-slate-900 border rounded-xl transition ${entity._id === currentId ? 'border-indigo-700' : 'border-slate-800'}`}
             >
+              {editing === entity._id ? (
+                <div className="px-4 py-3 space-y-3">
+                  <div className="flex gap-2">
+                    <input
+                      autoFocus
+                      value={editName}
+                      onChange={e => setEditName(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') saveEdit(entity); if (e.key === 'Escape') setEditing(null) }}
+                      className="flex-1 px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                    <button onClick={() => saveEdit(entity)} className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-sm font-medium rounded-lg transition">Save</button>
+                    <button onClick={() => setEditing(null)} className="px-2 py-1.5 text-slate-400 hover:text-slate-200 text-sm transition">Cancel</button>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {ENTITY_ICONS.map(ic => (
+                      <button
+                        key={ic}
+                        type="button"
+                        onClick={() => setEditIcon(ic)}
+                        className={`text-xl w-9 h-9 flex items-center justify-center rounded-lg transition ${editIcon === ic ? 'bg-indigo-500/20 ring-2 ring-indigo-500' : 'hover:bg-slate-800'}`}
+                      >
+                        {ic}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : (
               <div className="flex items-center gap-3 px-4 py-3">
                 <span className="text-2xl flex-shrink-0">{entity.icon}</span>
                 <div className="flex-1 min-w-0">
@@ -271,6 +314,13 @@ export default function EntityPage() {
                     {training === entity._id ? '…' : 'Train'}
                   </button>
                   <button
+                    onClick={() => startEdit(entity)}
+                    className="p-1.5 text-slate-600 hover:text-slate-300 rounded-lg transition"
+                    title="Edit name and icon"
+                  >
+                    ✎
+                  </button>
+                  <button
                     onClick={() => remove(entity)}
                     className="p-1.5 text-slate-700 hover:text-red-400 rounded-lg transition"
                   >
@@ -278,6 +328,7 @@ export default function EntityPage() {
                   </button>
                 </div>
               </div>
+              )}
             </div>
           ))}
         </div>
