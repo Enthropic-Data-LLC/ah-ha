@@ -121,6 +121,12 @@ export default function BoardPage({ slug }: Props) {
     await mutateColumns()
   }
 
+  async function deleteColumn(colId: string) {
+    await api.delete(`/api/board/${slug}/columns/${colId}`)
+    await mutateColumns()
+    await mutateCards()
+  }
+
   async function deleteSpace() {
     if (!user?.username) return
     setDeleting(true)

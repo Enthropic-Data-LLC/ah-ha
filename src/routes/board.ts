@@ -194,6 +194,33 @@ const boardRoutes: FastifyPluginAsync = async (fastify) => {
     }
   )
 
+  // DELETE /api/board/:slug/columns/:id — only allowed if column has no cards
+  fastify.delete<{ Params: { slug: string; id: string } }>(
+    '/api/board/:slug/columns/:id',
+    { preHandler: fastify.authenticate },
+    async (req, reply) => {
+      const space = await getSpace(fastify, req.params.slug, req.user!.orgId)
+      if (!space) return reply.status(404).send({ error: 'Board not found' })
+
+      const colId = new ObjectId(req.params.id)
+      const col = await fastify.mongo.collection('board_columns').findOne({
+        _id: colId, space_id: space._id, org_id: req.user!.orgId,
+      })
+      if (!col) return reply.status(404).send({ error: 'Column not found' })
+
+      const cardCount = await fastify.mongo.collection('board_cards').countDocuments({
+        column_id: colId, space_id: space._id, deleted_at: { $exists: false },
+      })
+      if (cardCount > 0) {
+        return reply.status(409).send({ error: 'Column has cards — move or delete them first' })
+      }
+
+      await fastify.mongo.collection('board_columns').deleteOne({ _id: colId })
+      publish(fastify, `${req.user!.username}/board/${req.params.slug}`, { op: 'column_deleted', id: req.params.id })
+      return { ok: true }
+    }
+  )
+
   // PATCH /api/board/:slug/columns/:id/move — shift column left or right
   fastify.patch<{ Params: { slug: string; id: string } }>(
     '/api/board/:slug/columns/:id/move',
