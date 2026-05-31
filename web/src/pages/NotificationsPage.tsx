@@ -36,7 +36,9 @@ export default function NotificationsPage() {
   const [aiKey, setAiKey] = useState('')
   const [savingKey, setSavingKey] = useState(false)
   const [keySaved, setKeySaved] = useState(false)
-  const { data: settingsData } = useSWR<{ data: { has_anthropic_key: boolean } }>('/api/settings', fetcher)
+  const { data: settingsData, mutate: mutateSettings } = useSWR<{ data: { has_anthropic_key: boolean } }>('/api/settings', fetcher)
+  const [testingKey, setTestingKey] = useState(false)
+  const [testResult, setTestResult] = useState<'ok' | 'fail' | null>(null)
 
   useEffect(() => {
     if (data?.data) {
@@ -75,8 +77,21 @@ export default function NotificationsPage() {
       await api.put('/api/settings', { anthropic_api_key: aiKey || null })
       setAiKey('')
       setKeySaved(true)
+      await mutateSettings()
       setTimeout(() => setKeySaved(false), 3000)
     } finally { setSavingKey(false) }
+  }
+
+  async function testAiKey() {
+    setTestingKey(true)
+    setTestResult(null)
+    try {
+      const res = await api.post<{ data: { briefing: string | null } }>('/api/now', {})
+      const d = res as { data: { briefing: string | null } }
+      setTestResult(d.data.briefing !== null ? 'ok' : 'fail')
+    } catch { setTestResult('fail') }
+    finally { setTestingKey(false) }
+    setTimeout(() => setTestResult(null), 5000)
   }
 
   if (isLoading) {
@@ -177,12 +192,23 @@ export default function NotificationsPage() {
             <p className="text-sm font-medium">AI features (Bring Your Own Key)</p>
             <p className="text-xs text-slate-500 mt-0.5">Used for natural language date parsing and Now view briefings. Your key, stored encrypted.</p>
           </div>
+          {settingsData?.data?.has_anthropic_key && (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-emerald-400">✓ Key saved</span>
+              <button type="button" onClick={testAiKey} disabled={testingKey}
+                className="px-2 py-1 text-xs bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg transition disabled:opacity-50">
+                {testingKey ? 'Testing…' : 'Test key'}
+              </button>
+              {testResult === 'ok' && <span className="text-xs text-emerald-400">AI working</span>}
+              {testResult === 'fail' && <span className="text-xs text-red-400">Failed — check key</span>}
+            </div>
+          )}
           <form onSubmit={saveAiKey} className="flex gap-2">
             <input
               type="password"
               value={aiKey}
               onChange={e => setAiKey(e.target.value)}
-              placeholder={settingsData?.data?.has_anthropic_key ? '••••••••••••••••' : 'sk-ant-...'}
+              placeholder={settingsData?.data?.has_anthropic_key ? 'Enter new key to replace' : 'sk-ant-...'}
               className="flex-1 px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500"
             />
             <button type="submit" disabled={savingKey || !aiKey}
@@ -190,7 +216,7 @@ export default function NotificationsPage() {
               {savingKey ? '…' : keySaved ? 'Saved!' : settingsData?.data?.has_anthropic_key ? 'Update' : 'Save'}
             </button>
             {settingsData?.data?.has_anthropic_key && (
-              <button type="button" onClick={() => api.put('/api/settings', { anthropic_api_key: null })}
+              <button type="button" onClick={async () => { await api.put('/api/settings', { anthropic_api_key: null }); await mutateSettings() }}
                 className="px-3 py-2 text-slate-500 hover:text-red-400 text-sm transition">Remove</button>
             )}
           </form>
