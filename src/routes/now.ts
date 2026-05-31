@@ -68,7 +68,7 @@ const nowRoutes: FastifyPluginAsync = async (fastify) => {
       if (presenceRaw && OID_RE.test(presenceRaw)) {
         try {
           const ent = await fastify.mongo.collection('entities').findOne({ _id: new ObjectId(presenceRaw) })
-          if (ent) presenceEntity = { _id: ent['_id'].toString(), name: ent['name'] as string, icon: ent['icon'] as string, time_chunks: (ent['time_chunks'] as string[] | undefined) ?? [] }
+          if (ent) presenceEntity = { _id: ent['_id'].toString(), name: ent['name'] as string, icon: ent['icon'] as string, time_chunks: [] }
         } catch { /* entity not found */ }
       }
 
