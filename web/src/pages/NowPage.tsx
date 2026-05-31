@@ -39,23 +39,42 @@ function DaysOverdue({ due }: { due: string }) {
   return <span className="text-xs text-red-400">{days}d overdue</span>
 }
 
-function CardRow({ card, onDefer }: { card: NowCard; onDefer: (id: string) => void }) {
+function CardRow({ card, onDefer, onComplete }: {
+  card: NowCard
+  onDefer: (id: string) => void
+  onComplete: (id: string) => void
+}) {
+  const isRecurring = !!card.recurrence
   return (
     <div className="flex items-center justify-between gap-3 py-2.5 px-3 rounded-lg hover:bg-slate-800/50 transition group">
       <div className="flex-1 min-w-0">
         <p className="text-sm text-slate-200 truncate">{card.title}</p>
-        {card.due_date && <DaysOverdue due={card.due_date} />}
-        {card.recurrence?.archetype === 'habit' && card.recurrence.streak_count && card.recurrence.streak_count > 2 && (
-          <span className="text-xs text-orange-400 ml-2">🔥 {card.recurrence.streak_count}</span>
-        )}
+        <div className="flex items-center gap-2 mt-0.5">
+          {card.due_date && <DaysOverdue due={card.due_date} />}
+          {card.recurrence?.archetype === 'habit' && (card.recurrence.streak_count ?? 0) > 2 && (
+            <span className="text-xs text-orange-400">🔥 {card.recurrence.streak_count}</span>
+          )}
+          {isRecurring && (
+            <span className="text-xs text-slate-700 capitalize">{card.recurrence?.archetype}</span>
+          )}
+        </div>
       </div>
-      <button
-        onClick={() => onDefer(card._id)}
-        className="opacity-0 group-hover:opacity-100 text-xs text-slate-600 hover:text-amber-400 transition px-2 py-1 rounded"
-        title="Snooze"
-      >
-        ⏸
-      </button>
+      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition">
+        <button
+          onClick={() => onComplete(card._id)}
+          className="text-xs text-slate-600 hover:text-emerald-400 transition px-2 py-1 rounded"
+          title={isRecurring ? 'Done — advance recurrence' : 'Done'}
+        >
+          ✓
+        </button>
+        <button
+          onClick={() => onDefer(card._id)}
+          className="text-xs text-slate-600 hover:text-amber-400 transition px-2 py-1 rounded"
+          title="Snooze"
+        >
+          ⏸
+        </button>
+      </div>
     </div>
   )
 }
@@ -87,8 +106,13 @@ export default function NowPage() {
   async function snooze(cardId: string) {
     setDeferring(cardId)
     const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1); tomorrow.setHours(8, 0, 0, 0)
-    await api.patch(`/api/board/unknown/cards/${cardId}`, { defer_until: tomorrow.toISOString() })
+    await api.post(`/api/cards/${cardId}/defer`, { defer_until: tomorrow.toISOString() })
     setDeferring(null)
+    await mutate()
+  }
+
+  async function complete(cardId: string) {
+    await api.post(`/api/cards/${cardId}/complete`, {})
     await mutate()
   }
 
@@ -155,17 +179,17 @@ export default function NowPage() {
 
       {/* Urgent */}
       <Section title="Overdue" count={now.urgent.length} accent="text-red-500">
-        {now.urgent.map(c => <CardRow key={c._id} card={c} onDefer={snooze} />)}
+        {now.urgent.map(c => <CardRow key={c._id} card={c} onDefer={snooze} onComplete={complete} />)}
       </Section>
 
       {/* Habits now */}
       <Section title="Now" count={now.habits.length} accent="text-indigo-400">
-        {now.habits.map(c => <CardRow key={c._id} card={c} onDefer={snooze} />)}
+        {now.habits.map(c => <CardRow key={c._id} card={c} onDefer={snooze} onComplete={complete} />)}
       </Section>
 
       {/* Due today */}
       <Section title="Today" count={now.due_today.length} accent="text-slate-400">
-        {now.due_today.map(c => <CardRow key={c._id} card={c} onDefer={snooze} />)}
+        {now.due_today.map(c => <CardRow key={c._id} card={c} onDefer={snooze} onComplete={complete} />)}
       </Section>
 
       {/* Location context cards */}
@@ -175,13 +199,13 @@ export default function NowPage() {
           count={now.location_context.length}
           accent="text-indigo-400"
         >
-          {now.location_context.map(c => <CardRow key={c._id} card={c} onDefer={snooze} />)}
+          {now.location_context.map(c => <CardRow key={c._id} card={c} onDefer={snooze} onComplete={complete} />)}
         </Section>
       )}
 
       {/* Resurfaced */}
       <Section title="Just resurfaced" count={now.resurfaced.length} accent="text-amber-500">
-        {now.resurfaced.map(c => <CardRow key={c._id} card={c} onDefer={snooze} />)}
+        {now.resurfaced.map(c => <CardRow key={c._id} card={c} onDefer={snooze} onComplete={complete} />)}
       </Section>
 
       {/* List items */}

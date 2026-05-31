@@ -67,10 +67,13 @@ interface Props {
   onClick: (card: BoardCard) => void
   onDefer?: (until: Date | null, label: string) => Promise<void>
   onPickDate?: (card: BoardCard) => void
+  onComplete?: (cardId: string) => Promise<void>
 }
 
-export default function BoardCardItem({ card, index, onClick, onDefer, onPickDate }: Props) {
+export default function BoardCardItem({ card, index, onClick, onDefer, onPickDate, onComplete }: Props) {
   const [showDefer, setShowDefer] = useState(false)
+  const [completing, setCompleting] = useState(false)
+  const isRecurring = !!card.recurrence
   const timing = getTimingState(card)
   const t = TIMING_STYLES[timing]
   const dueLabel = formatDueLabel(card, timing)
@@ -106,6 +109,22 @@ export default function BoardCardItem({ card, index, onClick, onDefer, onPickDat
             <div className="flex items-center gap-1 flex-shrink-0 mt-0.5">
               {streak && (
                 <span className="text-xs text-orange-400">🔥{streak}</span>
+              )}
+              {onComplete && isRecurring && (
+                <button
+                  onClick={async e => {
+                    e.stopPropagation()
+                    setCompleting(true)
+                    await onComplete(card._id)
+                    setCompleting(false)
+                  }}
+                  disabled={completing}
+                  className="opacity-0 group-hover:opacity-100 focus:opacity-100 p-0.5 text-slate-600 hover:text-emerald-400 rounded transition leading-none disabled:opacity-30"
+                  title="Done — advance recurrence"
+                  aria-label="Mark done"
+                >
+                  {completing ? '…' : '✓'}
+                </button>
               )}
               {onDefer && (
                 <button

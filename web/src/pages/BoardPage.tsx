@@ -111,6 +111,11 @@ export default function BoardPage({ slug }: Props) {
     await mutateCards()
   }
 
+  async function completeCard(cardId: string) {
+    await api.post(`/api/cards/${cardId}/complete`, {})
+    await mutateCards()
+  }
+
   async function deferCard(card: BoardCard, until: Date | null, label: string) {
     await saveCard(card._id, { defer_until: until?.toISOString() ?? null })
     const msg = label === 'Someday' ? 'Moved to someday' : `Snoozed — ${label.toLowerCase()}`
@@ -360,6 +365,7 @@ export default function BoardPage({ slug }: Props) {
                           onClick={setActiveCard}
                           onDefer={(until, label) => deferCard(card, until, label)}
                           onPickDate={setActiveCard}
+                          onComplete={completeCard}
                         />
                       ))}
                       {provided.placeholder}
