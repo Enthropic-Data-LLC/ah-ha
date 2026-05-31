@@ -70,8 +70,8 @@ export default function NotificationsPage() {
     }
   }
 
-  async function saveAiKey(e: React.FormEvent) {
-    e.preventDefault()
+  async function saveAiKey(e?: React.FormEvent | React.MouseEvent | unknown) {
+    if (e && typeof (e as React.FormEvent).preventDefault === 'function') (e as React.FormEvent).preventDefault()
     setSavingKey(true)
     try {
       await api.put('/api/settings', { anthropic_api_key: aiKey || null })
@@ -202,15 +202,16 @@ export default function NotificationsPage() {
               {testResult === 'fail' && <span className="text-xs text-red-400">Failed — check key</span>}
             </div>
           )}
-          <form onSubmit={saveAiKey} className="flex gap-2">
+          <div className="flex gap-2">
             <input
               type="password"
               value={aiKey}
               onChange={e => setAiKey(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && !savingKey && aiKey && saveAiKey(e as unknown as React.FormEvent)}
               placeholder={settingsData?.data?.has_anthropic_key ? 'Enter new key to replace' : 'sk-ant-...'}
               className="flex-1 px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500"
             />
-            <button type="submit" disabled={savingKey || !aiKey}
+            <button type="button" onClick={saveAiKey} disabled={savingKey || !aiKey}
               className="px-3 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-sm font-medium rounded-lg transition">
               {savingKey ? '…' : keySaved ? 'Saved!' : settingsData?.data?.has_anthropic_key ? 'Update' : 'Save'}
             </button>
@@ -218,7 +219,7 @@ export default function NotificationsPage() {
               <button type="button" onClick={async () => { await api.put('/api/settings', { anthropic_api_key: null }); await mutateSettings() }}
                 className="px-3 py-2 text-slate-500 hover:text-red-400 text-sm transition">Remove</button>
             )}
-          </form>
+          </div>
         </section>
 
         {error && <p className="text-sm text-red-400">{error}</p>}
