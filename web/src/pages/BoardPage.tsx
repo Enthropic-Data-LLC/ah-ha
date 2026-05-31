@@ -130,7 +130,6 @@ export default function BoardPage({ slug }: Props) {
   const [captureText, setCaptureText] = useState('')
   const [capturing, setCapturing] = useState(false)
   const [parsedCard, setParsedCard] = useState<null | { title: string; due_date?: string | null; recurrence?: unknown; parsed?: boolean }>(null)
-  const [boardView, setBoardView] = useState<'all' | 'today' | 'week' | 'upcoming' | 'someday'>('all')
 
   async function captureCard(e: React.FormEvent) {
     e.preventDefault()
@@ -190,17 +189,6 @@ export default function BoardPage({ slug }: Props) {
             ✕
           </button>
         </div>
-        </div>
-        {/* View filter tabs */}
-        <div className="flex items-center gap-1 px-4 pb-2">
-          {(['all', 'today', 'week', 'upcoming', 'someday'] as const).map(v => (
-            <button key={v} onClick={() => setBoardView(v)}
-              className={`px-3 py-1 rounded-full text-xs font-medium transition capitalize ${
-                boardView === v ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:text-slate-300'
-              }`}>
-              {v === 'week' ? 'This week' : v}
-            </button>
-          ))}
         </div>
         {/* Quick capture */}
         <form onSubmit={captureCard} className="px-4 pb-3 flex gap-2">
