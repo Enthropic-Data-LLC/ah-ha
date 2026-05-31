@@ -172,7 +172,7 @@ export default function BoardPage({ slug }: Props) {
 
   const [captureText, setCaptureText] = useState('')
   const [capturing, setCapturing] = useState(false)
-  type ParsedCard = { title: string; due_date?: string | null; start_date?: string | null; recurrence?: unknown; parsed?: boolean }
+  type ParsedCard = { title: string; due_date?: string | null; start_date?: string | null; recurrence?: string | null; parsed?: boolean }
   const [parsedCard, setParsedCard] = useState<null | ParsedCard>(null)
 
   async function captureCard(e: React.FormEvent) {
