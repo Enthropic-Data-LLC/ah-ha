@@ -12,6 +12,9 @@ import TablePage from './pages/TablePage'
 import KeysPage from './pages/KeysPage'
 import SearchPage from './pages/SearchPage'
 import AuditPage from './pages/AuditPage'
+import MqttPage from './pages/MqttPage'
+import WebhooksPage from './pages/WebhooksPage'
+import NotificationsPage from './pages/NotificationsPage'
 
 function Shell({ children }: { children: React.ReactNode }) {
   const { user } = useMe()
@@ -101,6 +104,21 @@ export default function App() {
   // Search
   if (path === '/search') {
     return <Shell><SearchPage /></Shell>
+  }
+
+  // MQTT subscriptions
+  if (path === '/mqtt') {
+    return <Shell><MqttPage /></Shell>
+  }
+
+  // Webhooks
+  if (path === '/webhooks') {
+    return <Shell><WebhooksPage /></Shell>
+  }
+
+  // Notification settings
+  if (path === '/settings') {
+    return <Shell><NotificationsPage /></Shell>
   }
 
   // Audit Log
