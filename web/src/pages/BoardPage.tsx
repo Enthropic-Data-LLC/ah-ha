@@ -127,6 +127,34 @@ export default function BoardPage({ slug }: Props) {
     await mutateCards()
   }
 
+  // Date range filter
+  const SLIDER_STEPS = [1, 3, 7, 14, 30, Infinity]
+  const SLIDER_LABELS = ['Today', '3 days', '1 week', '2 weeks', '30 days', 'All']
+  const [sliderStep, setSliderStep] = useState(5) // default: All
+  const [showUndated, setShowUndated] = useState(true)
+
+  const dueDays = SLIDER_STEPS[sliderStep]
+
+  function cardVisible(card: BoardCard): boolean {
+    const now = new Date()
+    const isDeferred = card.defer_until && new Date(card.defer_until) > now
+    const hasDueDate = !!card.due_date && !isDeferred
+    if (!hasDueDate) return showUndated
+    if (dueDays === Infinity) return true
+    const cutoff = new Date(now.getTime() + dueDays * 86400000)
+    cutoff.setHours(23, 59, 59, 999)
+    return new Date(card.due_date!) <= cutoff
+  }
+
+  function haptic(ms = 8) {
+    navigator.vibrate?.(ms)
+  }
+
+  const visibleCardsByColumn = columns.reduce<Record<string, BoardCard[]>>((acc, col) => {
+    acc[col._id] = (cardsByColumn[col._id] ?? []).filter(c => cardVisible(c))
+    return acc
+  }, {})
+
   const [captureText, setCaptureText] = useState('')
   const [capturing, setCapturing] = useState(false)
   type ParsedCard = { title: string; due_date?: string | null; start_date?: string | null; recurrence?: unknown; parsed?: boolean }
@@ -219,6 +247,40 @@ export default function BoardPage({ slug }: Props) {
             </div>
           </div>
         )}
+
+        {/* Date range filter */}
+        <div className="px-4 pb-3 flex items-center gap-3">
+          <div className="flex-1 flex items-center gap-3 min-w-0">
+            <span className="text-xs text-slate-600 flex-shrink-0">Due</span>
+            <input
+              type="range"
+              min={0}
+              max={5}
+              step={1}
+              value={sliderStep}
+              onChange={e => {
+                const v = Number(e.target.value)
+                if (v !== sliderStep) haptic(6)
+                setSliderStep(v)
+              }}
+              className="flex-1 h-1 accent-indigo-500 cursor-pointer"
+            />
+            <span className={`text-xs w-14 text-right flex-shrink-0 tabular-nums ${sliderStep < 5 ? 'text-indigo-400' : 'text-slate-600'}`}>
+              {SLIDER_LABELS[sliderStep]}
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => { haptic(10); setShowUndated(v => !v) }}
+            className={`text-xs px-2 py-1 rounded-lg border transition flex-shrink-0 ${
+              showUndated
+                ? 'border-slate-700 text-slate-500'
+                : 'border-slate-800 text-slate-700'
+            }`}
+          >
+            {showUndated ? 'undated ✓' : 'undated ✗'}
+          </button>
+        </div>
       </div>
 
       {/* Columns — mobile: snap scroll; desktop: free scroll */}
@@ -238,7 +300,12 @@ export default function BoardPage({ slug }: Props) {
                 <div className="flex items-center gap-1.5 mb-3 px-1 group">
                   <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: col.color }} />
                   <h2 className="text-sm font-semibold flex-1 truncate">{col.title}</h2>
-                  <span className="text-xs text-slate-600">{(cardsByColumn[col._id] ?? []).length}</span>
+                  <span className="text-xs text-slate-600">
+                    {(visibleCardsByColumn[col._id] ?? []).length}
+                    {(visibleCardsByColumn[col._id] ?? []).length !== (cardsByColumn[col._id] ?? []).length && (
+                      <span className="text-slate-700">/{(cardsByColumn[col._id] ?? []).length}</span>
+                    )}
+                  </span>
                   {/* Move buttons — visible on hover (desktop) or always (mobile) */}
                   <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity sm:opacity-0">
                     <button
@@ -265,7 +332,7 @@ export default function BoardPage({ slug }: Props) {
                         snapshot.isDraggingOver ? 'bg-slate-800/60' : ''
                       }`}
                     >
-                      {(cardsByColumn[col._id] ?? []).map((card, index) => (
+                      {(visibleCardsByColumn[col._id] ?? []).map((card, index) => (
                         <BoardCardItem
                           key={card._id}
                           card={card}
