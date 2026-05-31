@@ -266,9 +266,8 @@ export default function BoardPage({ slug }: Props) {
             step={1}
             value={sliderStep}
             onChange={e => {
-              const v = Number(e.target.value)
-              if (v !== sliderStep) haptic(6)
-              setSliderStep(v)
+              haptic(6)
+              setSliderStep(Number(e.target.value))
             }}
             className="flex-1 h-1 accent-indigo-500 cursor-pointer"
           />
