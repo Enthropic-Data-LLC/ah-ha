@@ -8,7 +8,8 @@ export default defineConfig({
     react(),
     tailwindcss(),
     VitePWA({
-      registerType: 'autoUpdate',
+      registerType: 'prompt',
+      workbox: { skipWaiting: true, clientsClaim: true },
       includeAssets: ['favicon.ico', 'icons/*.png'],
       manifest: {
         name: 'Ah-Ha',
