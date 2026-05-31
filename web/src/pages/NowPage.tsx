@@ -2,7 +2,7 @@ import useSWR from 'swr'
 import { fetcher, api } from '../lib/api'
 import { useState } from 'react'
 
-interface NowCard { _id: string; title: string; due_date?: string; priority?: string; ref?: string; recurrence?: { archetype: string; streak_count?: number; time_anchor?: string } }
+interface NowCard { _id: string; title: string; due_date?: string; priority?: string; ref?: string; created_at?: string; recurrence?: { archetype: string; streak_count?: number; time_anchor?: string; interval_days?: number; last_completed_at?: string | null } }
 interface NowItem { _id: string; title: string; due_at?: string }
 
 interface NowData {
@@ -74,6 +74,55 @@ function CardRow({ card, onDefer, onComplete }: {
         >
           ⏸
         </button>
+      </div>
+    </div>
+  )
+}
+
+function daysSince(dateStr: string | null | undefined, fallback: string | undefined): number {
+  const base = dateStr ? new Date(dateStr) : (fallback ? new Date(fallback) : null)
+  if (!base) return 0
+  return Math.floor((Date.now() - base.getTime()) / 86400000)
+}
+
+function NudgeRow({ card, onDefer, onComplete }: {
+  card: NowCard
+  onDefer: (id: string) => void
+  onComplete: (id: string) => void
+}) {
+  const rec = card.recurrence
+  const days = daysSince(rec?.last_completed_at, card.created_at)
+  const interval = rec?.interval_days ?? 0
+  const pct = interval > 0 ? Math.min(days / interval, 1) : 0
+
+  const warmMsg = days === 0
+    ? 'Just completed'
+    : days === 1
+    ? 'Yesterday'
+    : `${days} days ago`
+
+  return (
+    <div className="flex items-center gap-3 py-2.5 px-3 rounded-lg hover:bg-slate-800/30 transition group">
+      <div className="flex-1 min-w-0">
+        <p className="text-sm text-slate-400 truncate">{card.title}</p>
+        <div className="flex items-center gap-2 mt-1">
+          <div className="w-16 h-0.5 bg-slate-800 rounded-full overflow-hidden">
+            <div className="h-full bg-slate-600 rounded-full transition-all" style={{ width: `${pct * 100}%` }} />
+          </div>
+          <span className="text-xs text-slate-600">{warmMsg}</span>
+        </div>
+      </div>
+      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition">
+        <button
+          onClick={() => onComplete(card._id)}
+          className="text-xs text-slate-600 hover:text-emerald-400 transition px-2 py-1 rounded"
+          title="Done — reset clock"
+        >✓</button>
+        <button
+          onClick={() => onDefer(card._id)}
+          className="text-xs text-slate-600 hover:text-amber-400 transition px-2 py-1 rounded"
+          title="Snooze"
+        >⏸</button>
       </div>
     </div>
   )
@@ -223,12 +272,7 @@ export default function NowPage() {
         <div className="space-y-1 border-t border-slate-800/60 pt-4">
           <span className="text-xs font-mono uppercase tracking-wider text-slate-600 px-1">It's been a while</span>
           {now.nudges.map(c => (
-            <div key={c._id} className="flex items-center gap-3 py-2.5 px-3 rounded-lg hover:bg-slate-800/30 transition">
-              <p className="text-sm text-slate-400 flex-1 truncate">{c.title}</p>
-              {c.recurrence?.archetype === 'interval' && (
-                <span className="text-xs text-slate-600">~{(c.recurrence as { interval_days?: number }).interval_days}d interval</span>
-              )}
-            </div>
+            <NudgeRow key={c._id} card={c} onDefer={snooze} onComplete={complete} />
           ))}
         </div>
       )}

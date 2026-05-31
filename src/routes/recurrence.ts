@@ -109,6 +109,7 @@ const recurrenceRoutes: FastifyPluginAsync = async (fastify) => {
           case 'seasonal': {
             updates['recurrence'] = { ...rec, last_completed_at: now, completions }
             updates['due_date'] = nextIntervalDue(rec.interval_days ?? 7)
+            updates['interval_notified'] = false  // allow next nudge notification
             break
           }
         }

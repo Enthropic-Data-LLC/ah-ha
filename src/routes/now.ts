@@ -85,19 +85,24 @@ const nowRoutes: FastifyPluginAsync = async (fastify) => {
         defer_until: { $gte: oneHourAgo, $lte: now },
       }).limit(3).toArray()
 
-      // Interval nudges (at 80% of interval)
-      const nudges = await fastify.mongo.collection('board_cards').find({
+      // Interval nudges (at 80% of interval) — filter in Node, not $where (no JS eval in prod)
+      const allIntervalCards = await fastify.mongo.collection('board_cards').find({
         org_id: orgId,
         done: { $ne: true },
         deleted_at: { $exists: false },
-        'recurrence.archetype': 'interval',
-        $where: function(this: Record<string, unknown>) {
-          const rec = this['recurrence'] as { interval_days?: number; last_completed_at?: Date } | undefined
-          if (!rec?.interval_days || !rec?.last_completed_at) return false
-          const threshold = rec.interval_days * 0.8 * 86400000
-          return Date.now() - new Date(rec.last_completed_at).getTime() >= threshold
-        },
-      }).limit(3).toArray()
+        'recurrence.archetype': { $in: ['interval', 'seasonal'] },
+        $or: [{ defer_until: null }, { defer_until: { $lte: now } }],
+      }).toArray()
+
+      type IntervalRec = { interval_days?: number; last_completed_at?: Date | string | null }
+      const nudges = allIntervalCards.filter(c => {
+        const rec = c['recurrence'] as IntervalRec | undefined
+        if (!rec?.interval_days) return false
+        const base = rec.last_completed_at
+          ? new Date(rec.last_completed_at)
+          : new Date(c['created_at'] as Date)
+        return now.getTime() - base.getTime() >= rec.interval_days * 0.8 * 86400000
+      }).slice(0, 5)
 
       // List items due today
       const listItems = await fastify.mongo.collection('list_items').find({
@@ -185,7 +190,7 @@ const nowRoutes: FastifyPluginAsync = async (fastify) => {
           due_today: dueToday.map(c => ({ _id: c['_id'], title: c['title'], due_date: c['due_date'], priority: c['priority'], column_id: c['column_id'], ref: c['ref'] })),
           habits:    habits.map(c => ({ _id: c['_id'], title: c['title'], recurrence: c['recurrence'], ref: c['ref'] })),
           resurfaced: resurfaced.map(c => ({ _id: c['_id'], title: c['title'], ref: c['ref'] })),
-          nudges:     nudges.map(c => ({ _id: c['_id'], title: c['title'], recurrence: c['recurrence'], ref: c['ref'] })),
+          nudges:     nudges.map(c => ({ _id: c['_id'], title: c['title'], ref: c['ref'], recurrence: c['recurrence'], created_at: c['created_at'] })),
           list_items: listItems.map(i => ({ _id: i['_id'], title: i['title'], due_at: i['due_at'] })),
           location_context: locationCards,
           trail_pulse: trailPulse,

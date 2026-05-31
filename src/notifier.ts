@@ -177,6 +177,16 @@ function currentTimeInTz(timezone: string): { hour: number; minute: number } {
   }
 }
 
+function formatIntervalNudge(title: string, daysSince: number, intervalDays: number): string {
+  const RELATION_WORDS = ['call', 'text', 'reach out', 'catch up', 'connect', 'check in', 'visit', 'message']
+  const isRelationship = RELATION_WORDS.some(w => title.toLowerCase().includes(w))
+  const when = daysSince === 1 ? 'yesterday' : `${daysSince} days ago`
+  if (isRelationship) {
+    return `💙 It's been ${daysSince} days — "${title}". (~every ${intervalDays}d)`
+  }
+  return `🔔 It's been a while: "${title}" — last done ${when}. (~every ${intervalDays}d)`
+}
+
 // ── Main ───────────────────────────────────────────────────────────────────
 
 async function main() {
@@ -375,8 +385,42 @@ async function main() {
       }
     }
 
-    if (dueToday.length + newlyOverdue.length + resurfacing.length > 0) {
-      console.log(`[date-engine] processed: ${dueToday.length} due today, ${newlyOverdue.length} newly overdue, ${resurfacing.length} resurfaced`)
+    // 6. Interval nudge notifications (warm tone, once per cycle)
+    type IntervalRec = { interval_days?: number; last_completed_at?: Date | string | null }
+    const intervalCandidates = await db.collection('board_cards').find({
+      done: { $ne: true },
+      deleted_at: { $exists: false },
+      'recurrence.archetype': { $in: ['interval', 'seasonal'] },
+      interval_notified: { $ne: true },
+    }).toArray()
+
+    let nudgesSent = 0
+    for (const card of intervalCandidates) {
+      const rec = card['recurrence'] as IntervalRec | undefined
+      if (!rec?.interval_days) continue
+      const base = rec.last_completed_at
+        ? new Date(rec.last_completed_at)
+        : new Date(card['created_at'] as Date)
+      const daysSince = Math.floor((now.getTime() - base.getTime()) / 86400000)
+      if (daysSince < rec.interval_days * 0.8) continue
+
+      // Always mark so we don't recheck every 5 min even if user has no prefs
+      await db.collection('board_cards').updateOne({ _id: card['_id'] }, { $set: { interval_notified: true } })
+
+      const user = await db.collection('users').findOne({ _id: card['created_by'] })
+      if (!user) continue
+      const pref = await db.collection('notification_prefs').findOne({ user_id: user._id })
+      const channels = (pref?.['channels'] as { telegram_chat_id?: string; email?: string } | undefined) ?? {}
+      if (!channels.telegram_chat_id && !channels.email) continue
+
+      const msg = formatIntervalNudge(card['title'] as string, daysSince, rec.interval_days)
+      await postToNodeRed('interval_nudge', user['username'] as string, { message: msg, telegram_chat_id: channels.telegram_chat_id })
+      if (channels.email) await sendEmail(channels.email, `Gentle nudge: ${card['title'] as string}`, msg)
+      nudgesSent++
+    }
+
+    if (dueToday.length + newlyOverdue.length + resurfacing.length + nudgesSent > 0) {
+      console.log(`[date-engine] processed: ${dueToday.length} due today, ${newlyOverdue.length} newly overdue, ${resurfacing.length} resurfaced, ${nudgesSent} nudges sent`)
     }
   }
 
