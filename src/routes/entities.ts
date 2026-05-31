@@ -209,6 +209,53 @@ const entityRoutes: FastifyPluginAsync = async (fastify) => {
     return { ip: req.ip }
   })
 
+  // GET /api/entities/going-to?ids=id1,id2 — merged checklist for multiple destinations
+  fastify.get<{ Querystring: { ids?: string } }>(
+    '/api/entities/going-to',
+    { preHandler: fastify.authenticate },
+    async (req) => {
+      const ids = (req.query.ids ?? '').split(',').map(s => s.trim()).filter(Boolean)
+      if (!ids.length) return { data: [] }
+
+      const orgId = req.user!.orgId
+      const sections: Array<{
+        entity: { _id: string; name: string; icon: string }
+        list_items: Array<{ _id: string; title: string }>
+        cards: Array<{ _id: string; title: string; ref: string }>
+        total: number
+      }> = []
+
+      for (const idStr of ids) {
+        let entityId: ObjectId
+        try { entityId = new ObjectId(idStr) } catch { continue }
+
+        const entity = await fastify.mongo.collection('entities').findOne({
+          _id: entityId, org_id: orgId, deleted_at: { $exists: false },
+        })
+        if (!entity) continue
+
+        const listItems = await fastify.mongo.collection('list_items').find({
+          org_id: orgId, done: false, deleted_at: { $exists: false },
+          'contexts.entity_id': idStr,
+        }).toArray()
+
+        const cards = await fastify.mongo.collection('board_cards').find({
+          org_id: orgId, done: { $ne: true }, deleted_at: { $exists: false },
+          'contexts.entity_id': idStr,
+        }).toArray()
+
+        sections.push({
+          entity: { _id: entity['_id'].toString(), name: entity['name'] as string, icon: entity['icon'] as string },
+          list_items: listItems.map(i => ({ _id: i['_id'].toString(), title: i['title'] as string })),
+          cards: cards.map(c => ({ _id: c['_id'].toString(), title: c['title'] as string, ref: c['ref'] as string })),
+          total: listItems.length + cards.length,
+        })
+      }
+
+      return { data: sections }
+    }
+  )
+
   // GET /api/entities/:id/going-to — items + cards tagged to this entity (pre-departure checklist)
   fastify.get<{ Params: { id: string } }>(
     '/api/entities/:id/going-to',

@@ -76,6 +76,15 @@ export default function TrailPage({ slug }: { slug: string }) {
   const [showDelete, setShowDelete] = useState(false)
   const [deleting, setDeleting] = useState(false)
 
+  async function deleteSpace() {
+    if (!user?.username) return
+    setDeleting(true)
+    try {
+      await api.delete(`/api/spaces/${encodeURIComponent(`${user.username}/trail/${slug}`)}`)
+      window.location.href = `/${user.username}/spaces`
+    } catch { setDeleting(false) }
+  }
+
   const [text, setText]           = useState('')
   const [tone, setTone]           = useState<Tone>('neutral')
   const [tagsInput, setTagsInput] = useState('')
@@ -327,15 +336,16 @@ export default function TrailPage({ slug }: { slug: string }) {
         )}
       </div>
     </div>
-  )
 
-      {showDelete && (
-        <ConfirmDeleteModal
-          name={slug}
-          type="trail"
-          onConfirm={deleteSpace}
-          onCancel={() => setShowDelete(false)}
-          deleting={deleting}
-        />
-      )}
+    {showDelete && (
+      <ConfirmDeleteModal
+        name={slug}
+        type="trail"
+        onConfirm={deleteSpace}
+        onCancel={() => setShowDelete(false)}
+        deleting={deleting}
+      />
+    )}
+    </>
+  )
 }
