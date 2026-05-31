@@ -1,5 +1,6 @@
 import useSWR from 'swr'
 import { fetcher, api, ApiError } from '../lib/api'
+
 import { useEffect, useState } from 'react'
 
 interface NotifPrefs {
@@ -32,6 +33,10 @@ export default function NotificationsPage() {
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState('')
+  const [aiKey, setAiKey] = useState('')
+  const [savingKey, setSavingKey] = useState(false)
+  const [keySaved, setKeySaved] = useState(false)
+  const { data: settingsData } = useSWR<{ data: { has_anthropic_key: boolean } }>('/api/settings', fetcher)
 
   useEffect(() => {
     if (data?.data) {
@@ -61,6 +66,17 @@ export default function NotificationsPage() {
     } finally {
       setSaving(false)
     }
+  }
+
+  async function saveAiKey(e: React.FormEvent) {
+    e.preventDefault()
+    setSavingKey(true)
+    try {
+      await api.put('/api/settings', { anthropic_api_key: aiKey || null })
+      setAiKey('')
+      setKeySaved(true)
+      setTimeout(() => setKeySaved(false), 3000)
+    } finally { setSavingKey(false) }
   }
 
   if (isLoading) {
@@ -153,6 +169,31 @@ export default function NotificationsPage() {
               className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
             />
           </div>
+        </section>
+
+        {/* AI Key (BYOK) */}
+        <section className="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-4">
+          <div>
+            <p className="text-sm font-medium">AI features (Bring Your Own Key)</p>
+            <p className="text-xs text-slate-500 mt-0.5">Used for natural language date parsing and Now view briefings. Your key, stored encrypted.</p>
+          </div>
+          <form onSubmit={saveAiKey} className="flex gap-2">
+            <input
+              type="password"
+              value={aiKey}
+              onChange={e => setAiKey(e.target.value)}
+              placeholder={settingsData?.data?.has_anthropic_key ? '••••••••••••••••' : 'sk-ant-...'}
+              className="flex-1 px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+            <button type="submit" disabled={savingKey || !aiKey}
+              className="px-3 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-sm font-medium rounded-lg transition">
+              {savingKey ? '…' : keySaved ? 'Saved!' : settingsData?.data?.has_anthropic_key ? 'Update' : 'Save'}
+            </button>
+            {settingsData?.data?.has_anthropic_key && (
+              <button type="button" onClick={() => api.put('/api/settings', { anthropic_api_key: null })}
+                className="px-3 py-2 text-slate-500 hover:text-red-400 text-sm transition">Remove</button>
+            )}
+          </form>
         </section>
 
         {error && <p className="text-sm text-red-400">{error}</p>}

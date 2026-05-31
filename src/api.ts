@@ -28,6 +28,8 @@ import notificationsRoutes from './routes/notifications.js'
 import auditRoutes from './routes/audit.js'
 import webhooksRoutes from './routes/webhooks.js'
 import shareRoutes from './routes/share.js'
+import settingsRoutes from './routes/settings.js'
+import { captureRoute } from './routes/capture.js'
 import { setupTrailSchema, closePool } from './lib/timescale.js'
 
 const isProd = process.env['NODE_ENV'] === 'production'
@@ -91,6 +93,8 @@ await fastify.register(async (sub) => {
   await sub.register(auditRoutes)
   await sub.register(webhooksRoutes)
   await sub.register(shareRoutes)
+  await sub.register(settingsRoutes)
+  await sub.register(captureRoute)
 })
 
 fastify.get('/healthz', async () => ({ ok: true, ts: new Date().toISOString() }))

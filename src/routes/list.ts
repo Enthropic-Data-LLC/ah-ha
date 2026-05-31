@@ -72,11 +72,13 @@ const listRoutes: FastifyPluginAsync = async (fastify) => {
       const body = z.object({
         title: z.string().min(1).max(500).optional(),
         due_at: z.string().datetime().nullable().optional(),
+        defer_until: z.string().datetime().nullable().optional(),
       }).parse(req.body)
 
       const update: Record<string, unknown> = {}
       if (body.title !== undefined) update['title'] = body.title
       if (body.due_at !== undefined) update['due_at'] = body.due_at ? new Date(body.due_at) : null
+      if (body.defer_until !== undefined) update['defer_until'] = body.defer_until ? new Date(body.defer_until) : null
 
       const result = await fastify.mongo.collection('list_items').updateOne(
         { _id: new ObjectId(req.params.id), org_id: req.user!.orgId, deleted_at: { $exists: false } },

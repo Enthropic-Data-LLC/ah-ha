@@ -71,6 +71,23 @@ const boardRoutes: FastifyPluginAsync = async (fastify) => {
       }
       if (req.query.column_id) filter['column_id'] = new ObjectId(req.query.column_id)
 
+      const now = new Date()
+      const view = (req.query as Record<string, string>).view
+      if (view === 'today') {
+        const eod = new Date(now); eod.setHours(23, 59, 59, 999)
+        filter['due_date'] = { $lte: eod }
+      } else if (view === 'week') {
+        const eow = new Date(now); eow.setDate(eow.getDate() + 7)
+        filter['due_date'] = { $lte: eow, $gte: now }
+      } else if (view === 'upcoming') {
+        filter['start_date'] = { $gt: now }
+      } else if (view === 'someday') {
+        filter['due_date'] = { $exists: false }
+      }
+      if (view && view !== 'all') {
+        filter['$and'] = [{ $or: [{ start_date: null }, { start_date: { $lte: now } }] }, { $or: [{ defer_until: null }, { defer_until: { $lte: now } }] }]
+      }
+
       const cards = await fastify.mongo.collection('board_cards')
         .find(filter)
         .sort({ column_id: 1, position: 1 })
@@ -91,6 +108,10 @@ const boardRoutes: FastifyPluginAsync = async (fastify) => {
         priority: z.enum(['none', 'low', 'medium', 'high']).default('none'),
         tags: z.array(z.string()).default([]),
         color: z.string().default(''),
+        due_date: z.string().datetime().nullable().optional(),
+        start_date: z.string().datetime().nullable().optional(),
+        defer_until: z.string().datetime().nullable().optional(),
+        recurrence: z.unknown().optional(),
       }).parse(req.body)
 
       const space = await getSpace(fastify, req.params.slug, req.user!.orgId)
@@ -119,6 +140,10 @@ const boardRoutes: FastifyPluginAsync = async (fastify) => {
         created_by: req.user!.id,
         updated_at: new Date(),
         links: [],
+        due_date: body.due_date ? new Date(body.due_date) : null,
+        start_date: body.start_date ? new Date(body.start_date) : null,
+        defer_until: body.defer_until ? new Date(body.defer_until) : null,
+        recurrence: body.recurrence ?? null,
       }
       await fastify.mongo.collection('board_cards').insertOne(card)
       reply.status(201)
@@ -137,11 +162,26 @@ const boardRoutes: FastifyPluginAsync = async (fastify) => {
         priority: z.enum(['none', 'low', 'medium', 'high']).optional(),
         tags: z.array(z.string()).optional(),
         color: z.string().optional(),
+        due_date: z.string().datetime().nullable().optional(),
+        start_date: z.string().datetime().nullable().optional(),
+        defer_until: z.string().datetime().nullable().optional(),
+        recurrence: z.unknown().optional(),
       }).parse(req.body)
+
+      const update: Record<string, unknown> = { updated_at: new Date() }
+      if (body.title !== undefined) update['title'] = body.title
+      if (body.notes !== undefined) update['notes'] = body.notes
+      if (body.priority !== undefined) update['priority'] = body.priority
+      if (body.tags !== undefined) update['tags'] = body.tags
+      if (body.color !== undefined) update['color'] = body.color
+      if (body.due_date !== undefined) update['due_date'] = body.due_date ? new Date(body.due_date) : null
+      if (body.start_date !== undefined) update['start_date'] = body.start_date ? new Date(body.start_date) : null
+      if (body.defer_until !== undefined) update['defer_until'] = body.defer_until ? new Date(body.defer_until) : null
+      if (body.recurrence !== undefined) update['recurrence'] = body.recurrence
 
       const result = await fastify.mongo.collection('board_cards').updateOne(
         { _id: new ObjectId(req.params.id), org_id: req.user!.orgId, deleted_at: { $exists: false } },
-        { $set: { ...body, updated_at: new Date() } }
+        { $set: update }
       )
       if (result.matchedCount === 0) return reply.status(404).send({ error: 'Not found' })
       return { ok: true }

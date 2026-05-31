@@ -127,6 +127,29 @@ export default function BoardPage({ slug }: Props) {
     await mutateCards()
   }
 
+  const [captureText, setCaptureText] = useState('')
+  const [capturing, setCapturing] = useState(false)
+  const [parsedCard, setParsedCard] = useState<null | { title: string; due_date?: string | null; recurrence?: unknown; parsed?: boolean }>(null)
+  const [boardView, setBoardView] = useState<'all' | 'today' | 'week' | 'upcoming' | 'someday'>('all')
+
+  async function captureCard(e: React.FormEvent) {
+    e.preventDefault()
+    if (!captureText.trim()) return
+    setCapturing(true)
+    try {
+      const res = await api.post<{ data: { title: string; due_date?: string | null; recurrence?: unknown; parsed?: boolean } }>(`/api/board/${slug}/cards/capture`, { text: captureText })
+      setParsedCard((res as { data: { title: string; due_date?: string | null; recurrence?: unknown; parsed?: boolean } }).data)
+    } finally { setCapturing(false) }
+  }
+
+  async function confirmCapture() {
+    if (!parsedCard || !columns[0]) return
+    await actions.createCard({ column_id: columns[0]._id, title: parsedCard.title, due_date: parsedCard.due_date ?? undefined, recurrence: parsedCard.recurrence ?? undefined } as Parameters<typeof actions.createCard>[0])
+    await mutateCards()
+    setCaptureText('')
+    setParsedCard(null)
+  }
+
   async function deleteSpace() {
     if (!user?.username) return
     setDeleting(true)
@@ -149,9 +172,10 @@ export default function BoardPage({ slug }: Props) {
   return (
     <div className="flex flex-col h-full">
       {/* Board header */}
-      <div className="flex items-center justify-between px-6 py-3 border-b border-slate-800 flex-shrink-0">
-        <h1 className="font-semibold capitalize">{slug}</h1>
-        <div className="flex items-center gap-2">
+      <div className="flex flex-col border-b border-slate-800 flex-shrink-0">
+        <div className="flex items-center justify-between px-6 py-3">
+          <h1 className="font-semibold capitalize">{slug}</h1>
+          <div className="flex items-center gap-2">
           <button
             onClick={addColumn}
             className="px-3 py-1.5 text-sm text-slate-400 hover:text-slate-200 hover:bg-slate-800 rounded-lg transition"
@@ -166,6 +190,45 @@ export default function BoardPage({ slug }: Props) {
             ✕
           </button>
         </div>
+        </div>
+        {/* View filter tabs */}
+        <div className="flex items-center gap-1 px-4 pb-2">
+          {(['all', 'today', 'week', 'upcoming', 'someday'] as const).map(v => (
+            <button key={v} onClick={() => setBoardView(v)}
+              className={`px-3 py-1 rounded-full text-xs font-medium transition capitalize ${
+                boardView === v ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:text-slate-300'
+              }`}>
+              {v === 'week' ? 'This week' : v}
+            </button>
+          ))}
+        </div>
+        {/* Quick capture */}
+        <form onSubmit={captureCard} className="px-4 pb-3 flex gap-2">
+          <input value={captureText} onChange={e => setCaptureText(e.target.value)}
+            placeholder="Quick add… (AI parses dates & recurrence)"
+            className="flex-1 px-3 py-1.5 bg-slate-800/60 border border-slate-800 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 placeholder-slate-600"
+          />
+          <button type="submit" disabled={capturing || !captureText.trim()}
+            className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-sm rounded-lg transition">
+            {capturing ? '…' : '+'}
+          </button>
+        </form>
+        {parsedCard && (
+          <div className="mx-4 mb-2 px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg flex items-center justify-between gap-3">
+            <div className="text-xs text-slate-300 flex-1 min-w-0">
+              <span className="font-medium truncate block">{parsedCard.title}</span>
+              <div className="flex gap-2 mt-0.5">
+                {parsedCard.due_date && <span className="text-indigo-400">due {new Date(parsedCard.due_date).toLocaleDateString()}</span>}
+                {parsedCard.recurrence && <span className="text-emerald-400">repeats</span>}
+                {!parsedCard.parsed && <span className="text-slate-600">no AI key — add one in Settings</span>}
+              </div>
+            </div>
+            <div className="flex gap-1">
+              <button onClick={confirmCapture} className="px-2 py-1 bg-indigo-600 hover:bg-indigo-500 text-xs rounded transition">Add</button>
+              <button onClick={() => { setCaptureText(''); setParsedCard(null) }} className="px-2 py-1 text-slate-500 hover:text-slate-300 text-xs rounded transition">✕</button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Columns — mobile: snap scroll; desktop: free scroll */}

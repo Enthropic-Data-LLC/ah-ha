@@ -11,7 +11,7 @@ export interface Space {
   ref: string
   slug: string
   name: string
-  type: 'board' | 'trail' | 'note' | 'list'
+  type: 'board' | 'trail' | 'note' | 'list' | 'table'
   description?: string
   created_at: string
 }
@@ -22,6 +22,27 @@ export interface BoardColumn {
   color: string
   position: number
   space_id: string
+}
+
+export type RecurrenceArchetype = 'habit' | 'schedule' | 'interval' | 'seasonal'
+
+export interface Recurrence {
+  archetype: RecurrenceArchetype
+  // habit
+  time_anchor?: 'morning' | 'midday' | 'evening' | 'night'
+  streak_count?: number
+  streak_best?: number
+  // schedule
+  day_of_week?: number      // 0=Sun
+  day_of_month?: number
+  context?: 'home' | 'away' | null
+  // interval
+  interval_days?: number
+  last_completed_at?: string | null
+  // shared
+  completions?: number
+  end_date?: string | null
+  end_count?: number | null
 }
 
 export interface BoardCard {
@@ -36,4 +57,14 @@ export interface BoardCard {
   column_id: string
   updated_at: string
   created_by: string
+  // dates
+  due_date?: string | null
+  start_date?: string | null
+  defer_until?: string | null
+  recurrence?: Recurrence | null
+  // engine flags
+  overdue_notified?: boolean
+  escalated_day_1?: boolean
+  escalated_day_3?: boolean
+  escalated_day_7?: boolean
 }
