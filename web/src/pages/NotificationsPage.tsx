@@ -86,9 +86,8 @@ export default function NotificationsPage() {
     setTestingKey(true)
     setTestResult(null)
     try {
-      const res = await api.post<{ data: { briefing: string | null } }>('/api/now', {})
-      const d = res as { data: { briefing: string | null } }
-      setTestResult(d.data.briefing !== null ? 'ok' : 'fail')
+      const res = await api.post<{ ok: boolean }>('/api/settings/test-key', {})
+      setTestResult((res as { ok: boolean }).ok ? 'ok' : 'fail')
     } catch { setTestResult('fail') }
     finally { setTestingKey(false) }
     setTimeout(() => setTestResult(null), 5000)
