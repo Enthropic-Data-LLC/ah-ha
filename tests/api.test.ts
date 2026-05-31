@@ -236,11 +236,5 @@ describe('Table', () => {
 })
 
 // ── Cleanup ──────────────────────────────────────────────────────────────────
-
-afterAll(async () => {
-  for (const [type, slug] of [['trail', trailSlug], ['board', boardSlug], ['note', noteSlug], ['list', listSlug], ['table', tableSlug]]) {
-    if (slug && username) {
-      await req('DELETE', `/api/spaces/${encodeURIComponent(`${username}/${type}/${slug}`)}`)
-    }
-  }
-})
+// NOTE: intentionally no afterAll cleanup — the test instance shares the same
+// MongoDB as production. Test spaces linger with slugs like test-trail-{ts}.
