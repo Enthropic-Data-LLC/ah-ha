@@ -94,7 +94,7 @@ await fastify.register(async (sub) => {
 fastify.get('/healthz', async () => ({ ok: true, ts: new Date().toISOString() }))
 
 const webDist = join(dirname(fileURLToPath(import.meta.url)), '..', 'web', 'dist')
-await fastify.register(staticFiles, { root: webDist, wildcard: false })
+await fastify.register(staticFiles, { root: webDist })
 fastify.setNotFoundHandler(async (_req, reply) => {
   reply.sendFile('index.html')
 })
