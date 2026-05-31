@@ -7,6 +7,7 @@ import type { BoardCard, BoardColumn } from '../lib/types'
 
 interface NowCard { _id: string; title: string; due_date?: string; priority?: string; ref?: string; created_at?: string; recurrence?: { archetype: string; streak_count?: number; time_anchor?: string; interval_days?: number; last_completed_at?: string | null } }
 interface NowItem { _id: string; title: string; due_at?: string }
+interface NowListItem { _id: string; title: string; space_ref?: string }
 
 interface NowData {
   context: {
@@ -21,6 +22,7 @@ interface NowData {
   resurfaced: NowCard[]
   nudges: NowCard[]
   list_items: NowItem[]
+  entity_list_items: NowListItem[]
   location_context: NowCard[]
   trail_pulse: { recent_tone: string; total_today: number } | null
   briefing: string | null
@@ -215,7 +217,7 @@ export default function NowPage() {
     )
   }
 
-  const total = now.urgent.length + now.due_today.length + now.habits.length + now.resurfaced.length + now.list_items.length + now.nudges.length
+  const total = now.urgent.length + now.due_today.length + now.habits.length + now.resurfaced.length + now.list_items.length + now.nudges.length + now.entity_list_items.length
   const isEmpty = total === 0
 
   return (
@@ -300,7 +302,23 @@ export default function NowPage() {
         {now.resurfaced.map(c => <CardRow key={c._id} card={c} onDefer={snooze} onComplete={complete} onOpen={openCard} />)}
       </Section>
 
-      {/* List items */}
+      {/* Entity-tagged list items — surfaced because you're here */}
+      {now.context.presence_entity && now.entity_list_items.length > 0 && (
+        <Section
+          title={`${now.context.presence_entity.icon} Pick up`}
+          count={now.entity_list_items.length}
+          accent="text-indigo-400"
+        >
+          {now.entity_list_items.map(i => (
+            <div key={i._id} className="flex items-center gap-3 py-2.5 px-3 group">
+              <div className="w-4 h-4 rounded border border-slate-600 flex-shrink-0" />
+              <p className="text-sm text-slate-200 flex-1 truncate">{i.title}</p>
+            </div>
+          ))}
+        </Section>
+      )}
+
+      {/* List items due today */}
       <Section title="List items" count={now.list_items.length} accent="text-slate-500">
         {now.list_items.map(i => (
           <div key={i._id} className="flex items-center gap-3 py-2.5 px-3">

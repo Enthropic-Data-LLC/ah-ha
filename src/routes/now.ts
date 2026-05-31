@@ -142,6 +142,31 @@ const nowRoutes: FastifyPluginAsync = async (fastify) => {
         $or: [{ defer_until: null }, { defer_until: { $lte: now } }],
       }).limit(5).toArray()
 
+      // Entity-tagged list items — surface when checked in, regardless of due date
+      let entityListItems: Array<{ _id: string; title: string; space_ref?: string; contexts: unknown }> = []
+      if (presenceRaw && OID_RE.test(presenceRaw)) {
+        const raw = await fastify.mongo.collection('list_items').find({
+          org_id: orgId,
+          done: false,
+          deleted_at: { $exists: false },
+          'contexts.entity_id': presenceRaw,
+          $or: [{ defer_until: null }, { defer_until: { $lte: now } }],
+        }).limit(20).toArray()
+
+        // Filter by time_chunks on the context entry (same logic as card contexts)
+        entityListItems = raw.filter(item => {
+          const ctxs = item['contexts'] as Array<{ entity_id: string; time_chunks: string[] }> | undefined
+          const entry = ctxs?.find(x => x.entity_id === presenceRaw)
+          if (!entry) return false
+          return matchesTimeChunks(entry.time_chunks, localHour, localDow)
+        }).slice(0, 15).map(item => ({
+          _id: item['_id'].toString(),
+          title: item['title'] as string,
+          space_ref: item['space_id']?.toString(),
+          contexts: item['contexts'],
+        }))
+      }
+
       // Location-context cards — cards tagged for the current entity+time pairing
       // contexts is now Array<{ entity_id, time_chunks[] }>
       // A card matches if: its contexts array has an entry for the current entity
@@ -239,6 +264,7 @@ const nowRoutes: FastifyPluginAsync = async (fastify) => {
           resurfaced: sortByTimeChunk(resurfaced, localHour, localDow).map(c => ({ _id: c['_id'], title: c['title'], ref: c['ref'] })),
           nudges:     nudges.map(c => ({ _id: c['_id'], title: c['title'], ref: c['ref'], recurrence: c['recurrence'], created_at: c['created_at'] })),
           list_items: listItems.map(i => ({ _id: i['_id'], title: i['title'], due_at: i['due_at'] })),
+          entity_list_items: entityListItems,
           location_context: locationCards,
           trail_pulse: trailPulse,
           briefing,

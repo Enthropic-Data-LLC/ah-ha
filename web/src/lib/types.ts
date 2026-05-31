@@ -97,3 +97,13 @@ export interface Entity {
   created_at: string
   updated_at: string
 }
+
+export interface ListItem {
+  _id: string
+  title: string
+  done: boolean
+  done_at: string | null
+  due_at: string | null
+  defer_until?: string | null
+  contexts?: Array<{ entity_id: string; time_chunks: string[] }>
+}

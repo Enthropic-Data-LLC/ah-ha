@@ -34,8 +34,9 @@ const listRoutes: FastifyPluginAsync = async (fastify) => {
     { preHandler: fastify.authenticate },
     async (req, reply) => {
       const body = z.object({
-        title: z.string().min(1).max(500),
-        due_at: z.string().datetime().optional(),
+        title:    z.string().min(1).max(500),
+        due_at:   z.string().datetime().optional(),
+        contexts: z.array(z.object({ entity_id: z.string(), time_chunks: z.array(z.string()).default([]) })).default([]),
       }).parse(req.body)
 
       const space = await getSpace(fastify, req.params.slug, req.user!.orgId)
@@ -50,13 +51,14 @@ const listRoutes: FastifyPluginAsync = async (fastify) => {
         _id: new ObjectId(),
         space_id: space._id,
         org_id: req.user!.orgId,
-        title: body.title,
-        done: false,
-        done_at: null,
-        due_at: body.due_at ? new Date(body.due_at) : null,
+        title:    body.title,
+        done:     false,
+        done_at:  null,
+        due_at:   body.due_at ? new Date(body.due_at) : null,
+        contexts: body.contexts,
         position: last ? (last['position'] as number) + 1.0 : initial(),
-        created_by: req.user!.id,
-        created_at: new Date(),
+        created_by:  req.user!.id,
+        created_at:  new Date(),
       }
       await fastify.mongo.collection('list_items').insertOne(item)
       reply.status(201)
@@ -70,15 +72,17 @@ const listRoutes: FastifyPluginAsync = async (fastify) => {
     { preHandler: fastify.authenticate },
     async (req, reply) => {
       const body = z.object({
-        title: z.string().min(1).max(500).optional(),
-        due_at: z.string().datetime().nullable().optional(),
+        title:       z.string().min(1).max(500).optional(),
+        due_at:      z.string().datetime().nullable().optional(),
         defer_until: z.string().datetime().nullable().optional(),
+        contexts:    z.array(z.object({ entity_id: z.string(), time_chunks: z.array(z.string()).default([]) })).optional(),
       }).parse(req.body)
 
       const update: Record<string, unknown> = {}
       if (body.title !== undefined) update['title'] = body.title
       if (body.due_at !== undefined) update['due_at'] = body.due_at ? new Date(body.due_at) : null
       if (body.defer_until !== undefined) update['defer_until'] = body.defer_until ? new Date(body.defer_until) : null
+      if (body.contexts !== undefined) update['contexts'] = body.contexts
 
       const result = await fastify.mongo.collection('list_items').updateOne(
         { _id: new ObjectId(req.params.id), org_id: req.user!.orgId, deleted_at: { $exists: false } },
