@@ -11,7 +11,7 @@
  */
 import 'dotenv/config'
 import { Redis } from 'ioredis'
-import { MongoClient, type Db } from 'mongodb'
+import { MongoClient, ObjectId, type Db } from 'mongodb'
 import nodemailer from 'nodemailer'
 
 const MONGO_URI      = process.env['MONGODB_URI']
@@ -80,7 +80,7 @@ async function fetchTrailSummary(slug: string, since = '24h') {
 async function fetchTopCard(db: Db, orgId: string): Promise<{ title: string; column: string; board: string } | null> {
   const PRIORITY_ORDER = { high: 0, medium: 1, low: 2, none: 3 }
   const card = await db.collection('board_cards')
-    .find({ org_id: { $toString: orgId }, deleted_at: { $exists: false } })
+    .find({ org_id: new ObjectId(orgId), deleted_at: { $exists: false } })
     .sort({ priority: 1 })
     .limit(10)
     .toArray()

@@ -100,4 +100,15 @@ const notificationsRoutes: FastifyPluginAsync = async (fastify) => {
 
 void TIMEZONES  // suppress unused warning
 
+  // GET /api/presence/:username — read current presence state
+  fastify.get<{ Params: { username: string } }>(
+    '/api/presence/:username',
+    async (req, reply) => {
+      const state = await fastify.redis.get(`aha:presence:last:${req.params.username}`)
+      const raw   = await fastify.redis.get(`aha:presence:state:${req.params.username}`)
+      if (!state && !raw) return reply.status(404).send({ error: 'No presence data' })
+      return { data: { username: req.params.username, state: raw ?? 'unknown', last_seen: state } }
+    }
+  )
+
 export default notificationsRoutes

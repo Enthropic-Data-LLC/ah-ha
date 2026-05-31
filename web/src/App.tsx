@@ -15,6 +15,7 @@ import AuditPage from './pages/AuditPage'
 import MqttPage from './pages/MqttPage'
 import WebhooksPage from './pages/WebhooksPage'
 import NotificationsPage from './pages/NotificationsPage'
+import SharePage from './pages/SharePage'
 
 function Shell({ children }: { children: React.ReactNode }) {
   const { user } = useMe()
@@ -57,6 +58,12 @@ export default function App() {
   const { user, isLoading, isLoggedOut } = useMe()
 
   // Public routes — no auth needed
+  // Public share link
+  const shareMatch = path.match(/^\/s\/([A-Za-z0-9_-]{24})$/)
+  if (shareMatch) {
+    return <SharePage token={shareMatch[1]!} />
+  }
+
   if (path === '/auth/verify' || path.startsWith('/auth/verify?')) {
     return <VerifyPage />
   }

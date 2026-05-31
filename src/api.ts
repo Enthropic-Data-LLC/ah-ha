@@ -27,6 +27,7 @@ import mqttRoutes from './routes/mqtt.js'
 import notificationsRoutes from './routes/notifications.js'
 import auditRoutes from './routes/audit.js'
 import webhooksRoutes from './routes/webhooks.js'
+import shareRoutes from './routes/share.js'
 import { setupTrailSchema, closePool } from './lib/timescale.js'
 
 const isProd = process.env['NODE_ENV'] === 'production'
@@ -89,6 +90,7 @@ await fastify.register(async (sub) => {
   await sub.register(notificationsRoutes)
   await sub.register(auditRoutes)
   await sub.register(webhooksRoutes)
+  await sub.register(shareRoutes)
 })
 
 fastify.get('/healthz', async () => ({ ok: true, ts: new Date().toISOString() }))
