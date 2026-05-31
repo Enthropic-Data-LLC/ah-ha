@@ -67,10 +67,10 @@ export interface BoardCard {
   escalated_day_1?: boolean
   escalated_day_3?: boolean
   escalated_day_7?: boolean
-  // location context
-  contexts?: string[]
-  // time windows — card floats to top of Now sections when active
-  time_chunks?: string[]
+  // location+time context — each entry pairs a place with optional time windows
+  // e.g. [{ entity_id: "abc", time_chunks: ["evening", "night"] }]
+  // empty time_chunks means "any time at this place"
+  contexts?: Array<{ entity_id: string; time_chunks: string[] }>
 }
 
 export interface LocationSignature {

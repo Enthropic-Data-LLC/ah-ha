@@ -19,10 +19,14 @@ function matchesTimeChunks(chunks: string[], hour: number, dow: number): boolean
 }
 
 function sortByTimeChunk(cards: Array<Record<string, unknown>>, hour: number, dow: number) {
+  type CtxEntry = { entity_id: string; time_chunks: string[] }
   return [...cards].sort((a, b) => {
-    const aMatch = matchesTimeChunks((a['time_chunks'] as string[] | undefined) ?? [], hour, dow) && (a['time_chunks'] as string[] | undefined)?.length ? 1 : 0
-    const bMatch = matchesTimeChunks((b['time_chunks'] as string[] | undefined) ?? [], hour, dow) && (b['time_chunks'] as string[] | undefined)?.length ? 1 : 0
-    return bMatch - aMatch  // matched cards (1) sort before unmatched (0)
+    const ctxsA = (a['contexts'] as CtxEntry[] | undefined) ?? []
+    const ctxsB = (b['contexts'] as CtxEntry[] | undefined) ?? []
+    // A card "matches" if any of its context entries have non-empty time_chunks that match now
+    const aMatch = ctxsA.some(c => c.time_chunks.length > 0 && matchesTimeChunks(c.time_chunks, hour, dow)) ? 1 : 0
+    const bMatch = ctxsB.some(c => c.time_chunks.length > 0 && matchesTimeChunks(c.time_chunks, hour, dow)) ? 1 : 0
+    return bMatch - aMatch
   })
 }
 
@@ -138,22 +142,34 @@ const nowRoutes: FastifyPluginAsync = async (fastify) => {
         $or: [{ defer_until: null }, { defer_until: { $lte: now } }],
       }).limit(5).toArray()
 
-      // Location-context cards — only when checked in to an entity
-      // If entity has time_chunks, only surface cards during matching windows
+      // Location-context cards — cards tagged for the current entity+time pairing
+      // contexts is now Array<{ entity_id, time_chunks[] }>
+      // A card matches if: its contexts array has an entry for the current entity
+      //   AND that entry's time_chunks is empty (any time) OR matches current time
       let locationCards: Array<{ _id: string; title: string; ref?: string }> = []
-      let presenceTimeChunks: string[] = []
-      if (presenceRaw && OID_RE.test(presenceRaw) && presenceEntity) {
-        presenceTimeChunks = (presenceEntity as unknown as { time_chunks?: string[] }).time_chunks ?? []
-        if (matchesTimeChunks(presenceTimeChunks, localHour, localDow)) {
-          const raw = await fastify.mongo.collection('board_cards').find({
-            org_id: orgId,
-            done: { $ne: true },
-            deleted_at: { $exists: false },
-            contexts: presenceRaw,
-            $or: [{ defer_until: null }, { defer_until: { $lte: now } }],
-          }).limit(8).toArray()
-          locationCards = raw.map(c => ({ _id: c['_id'].toString(), title: c['title'] as string, ref: c['ref'] as string | undefined }))
-        }
+      if (presenceRaw && OID_RE.test(presenceRaw)) {
+        // Fetch all cards that have a context entry for this entity
+        const raw = await fastify.mongo.collection('board_cards').find({
+          org_id: orgId,
+          done: { $ne: true },
+          deleted_at: { $exists: false },
+          'contexts.entity_id': presenceRaw,
+          $or: [{ defer_until: null }, { defer_until: { $lte: now } }],
+        }).limit(20).toArray()
+
+        // Filter by time_chunks on the specific context entry
+        const filtered = raw.filter(c => {
+          const ctxs = c['contexts'] as Array<{ entity_id: string; time_chunks: string[] }> | undefined
+          const entry = ctxs?.find(x => x.entity_id === presenceRaw)
+          if (!entry) return false
+          return matchesTimeChunks(entry.time_chunks, localHour, localDow)
+        })
+
+        locationCards = filtered.slice(0, 8).map(c => ({
+          _id: c['_id'].toString(),
+          title: c['title'] as string,
+          ref: c['ref'] as string | undefined,
+        }))
       }
 
       // Trail pulse — last entry tone
@@ -217,11 +233,11 @@ const nowRoutes: FastifyPluginAsync = async (fastify) => {
             generated_at:   now.toISOString(),
           },
           // Sort each section: time-chunk-matched cards float first
-          urgent:    sortByTimeChunk(urgent,    localHour, localDow).map(c => ({ _id: c['_id'], title: c['title'], due_date: c['due_date'], column_id: c['column_id'], ref: c['ref'], time_chunks: c['time_chunks'] })),
-          due_today: sortByTimeChunk(dueToday,  localHour, localDow).map(c => ({ _id: c['_id'], title: c['title'], due_date: c['due_date'], priority: c['priority'], column_id: c['column_id'], ref: c['ref'], time_chunks: c['time_chunks'] })),
-          habits:    sortByTimeChunk(habits,    localHour, localDow).map(c => ({ _id: c['_id'], title: c['title'], recurrence: c['recurrence'], ref: c['ref'], time_chunks: c['time_chunks'] })),
-          resurfaced: sortByTimeChunk(resurfaced, localHour, localDow).map(c => ({ _id: c['_id'], title: c['title'], ref: c['ref'], time_chunks: c['time_chunks'] })),
-          nudges:     nudges.map(c => ({ _id: c['_id'], title: c['title'], ref: c['ref'], recurrence: c['recurrence'], created_at: c['created_at'], time_chunks: c['time_chunks'] })),
+          urgent:    sortByTimeChunk(urgent,    localHour, localDow).map(c => ({ _id: c['_id'], title: c['title'], due_date: c['due_date'], column_id: c['column_id'], ref: c['ref'] })),
+          due_today: sortByTimeChunk(dueToday,  localHour, localDow).map(c => ({ _id: c['_id'], title: c['title'], due_date: c['due_date'], priority: c['priority'], column_id: c['column_id'], ref: c['ref'] })),
+          habits:    sortByTimeChunk(habits,    localHour, localDow).map(c => ({ _id: c['_id'], title: c['title'], recurrence: c['recurrence'], ref: c['ref'] })),
+          resurfaced: sortByTimeChunk(resurfaced, localHour, localDow).map(c => ({ _id: c['_id'], title: c['title'], ref: c['ref'] })),
+          nudges:     nudges.map(c => ({ _id: c['_id'], title: c['title'], ref: c['ref'], recurrence: c['recurrence'], created_at: c['created_at'] })),
           list_items: listItems.map(i => ({ _id: i['_id'], title: i['title'], due_at: i['due_at'] })),
           location_context: locationCards,
           trail_pulse: trailPulse,
