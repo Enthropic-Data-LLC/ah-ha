@@ -11,6 +11,7 @@ import ListPage from './pages/ListPage'
 import TablePage from './pages/TablePage'
 import KeysPage from './pages/KeysPage'
 import SearchPage from './pages/SearchPage'
+import AuditPage from './pages/AuditPage'
 
 function Shell({ children }: { children: React.ReactNode }) {
   const { user } = useMe()
@@ -33,6 +34,7 @@ function Shell({ children }: { children: React.ReactNode }) {
               <span className="text-xs font-mono text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded-full">@{user.username}</span>
               {navLink(`/${user.username}/spaces`, 'Spaces')}
               {navLink('/search', 'Search')}
+              {navLink('/audit', 'Audit')}
             </>
           )}
         </div>
@@ -99,6 +101,11 @@ export default function App() {
   // Search
   if (path === '/search') {
     return <Shell><SearchPage /></Shell>
+  }
+
+  // Audit Log
+  if (path === '/audit') {
+    return <Shell><AuditPage /></Shell>
   }
 
   // API Keys
