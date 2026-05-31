@@ -161,6 +161,7 @@ export default function TrailPage({ slug }: { slug: string }) {
   const showHappyArc  = streaks && streaks.current_tone === 'happy' && streaks.current_length >= 3
 
   return (
+    <>
     <div className="max-w-2xl mx-auto px-4 py-8 space-y-5">
 
       {/* Arc banner */}
