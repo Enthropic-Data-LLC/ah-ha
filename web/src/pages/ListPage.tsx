@@ -1,6 +1,8 @@
 import useSWR from 'swr'
 import { fetcher, api } from '../lib/api'
 import { useState } from 'react'
+import { useMe } from '../hooks/useMe'
+import ConfirmDeleteModal from '../components/ConfirmDeleteModal'
 
 interface ListItem {
   _id: string
@@ -11,6 +13,10 @@ interface ListItem {
 }
 
 export default function ListPage({ slug }: { slug: string }) {
+  const { user } = useMe()
+  const [showDelete, setShowDelete] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+
   const { data, mutate } = useSWR<{ data: ListItem[] }>(`/api/list/${slug}/items`, fetcher)
   const [title, setTitle] = useState('')
   const [adding, setAdding] = useState(false)
@@ -38,13 +44,25 @@ export default function ListPage({ slug }: { slug: string }) {
     await mutate()
   }
 
+  async function deleteSpace() {
+    if (!user?.username) return
+    setDeleting(true)
+    try {
+      await api.delete(`/api/spaces/${encodeURIComponent(`${user.username}/list/${slug}`)}`)
+      window.location.href = `/${user.username}/spaces`
+    } catch { setDeleting(false) }
+  }
+
   const items = data?.data ?? []
   const open = items.filter(i => !i.done)
   const done = items.filter(i => i.done)
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-8 space-y-6">
-      <h1 className="text-xl font-bold capitalize">{slug}</h1>
+      <div className="flex items-center gap-2">
+        <h1 className="text-xl font-bold capitalize">{slug}</h1>
+        <button onClick={() => setShowDelete(true)} className="text-slate-700 hover:text-red-400 text-xs transition" title="Delete list">✕</button>
+      </div>
 
       <form onSubmit={addItem} className="flex gap-2">
         <input
@@ -87,4 +105,14 @@ export default function ListPage({ slug }: { slug: string }) {
       </div>
     </div>
   )
+
+      {showDelete && (
+        <ConfirmDeleteModal
+          name={slug}
+          type="list"
+          onConfirm={deleteSpace}
+          onCancel={() => setShowDelete(false)}
+          deleting={deleting}
+        />
+      )}
 }

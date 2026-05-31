@@ -1,8 +1,11 @@
 import { useState } from 'react'
 import { DragDropContext, Droppable, type DropResult } from '@hello-pangea/dnd'
 import { useBoardColumns, useBoardCards, useBoardActions } from '../hooks/useBoard'
+import { useMe } from '../hooks/useMe'
+import { api } from '../lib/api'
 import BoardCardItem from '../components/BoardCard'
 import CardModal from '../components/CardModal'
+import ConfirmDeleteModal from '../components/ConfirmDeleteModal'
 import type { BoardCard, BoardColumn } from '../lib/types'
 
 interface Props {
@@ -59,7 +62,10 @@ export default function BoardPage({ slug }: Props) {
   const { data: colData, mutate: mutateColumns } = useBoardColumns(slug)
   const { data: cardData, mutate: mutateCards } = useBoardCards(slug)
   const actions = useBoardActions(slug)
+  const { user } = useMe()
   const [activeCard, setActiveCard] = useState<BoardCard | null>(null)
+  const [showDelete, setShowDelete] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   const columns: BoardColumn[] = colData?.data ?? []
   const cards: BoardCard[] = cardData?.data ?? []
@@ -76,12 +82,7 @@ export default function BoardPage({ slug }: Props) {
     if (!destination) return
     if (destination.droppableId === source.droppableId && destination.index === source.index) return
 
-    const destCards = cardsByColumn[destination.droppableId] ?? []
-    const beforeCard = destCards[destination.index - 1] ?? null
-    const afterCard = destCards[destination.index] ?? null
-
-    // Skip the card being moved when calculating neighbors
-    const filteredDest = destCards.filter(c => c._id !== draggableId)
+    const filteredDest = (cardsByColumn[destination.droppableId] ?? []).filter(c => c._id !== draggableId)
     const before = filteredDest[destination.index - 1] ?? null
     const after = filteredDest[destination.index] ?? null
 
@@ -90,7 +91,6 @@ export default function BoardPage({ slug }: Props) {
       before_id: before?._id ?? null,
       after_id: after?._id ?? null,
     })
-    void beforeCard; void afterCard
     await mutateCards()
   }
 
@@ -116,6 +116,22 @@ export default function BoardPage({ slug }: Props) {
     await mutateColumns()
   }
 
+  async function moveColumn(colId: string, direction: 'left' | 'right') {
+    await api.patch(`/api/board/${slug}/columns/${colId}/move`, { direction })
+    await mutateColumns()
+  }
+
+  async function deleteSpace() {
+    if (!user?.username) return
+    setDeleting(true)
+    try {
+      await api.delete(`/api/spaces/${encodeURIComponent(`${user.username}/board/${slug}`)}`)
+      window.location.href = `/${user.username}/spaces`
+    } catch {
+      setDeleting(false)
+    }
+  }
+
   if (!colData) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -127,27 +143,58 @@ export default function BoardPage({ slug }: Props) {
   return (
     <div className="flex flex-col h-full">
       {/* Board header */}
-      <div className="flex items-center justify-between px-6 py-3 border-b border-slate-800">
+      <div className="flex items-center justify-between px-6 py-3 border-b border-slate-800 flex-shrink-0">
         <h1 className="font-semibold capitalize">{slug}</h1>
-        <button
-          onClick={addColumn}
-          className="px-3 py-1.5 text-sm text-slate-400 hover:text-slate-200 hover:bg-slate-800 rounded-lg transition"
-        >
-          + Column
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={addColumn}
+            className="px-3 py-1.5 text-sm text-slate-400 hover:text-slate-200 hover:bg-slate-800 rounded-lg transition"
+          >
+            + Column
+          </button>
+          <button
+            onClick={() => setShowDelete(true)}
+            className="px-2 py-1.5 text-sm text-slate-600 hover:text-red-400 hover:bg-slate-800 rounded-lg transition"
+            title="Delete board"
+          >
+            ✕
+          </button>
+        </div>
       </div>
 
-      {/* Columns */}
+      {/* Columns — mobile: snap scroll; desktop: free scroll */}
       <DragDropContext onDragEnd={onDragEnd}>
-        <div className="flex-1 overflow-x-auto">
-          <div className="flex gap-4 p-4 h-full items-start min-w-max">
-            {columns.map(col => (
-              <div key={col._id} className="w-72 flex-shrink-0">
+        <div
+          className="flex-1 overflow-x-auto"
+          style={{ scrollSnapType: 'x mandatory', WebkitOverflowScrolling: 'touch' }}
+        >
+          <div className="flex gap-3 p-4 h-full items-start min-w-max">
+            {columns.map((col, colIdx) => (
+              <div
+                key={col._id}
+                className="w-72 flex-shrink-0"
+                style={{ scrollSnapAlign: 'start' }}
+              >
                 {/* Column header */}
-                <div className="flex items-center gap-2 mb-3 px-1">
+                <div className="flex items-center gap-1.5 mb-3 px-1 group">
                   <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: col.color }} />
                   <h2 className="text-sm font-semibold flex-1 truncate">{col.title}</h2>
                   <span className="text-xs text-slate-600">{(cardsByColumn[col._id] ?? []).length}</span>
+                  {/* Move buttons — visible on hover (desktop) or always (mobile) */}
+                  <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity sm:opacity-0">
+                    <button
+                      onClick={() => moveColumn(col._id, 'left')}
+                      disabled={colIdx === 0}
+                      className="p-0.5 text-slate-600 hover:text-slate-300 disabled:opacity-20 disabled:cursor-not-allowed transition rounded"
+                      title="Move left"
+                    >‹</button>
+                    <button
+                      onClick={() => moveColumn(col._id, 'right')}
+                      disabled={colIdx === columns.length - 1}
+                      className="p-0.5 text-slate-600 hover:text-slate-300 disabled:opacity-20 disabled:cursor-not-allowed transition rounded"
+                      title="Move right"
+                    >›</button>
+                  </div>
                 </div>
 
                 <Droppable droppableId={col._id}>
@@ -183,7 +230,7 @@ export default function BoardPage({ slug }: Props) {
 
             {columns.length === 0 && (
               <div className="flex items-center justify-center w-full h-64 text-slate-600 text-sm">
-                No columns yet — click "+ Column" to get started.
+                No columns yet — click &quot;+ Column&quot; to get started.
               </div>
             )}
           </div>
@@ -197,6 +244,16 @@ export default function BoardPage({ slug }: Props) {
           onClose={() => setActiveCard(null)}
           onSave={saveCard}
           onDelete={deleteCard}
+        />
+      )}
+
+      {showDelete && (
+        <ConfirmDeleteModal
+          name={slug}
+          type="board"
+          onConfirm={deleteSpace}
+          onCancel={() => setShowDelete(false)}
+          deleting={deleting}
         />
       )}
     </div>

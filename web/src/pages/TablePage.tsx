@@ -1,6 +1,8 @@
 import useSWR from 'swr'
 import { fetcher, api } from '../lib/api'
 import { useState, useRef, useEffect } from 'react'
+import { useMe } from '../hooks/useMe'
+import ConfirmDeleteModal from '../components/ConfirmDeleteModal'
 
 type ColType = 'text' | 'number' | 'date' | 'checkbox' | 'select' | 'multiselect'
 
@@ -128,6 +130,19 @@ function CellEditor({
 }
 
 export default function TablePage({ slug }: { slug: string }) {
+  const { user } = useMe()
+  const [showDelete, setShowDelete] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+
+  async function deleteSpace() {
+    if (!user?.username) return
+    setDeleting(true)
+    try {
+      await api.delete(`/api/spaces/${encodeURIComponent(`${user.username}/table/${slug}`)}`)
+      window.location.href = `/${user.username}/spaces`
+    } catch { setDeleting(false) }
+  }
+
   const { data, mutate } = useSWR<{ data: TableData }>(`/api/table/${slug}`, fetcher)
 
   const [editing, setEditing] = useState<{ rowId: string; colId: string } | null>(null)
@@ -183,7 +198,10 @@ export default function TablePage({ slug }: { slug: string }) {
   return (
     <div className="flex flex-col h-full px-4 py-6 gap-4">
       <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
         <h1 className="text-xl font-bold capitalize">{slug}</h1>
+        <button onClick={() => setShowDelete(true)} className="text-slate-700 hover:text-red-400 text-xs transition" title="Delete table">✕</button>
+      </div>
         <button
           onClick={() => setShowAddCol(s => !s)}
           className="text-xs px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg transition"
@@ -313,4 +331,14 @@ export default function TablePage({ slug }: { slug: string }) {
       </div>
     </div>
   )
+
+      {showDelete && (
+        <ConfirmDeleteModal
+          name={slug}
+          type="table"
+          onConfirm={deleteSpace}
+          onCancel={() => setShowDelete(false)}
+          deleting={deleting}
+        />
+      )}
 }

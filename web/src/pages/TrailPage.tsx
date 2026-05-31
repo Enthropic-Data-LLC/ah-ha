@@ -2,6 +2,8 @@ import { useState, useRef } from 'react'
 import useSWR from 'swr'
 import useSWRInfinite from 'swr/infinite'
 import { fetcher, api, ApiError } from '../lib/api'
+import { useMe } from '../hooks/useMe'
+import ConfirmDeleteModal from '../components/ConfirmDeleteModal'
 
 type Tone = 'happy' | 'sorrow' | 'neutral'
 type ToneFilter = Tone | 'all'
@@ -70,6 +72,10 @@ function relativeTime(ts: string): string {
 }
 
 export default function TrailPage({ slug }: { slug: string }) {
+  const { user } = useMe()
+  const [showDelete, setShowDelete] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+
   const [text, setText]           = useState('')
   const [tone, setTone]           = useState<Tone>('neutral')
   const [tagsInput, setTagsInput] = useState('')
@@ -321,4 +327,14 @@ export default function TrailPage({ slug }: { slug: string }) {
       </div>
     </div>
   )
+
+      {showDelete && (
+        <ConfirmDeleteModal
+          name={slug}
+          type="trail"
+          onConfirm={deleteSpace}
+          onCancel={() => setShowDelete(false)}
+          deleting={deleting}
+        />
+      )}
 }

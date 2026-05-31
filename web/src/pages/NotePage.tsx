@@ -1,8 +1,14 @@
 import useSWR from 'swr'
 import { fetcher, api } from '../lib/api'
 import { useState, useEffect } from 'react'
+import { useMe } from '../hooks/useMe'
+import ConfirmDeleteModal from '../components/ConfirmDeleteModal'
 
 export default function NotePage({ slug }: { slug: string }) {
+  const { user } = useMe()
+  const [showDelete, setShowDelete] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+
   const { data, mutate } = useSWR<{ data: { body: string; updated_at: string | null } }>(`/api/note/${slug}`, fetcher)
   const [body, setBody] = useState('')
   const [saving, setSaving] = useState(false)
@@ -36,6 +42,15 @@ export default function NotePage({ slug }: { slug: string }) {
     }
   }
 
+  async function deleteSpace() {
+    if (!user?.username) return
+    setDeleting(true)
+    try {
+      await api.delete(`/api/spaces/${encodeURIComponent(`${user.username}/note/${slug}`)}`)
+      window.location.href = `/${user.username}/spaces`
+    } catch { setDeleting(false) }
+  }
+
   function handleKeyDown(e: React.KeyboardEvent) {
     if ((e.ctrlKey || e.metaKey) && e.key === 's') {
       e.preventDefault()
@@ -60,6 +75,7 @@ export default function NotePage({ slug }: { slug: string }) {
           >
             {saving ? 'Saving…' : 'Save'}
           </button>
+          <button onClick={() => setShowDelete(true)} className="text-slate-600 hover:text-red-400 text-sm transition" title="Delete note">✕</button>
         </div>
       </div>
       <textarea
@@ -71,4 +87,14 @@ export default function NotePage({ slug }: { slug: string }) {
       />
     </div>
   )
+
+      {showDelete && (
+        <ConfirmDeleteModal
+          name={slug}
+          type="note"
+          onConfirm={deleteSpace}
+          onCancel={() => setShowDelete(false)}
+          deleting={deleting}
+        />
+      )}
 }

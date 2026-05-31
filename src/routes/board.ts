@@ -195,6 +195,42 @@ const boardRoutes: FastifyPluginAsync = async (fastify) => {
   )
 }
 
+  // PATCH /api/board/:slug/columns/:id/move — shift column left or right
+  fastify.patch<{ Params: { slug: string; id: string } }>(
+    '/api/board/:slug/columns/:id/move',
+    { preHandler: fastify.authenticate },
+    async (req, reply) => {
+      const { direction } = z.object({ direction: z.enum(['left', 'right']) }).parse(req.body)
+      const space = await getSpace(fastify, req.params.slug, req.user!.orgId)
+      if (!space) return reply.status(404).send({ error: 'Board not found' })
+
+      const cols = await fastify.mongo.collection('board_columns')
+        .find({ space_id: space._id, org_id: req.user!.orgId })
+        .sort({ position: 1 })
+        .toArray()
+
+      const idx = cols.findIndex(c => c['_id'].toHexString() === req.params.id)
+      if (idx === -1) return reply.status(404).send({ error: 'Column not found' })
+
+      const swapIdx = direction === 'left' ? idx - 1 : idx + 1
+      if (swapIdx < 0 || swapIdx >= cols.length) return { ok: true } // already at edge
+
+      const a = cols[idx]!
+      const b = cols[swapIdx]!
+      const posA = a['position'] as number
+      const posB = b['position'] as number
+
+      await fastify.mongo.collection('board_columns').bulkWrite([
+        { updateOne: { filter: { _id: a['_id'] }, update: { $set: { position: posB } } } },
+        { updateOne: { filter: { _id: b['_id'] }, update: { $set: { position: posA } } } },
+      ])
+
+      publish(fastify, `${req.user!.username}/board/${req.params.slug}`, { op: 'columns_reordered' })
+      return { ok: true }
+    }
+  )
+
+
 async function getSpace(fastify: { mongo: import('mongodb').Db }, slug: string, orgId: ObjectId) {
   return fastify.mongo.collection('spaces').findOne({
     slug,
