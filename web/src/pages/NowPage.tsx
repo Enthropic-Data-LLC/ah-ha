@@ -3,7 +3,7 @@ import { fetcher, api } from '../lib/api'
 import { useState } from 'react'
 import { useMe } from '../hooks/useMe'
 import CardModal from '../components/CardModal'
-import type { BoardCard, BoardColumn } from '../lib/types'
+import type { BoardCard, BoardColumn, Entity } from '../lib/types'
 
 interface NowCard { _id: string; title: string; due_date?: string; priority?: string; ref?: string; created_at?: string; recurrence?: { archetype: string; streak_count?: number; time_anchor?: string; interval_days?: number; last_completed_at?: string | null } }
 interface NowItem { _id: string; title: string; due_at?: string }
@@ -166,6 +166,13 @@ export default function NowPage() {
   const [deferring, setDeferring] = useState<string | null>(null)
   const [activeCardId, setActiveCardId] = useState<string | null>(null)
   const [activeBoardSlug, setActiveBoardSlug] = useState<string | null>(null)
+  const [goingToId, setGoingToId] = useState<string | null>(null)
+  const [checkedOff, setCheckedOff] = useState<Set<string>>(new Set())
+
+  const { data: entitiesData } = useSWR<{ data: Entity[] }>('/api/entities', fetcher)
+  const { data: goingToData, mutate: mutateGoingTo } = useSWR<{
+    data: { entity: { _id: string; name: string; icon: string }; list_items: Array<{ _id: string; title: string }>; cards: Array<{ _id: string; title: string; ref: string }>; total: number }
+  }>(goingToId ? `/api/entities/${goingToId}/going-to` : null, fetcher)
 
   const { data: activeCardData, mutate: mutateCard } = useSWR<{ data: BoardCard }>(
     activeCardId ? `/api/cards/${activeCardId}` : null, fetcher
@@ -255,6 +262,85 @@ export default function NowPage() {
           )}
         </div>
       </div>
+
+      {/* Going to — pre-departure checklist */}
+      {(entitiesData?.data?.length ?? 0) > 0 && (
+        <div className="space-y-2">
+          {/* Entity picker */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-xs text-slate-500 font-medium">Going to</span>
+            {entitiesData!.data.map(e => (
+              <button
+                key={e._id}
+                onClick={() => {
+                  setGoingToId(goingToId === e._id ? null : e._id)
+                  setCheckedOff(new Set())
+                  mutateGoingTo()
+                }}
+                className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs border transition ${
+                  goingToId === e._id
+                    ? 'border-indigo-500 bg-indigo-500/15 text-indigo-300'
+                    : 'border-slate-700 text-slate-400 hover:border-slate-500'
+                }`}
+              >
+                {e.icon} {e.name}
+              </button>
+            ))}
+          </div>
+
+          {/* Checklist panel */}
+          {goingToId && goingToData?.data && (
+            <div className="bg-slate-900 border border-indigo-800/50 rounded-xl overflow-hidden">
+              <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-800">
+                <span className="text-sm font-medium text-indigo-300">
+                  {goingToData.data.entity.icon} Pack for {goingToData.data.entity.name}
+                </span>
+                {goingToData.data.total === 0
+                  ? <span className="text-xs text-emerald-400">All clear ✓</span>
+                  : <span className="text-xs text-slate-600">{goingToData.data.total - checkedOff.size} remaining</span>
+                }
+              </div>
+              {goingToData.data.total === 0 && (
+                <p className="px-4 py-3 text-xs text-slate-600">No items tagged for {goingToData.data.entity.name}.</p>
+              )}
+              {goingToData.data.list_items.map(item => (
+                <button
+                  key={item._id}
+                  onClick={() => {
+                    const next = new Set(checkedOff)
+                    next.has(item._id) ? next.delete(item._id) : next.add(item._id)
+                    setCheckedOff(next)
+                  }}
+                  className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-slate-800/40 transition text-left border-b border-slate-800/50 last:border-0 group"
+                >
+                  <div className={`w-4 h-4 rounded border-2 flex-shrink-0 flex items-center justify-center transition ${checkedOff.has(item._id) ? 'border-emerald-500 bg-emerald-500' : 'border-slate-600 group-hover:border-indigo-400'}`}>
+                    {checkedOff.has(item._id) && <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7"/></svg>}
+                  </div>
+                  <span className={`text-sm flex-1 ${checkedOff.has(item._id) ? 'line-through text-slate-500' : 'text-slate-200'}`}>{item.title}</span>
+                  <span className="text-xs text-slate-700">item</span>
+                </button>
+              ))}
+              {goingToData.data.cards.map(card => (
+                <button
+                  key={card._id}
+                  onClick={() => {
+                    const next = new Set(checkedOff)
+                    next.has(card._id) ? next.delete(card._id) : next.add(card._id)
+                    setCheckedOff(next)
+                  }}
+                  className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-slate-800/40 transition text-left border-b border-slate-800/50 last:border-0 group"
+                >
+                  <div className={`w-4 h-4 rounded border-2 flex-shrink-0 flex items-center justify-center transition ${checkedOff.has(card._id) ? 'border-emerald-500 bg-emerald-500' : 'border-slate-600 group-hover:border-indigo-400'}`}>
+                    {checkedOff.has(card._id) && <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7"/></svg>}
+                  </div>
+                  <span className={`text-sm flex-1 ${checkedOff.has(card._id) ? 'line-through text-slate-500' : 'text-slate-200'}`}>{card.title}</span>
+                  <span className="text-xs text-slate-700">task</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* AI briefing */}
       {now.briefing && (

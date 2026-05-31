@@ -208,6 +208,47 @@ const entityRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get('/api/my-ip', { preHandler: fastify.authenticate }, async (req) => {
     return { ip: req.ip }
   })
+
+  // GET /api/entities/:id/going-to — items + cards tagged to this entity (pre-departure checklist)
+  fastify.get<{ Params: { id: string } }>(
+    '/api/entities/:id/going-to',
+    { preHandler: fastify.authenticate },
+    async (req, reply) => {
+      const entityId = new ObjectId(req.params.id)
+      const entity = await fastify.mongo.collection('entities').findOne({
+        _id: entityId, org_id: req.user!.orgId, deleted_at: { $exists: false },
+      })
+      if (!entity) return reply.status(404).send({ error: 'Not found' })
+
+      const entityIdStr = entityId.toString()
+      const orgId = req.user!.orgId
+
+      // List items tagged to this entity that aren't done
+      const listItems = await fastify.mongo.collection('list_items').find({
+        org_id: orgId,
+        done: false,
+        deleted_at: { $exists: false },
+        'contexts.entity_id': entityIdStr,
+      }).toArray()
+
+      // Board cards tagged to this entity that aren't done
+      const cards = await fastify.mongo.collection('board_cards').find({
+        org_id: orgId,
+        done: { $ne: true },
+        deleted_at: { $exists: false },
+        'contexts.entity_id': entityIdStr,
+      }).toArray()
+
+      return {
+        data: {
+          entity: { _id: entity['_id'], name: entity['name'] as string, icon: entity['icon'] as string },
+          list_items: listItems.map(i => ({ _id: i['_id'].toString(), title: i['title'], space_id: i['space_id']?.toString() })),
+          cards: cards.map(c => ({ _id: c['_id'].toString(), title: c['title'], ref: c['ref'] })),
+          total: listItems.length + cards.length,
+        }
+      }
+    }
+  )
 }
 
 export default entityRoutes
