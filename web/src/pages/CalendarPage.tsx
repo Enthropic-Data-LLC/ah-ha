@@ -146,22 +146,32 @@ export default function CalendarPage() {
         {/* Existing sources */}
         {sources.length > 0 && (
           <div className="bg-slate-900 border border-slate-800 rounded-xl divide-y divide-slate-800 mb-6">
-            {sources.map(s => (
-              <div key={s._id} className="flex items-center gap-3 px-4 py-3">
-                <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: s.color }} />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate">{s.name}</p>
-                  <p className="text-xs text-slate-500 font-mono">{s.ical_url}</p>
+            {sources.map(s => {
+              const broken = !eventsLoading && eventsData !== undefined && events.length === 0
+              return (
+                <div key={s._id} className="flex items-start gap-3 px-4 py-3">
+                  <span className="w-3 h-3 rounded-full flex-shrink-0 mt-0.5" style={{ backgroundColor: s.color }} />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-medium truncate">{s.name}</p>
+                      {broken && (
+                        <span className="text-[10px] bg-amber-500/15 text-amber-400 border border-amber-500/30 px-1.5 py-0.5 rounded">
+                          no events — check URL
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-slate-500 font-mono">{s.ical_url}</p>
+                  </div>
+                  <button
+                    onClick={() => deleteSource(s._id)}
+                    disabled={deleting === s._id}
+                    className="text-slate-600 hover:text-red-400 text-xs transition disabled:opacity-40 flex-shrink-0 mt-0.5"
+                  >
+                    {deleting === s._id ? '…' : 'Remove'}
+                  </button>
                 </div>
-                <button
-                  onClick={() => deleteSource(s._id)}
-                  disabled={deleting === s._id}
-                  className="text-slate-600 hover:text-red-400 text-xs transition disabled:opacity-40 flex-shrink-0"
-                >
-                  {deleting === s._id ? '…' : 'Remove'}
-                </button>
-              </div>
-            ))}
+              )
+            })}
           </div>
         )}
 
@@ -188,9 +198,11 @@ export default function CalendarPage() {
                 placeholder="https://calendar.google.com/calendar/ical/…"
                 className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500"
               />
-              <p className="text-xs text-slate-600">
-                Google Calendar: Settings → your calendar → <em>Secret address in iCal format</em>
-              </p>
+              <div className="text-xs space-y-1">
+                <p className="text-amber-400 font-medium">⚠ Must be the private/secret URL — not the public one.</p>
+                <p className="text-slate-500">Google Calendar: Settings → your calendar → scroll to <em>"Secret address in iCal format"</em> → Copy link</p>
+                <p className="text-slate-600">The URL should contain <span className="font-mono">/private/</span> not <span className="font-mono">/public/</span></p>
+              </div>
             </div>
 
             <div className="space-y-1">

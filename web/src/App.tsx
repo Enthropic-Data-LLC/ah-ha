@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useMe } from './hooks/useMe'
 import LandingPage from './pages/LandingPage'
 import AuthPage from './pages/AuthPage'
@@ -48,17 +49,16 @@ const Icons = {
 function Shell({ children }: { children: React.ReactNode }) {
   const { user } = useMe()
   const path = window.location.pathname
+  const [menuOpen, setMenuOpen] = useState(false)
 
   const isActive = (href: string) => path === href || path.startsWith(href + '/')
 
-  // Desktop text nav link
   const navLink = (href: string, label: string) => (
     <a href={href} className={`text-sm transition hidden sm:block ${isActive(href) ? 'text-slate-200' : 'text-slate-500 hover:text-slate-300'}`}>
       {label}
     </a>
   )
 
-  // Mobile bottom tab
   const tabLink = (href: string, icon: React.ReactNode, label: string) => (
     <a href={href} className={`flex flex-col items-center gap-0.5 px-3 py-1 transition ${isActive(href) ? 'text-indigo-400' : 'text-slate-600'}`}>
       {icon}
@@ -66,13 +66,23 @@ function Shell({ children }: { children: React.ReactNode }) {
     </a>
   )
 
-  const spacesHref  = user ? `/${user.username}/spaces`   : '/auth'
+  const drawerLink = (href: string, label: string) => (
+    <a
+      href={href}
+      onClick={() => setMenuOpen(false)}
+      className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition ${isActive(href) ? 'bg-indigo-500/15 text-indigo-300' : 'text-slate-300 hover:bg-slate-800'}`}
+    >
+      {label}
+    </a>
+  )
+
+  const spacesHref   = user ? `/${user.username}/spaces`   : '/auth'
   const entitiesHref = user ? `/${user.username}/entities` : '/auth'
 
   return (
     <div className="flex flex-col min-h-screen">
       {/* Top bar */}
-      <header className="border-b border-slate-800 px-4 h-12 flex items-center justify-between flex-shrink-0">
+      <header className="border-b border-slate-800 px-4 h-12 flex items-center justify-between flex-shrink-0 z-30 relative">
         <div className="flex items-center gap-4">
           <a href={user ? '/now' : '/'} className="font-bold text-sm tracking-tight">aH-Ha</a>
           {user && (
@@ -86,19 +96,69 @@ function Shell({ children }: { children: React.ReactNode }) {
             </>
           )}
         </div>
-        {user && (
-          <div className="flex items-center gap-3">
-            {navLink('/keys', 'API Keys')}
-            {navLink('/calendar', 'Calendar')}
-            {navLink('/settings', 'Settings')}
-          </div>
-        )}
+        <div className="flex items-center gap-3">
+          {user && (
+            <>
+              {navLink('/keys', 'API Keys')}
+              {navLink('/calendar', 'Calendar')}
+              {navLink('/settings', 'Settings')}
+              {/* Hamburger — mobile only */}
+              <button
+                onClick={() => setMenuOpen(true)}
+                className="sm:hidden p-1.5 text-slate-400 hover:text-slate-200 transition"
+                aria-label="Open menu"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" className="w-5 h-5">
+                  <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
+                </svg>
+              </button>
+            </>
+          )}
+        </div>
       </header>
 
-      {/* Main content — add bottom padding on mobile to clear the tab bar */}
+      {/* Mobile slide-in drawer */}
+      {menuOpen && (
+        <div className="sm:hidden fixed inset-0 z-50 flex" onClick={() => setMenuOpen(false)}>
+          {/* Backdrop */}
+          <div className="flex-1 bg-slate-950/70 backdrop-blur-sm" />
+          {/* Panel */}
+          <div
+            className="w-64 bg-slate-900 border-l border-slate-800 flex flex-col h-full overflow-y-auto"
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Drawer header */}
+            <div className="flex items-center justify-between px-4 h-12 border-b border-slate-800 flex-shrink-0">
+              <span className="text-xs font-mono text-indigo-400">@{user?.username}</span>
+              <button onClick={() => setMenuOpen(false)} className="p-1 text-slate-500 hover:text-slate-200 transition">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" className="w-4 h-4">
+                  <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+              </button>
+            </div>
+            {/* Nav items */}
+            <nav className="flex-1 px-3 py-4 space-y-0.5">
+              <p className="text-[10px] font-mono uppercase tracking-wider text-slate-600 px-3 pb-1">Main</p>
+              {drawerLink('/now', '⏱  Now')}
+              {drawerLink(spacesHref, '⊞  Spaces')}
+              {drawerLink(entitiesHref, '📍  Entities')}
+              {drawerLink('/search', '⌕  Search')}
+              <p className="text-[10px] font-mono uppercase tracking-wider text-slate-600 px-3 pb-1 pt-3">Settings</p>
+              {drawerLink('/calendar', '📅  Calendar')}
+              {drawerLink('/settings', '🔔  Notifications')}
+              {drawerLink('/keys', '🔑  API Keys')}
+              {drawerLink('/audit', '📋  Audit Log')}
+              {drawerLink('/mqtt', '📡  MQTT')}
+              {drawerLink('/webhooks', '🔗  Webhooks')}
+            </nav>
+          </div>
+        </div>
+      )}
+
+      {/* Main content */}
       <main className="flex-1 flex flex-col overflow-hidden pb-16 sm:pb-0">{children}</main>
 
-      {/* Mobile bottom tab bar — hidden on sm+ */}
+      {/* Mobile bottom tab bar */}
       {user && (
         <nav className="sm:hidden fixed bottom-0 left-0 right-0 h-16 bg-slate-950 border-t border-slate-800 flex items-center justify-around px-2 z-40">
           {tabLink('/now', Icons.now, 'Now')}
