@@ -8,8 +8,10 @@ import type { BoardCard, BoardColumn, Entity } from '../lib/types'
 interface NowCard { _id: string; title: string; due_date?: string; priority?: string; ref?: string; created_at?: string; recurrence?: { archetype: string; streak_count?: number; time_anchor?: string; interval_days?: number; last_completed_at?: string | null } }
 interface NowItem { _id: string; title: string; due_at?: string }
 interface NowListItem { _id: string; title: string; space_ref?: string }
+interface CalendarEvent { uid: string; title: string; start: string; end: string; all_day: boolean; location?: string; calendar: string; color: string }
 
 interface NowData {
+  calendar_events: CalendarEvent[]
   context: {
     time_of_day: string
     presence: string
@@ -203,6 +205,7 @@ export default function NowPage() {
   }
 
   const now = data?.data
+  const calEvents = now?.calendar_events ?? []
 
   async function snooze(cardId: string) {
     setDeferring(cardId)
@@ -353,6 +356,33 @@ export default function NowPage() {
       {now.briefing && (
         <div className="px-4 py-3 bg-slate-900 border border-slate-800 rounded-xl">
           <p className="text-sm text-slate-300 leading-relaxed">{now.briefing}</p>
+        </div>
+      )}
+
+      {/* Upcoming calendar events */}
+      {calEvents.length > 0 && (
+        <div className="space-y-1">
+          <div className="flex items-center gap-2 px-1">
+            <span className="text-xs font-mono uppercase tracking-wider text-slate-500">Calendar</span>
+            <span className="text-xs text-slate-700">{calEvents.length}</span>
+          </div>
+          <div className="bg-slate-900 border border-slate-800 rounded-xl divide-y divide-slate-800">
+            {calEvents.map(ev => {
+              const start = new Date(ev.start)
+              const end = new Date(ev.end)
+              const timeStr = ev.all_day ? 'All day' : `${start.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} – ${end.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`
+              return (
+                <div key={ev.uid} className="flex items-center gap-3 px-3 py-2.5">
+                  <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: ev.color }} />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-slate-200 truncate">{ev.title}</p>
+                    <p className="text-xs text-slate-500">{timeStr}{ev.location ? ` · ${ev.location}` : ''}</p>
+                  </div>
+                  <span className="text-xs text-slate-700 flex-shrink-0">{ev.calendar}</span>
+                </div>
+              )
+            })}
+          </div>
         </div>
       )}
 
