@@ -224,7 +224,7 @@ const nowRoutes: FastifyPluginAsync = async (fastify) => {
         const calSources = await fastify.mongo.collection<CalendarSource>('calendar_sources')
           .find({ user_id: req.user!.id }).toArray()
         if (calSources.length > 0) {
-          const calEnd = new Date(now.getTime() + 8 * 3_600_000)
+          const calEnd = new Date(now.getTime() + 16 * 3_600_000)
           calendarEvents = await fetchCalendarEvents(calSources, now, calEnd, fastify.redis)
         }
       } catch { /* calendar unavailable */ }
@@ -245,7 +245,7 @@ const nowRoutes: FastifyPluginAsync = async (fastify) => {
             urgent.length > 0 ? `${urgent.length} overdue tasks: ${urgent.map(c => c['title']).join(', ')}` : '',
             dueToday.length > 0 ? `${dueToday.length} due today: ${dueToday.map(c => c['title']).join(', ')}` : '',
             habits.length > 0 ? `habits now: ${habits.map(c => `${c['title']} (streak: ${(c['recurrence'] as Record<string, unknown>)?.['streak_count'] ?? 0})`).join(', ')}` : '',
-            calLines.length > 0 ? `upcoming appointments (next 8h): ${calLines.join(', ')}` : '',
+            calLines.length > 0 ? `upcoming appointments (next 16h): ${calLines.join(', ')}` : '',
             presenceEntity ? `currently at: ${presenceEntity.name}` : '',
           ].filter(Boolean).join('. ')
 
@@ -257,7 +257,7 @@ const nowRoutes: FastifyPluginAsync = async (fastify) => {
               max_tokens: 150,
               messages: [{
                 role: 'user',
-                content: `You are helping someone with ADHD stay on track. Write 1-2 plain sentences. Be calm, warm, and specific — never alarming. If there are upcoming appointments, explain WHY now is a good moment to act (e.g. "you have a meeting at 2pm, so now is a natural window to finish X"). Give a reason that makes starting feel easy, not pressured. Context: ${context}. Time of day: ${tod}. No fluff, no "Hey!", no exclamation marks, no shame.`
+                content: `You are helping someone with ADHD stay on track. Write 1-2 plain sentences. Be calm, warm, and specific — never alarming. Look at the next 16 hours: if something is needed in the morning (a meeting, appointment, or deadline), suggest preparing tonight before bed so morning-you has less to scramble. If something is due later today, explain why now is a natural window to make progress. Give a concrete reason that makes starting feel easy, not pressured. Context: ${context}. Time of day: ${tod}. No fluff, no "Hey!", no exclamation marks, no shame.`
               }]
             })
           })
