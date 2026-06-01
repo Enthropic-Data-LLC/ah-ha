@@ -23,7 +23,7 @@ export interface CalendarEvent {
   color: string
 }
 
-const CACHE_TTL_SEC = 300
+const CACHE_TTL_SEC = 900
 
 async function fetchIcalText(url: string): Promise<string> {
   const controller = new AbortController()
@@ -57,11 +57,14 @@ function parseSource(icalText: string, start: Date, end: Date, source: CalendarS
       const desc = typeof rawDesc === 'string' ? rawDesc : undefined
 
       if (ev.isRecurring()) {
-        const startIcal = ICAL.Time.fromJSDate(start, false)
-        const endIcal   = ICAL.Time.fromJSDate(end, false)
-        const iter = ev.iterator()
+        // Use UTC so ICAL.js can fast-forward through the recurrence rule
+        // without stepping through every past occurrence one-by-one.
+        const startIcal = ICAL.Time.fromJSDate(start, true)
+        const endIcal   = ICAL.Time.fromJSDate(end, true)
+        const iter = ev.iterator(startIcal)
         let next: ICAL.Time | null = iter.next()
-        while (next) {
+        let safety = 0
+        while (next && safety++ < 500) {
           if (next.compare(endIcal) >= 0) break
           const details = ev.getOccurrenceDetails(next)
           const occStart = icalTimeToDate(details.startDate)
@@ -78,10 +81,6 @@ function parseSource(icalText: string, start: Date, end: Date, source: CalendarS
               calendar: source.name,
               color: source.color,
             })
-          }
-          if (next.compare(startIcal) < 0) {
-            next = iter.next()
-            continue
           }
           next = iter.next()
         }
