@@ -23,7 +23,8 @@ export interface CalendarEvent {
   color: string
 }
 
-const CACHE_TTL_SEC = 900
+const CACHE_TTL_SEC  = 900   // 15 min — how long before re-fetching from Google
+const ROLLING_DAYS   = 30    // parse this many days ahead and cache the result
 
 async function fetchIcalText(url: string): Promise<string> {
   const controller = new AbortController()
@@ -118,13 +119,35 @@ export async function fetchCalendarEvents(
 
   await Promise.all(sources.map(async (source) => {
     try {
-      const key = `cal:${source._id.toString()}:raw`
-      let icalText = await redis.get(key)
-      if (!icalText) {
-        icalText = await fetchIcalText(source.ical_url)
-        await redis.set(key, icalText, 'EX', CACHE_TTL_SEC)
+      // Cache key includes today's date so the window rolls forward each day
+      // and yesterday's stale events don't linger indefinitely.
+      const today = new Date().toISOString().slice(0, 10)
+      const eventsKey = `cal:${source._id.toString()}:events:${today}`
+
+      let windowEvents: CalendarEvent[] | null = null
+      const cached = await redis.get(eventsKey)
+      if (cached) {
+        try { windowEvents = JSON.parse(cached) } catch { /* corrupt — refetch */ }
       }
-      all.push(...parseSource(icalText, start, end, source))
+
+      if (!windowEvents) {
+        // Parse a full 30-day rolling window and cache the result.
+        // Any sub-window query (16h Now, 7d Calendar page) then just filters
+        // this array — no re-fetch and no re-parse until the TTL expires.
+        const icalText = await fetchIcalText(source.ical_url)
+        const windowStart = new Date(); windowStart.setHours(0, 0, 0, 0)
+        const windowEnd   = new Date(windowStart.getTime() + ROLLING_DAYS * 86_400_000)
+        windowEvents = parseSource(icalText, windowStart, windowEnd, source)
+        await redis.set(eventsKey, JSON.stringify(windowEvents), 'EX', CACHE_TTL_SEC)
+      }
+
+      // Filter cached events down to the caller's requested window
+      const filtered = windowEvents.filter(ev => {
+        const evEnd   = new Date(ev.end)
+        const evStart = new Date(ev.start)
+        return evEnd > start && evStart < end
+      })
+      all.push(...filtered)
     } catch (err) {
       console.error(`[calendar] failed to load "${source.name}":`, (err as Error).message)
     }
