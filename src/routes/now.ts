@@ -1,6 +1,8 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { ObjectId } from 'mongodb'
 import { getPool } from '../lib/timescale.js'
+import { fetchCalendarEvents } from '../lib/ical-fetch.js'
+import type { CalendarSource } from '../lib/ical-fetch.js'
 
 const TIME_CHUNKS: Record<string, (h: number, dow: number) => boolean> = {
   wakeup:          (h)     => h >= 5  && h < 8,
@@ -216,17 +218,34 @@ const nowRoutes: FastifyPluginAsync = async (fastify) => {
         }
       } catch { /* trail unavailable */ }
 
+      // Upcoming calendar events — next 8 hours
+      let calendarEvents: Array<{ uid: string; title: string; start: string; end: string; all_day: boolean; location?: string; calendar: string; color: string }> = []
+      try {
+        const calSources = await fastify.mongo.collection<CalendarSource>('calendar_sources')
+          .find({ user_id: req.user!.id }).toArray()
+        if (calSources.length > 0) {
+          const calEnd = new Date(now.getTime() + 8 * 3_600_000)
+          calendarEvents = await fetchCalendarEvents(calSources, now, calEnd, fastify.redis)
+        }
+      } catch { /* calendar unavailable */ }
+
       // AI briefing
       let briefing: string | null = null
       const settings = await fastify.mongo.collection('user_settings').findOne({ user_id: req.user!.id })
       const apiKey = (settings?.['anthropic_api_key'] as string | null) ?? process.env['ANTHROPIC_API_KEY']
 
-      if (apiKey && (urgent.length + dueToday.length + habits.length) > 0) {
+      if (apiKey && (urgent.length + dueToday.length + habits.length + calendarEvents.length) > 0) {
         try {
+          const fmtTime = (iso: string) => new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: tz })
+          const calLines = calendarEvents.slice(0, 5).map(ev =>
+            ev.all_day ? ev.title : `${ev.title} at ${fmtTime(ev.start)}`
+          )
+
           const context = [
-            urgent.length > 0 ? `${urgent.length} overdue: ${urgent.map(c => c['title']).join(', ')}` : '',
+            urgent.length > 0 ? `${urgent.length} overdue tasks: ${urgent.map(c => c['title']).join(', ')}` : '',
             dueToday.length > 0 ? `${dueToday.length} due today: ${dueToday.map(c => c['title']).join(', ')}` : '',
             habits.length > 0 ? `habits now: ${habits.map(c => `${c['title']} (streak: ${(c['recurrence'] as Record<string, unknown>)?.['streak_count'] ?? 0})`).join(', ')}` : '',
+            calLines.length > 0 ? `upcoming appointments (next 8h): ${calLines.join(', ')}` : '',
             presenceEntity ? `currently at: ${presenceEntity.name}` : '',
           ].filter(Boolean).join('. ')
 
@@ -235,10 +254,10 @@ const nowRoutes: FastifyPluginAsync = async (fastify) => {
             headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
             body: JSON.stringify({
               model: 'claude-haiku-4-5-20251001',
-              max_tokens: 100,
+              max_tokens: 150,
               messages: [{
                 role: 'user',
-                content: `Write one plain, supportive sentence (no fluff, no "Hey!", no alarming language) that helps the person focus on what matters right now: ${context}. Time of day: ${tod}. Tone: calm, encouraging, never shame-y or urgent.`
+                content: `You are helping someone with ADHD stay on track. Write 1-2 plain sentences. Be calm, warm, and specific — never alarming. If there are upcoming appointments, explain WHY now is a good moment to act (e.g. "you have a meeting at 2pm, so now is a natural window to finish X"). Give a reason that makes starting feel easy, not pressured. Context: ${context}. Time of day: ${tod}. No fluff, no "Hey!", no exclamation marks, no shame.`
               }]
             })
           })
@@ -267,6 +286,7 @@ const nowRoutes: FastifyPluginAsync = async (fastify) => {
           entity_list_items: entityListItems,
           location_context: locationCards,
           trail_pulse: trailPulse,
+          calendar_events: calendarEvents,
           briefing,
         }
       }

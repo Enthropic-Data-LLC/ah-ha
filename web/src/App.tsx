@@ -74,7 +74,7 @@ function Shell({ children }: { children: React.ReactNode }) {
       {/* Top bar */}
       <header className="border-b border-slate-800 px-4 h-12 flex items-center justify-between flex-shrink-0">
         <div className="flex items-center gap-4">
-          <a href={spacesHref} className="font-bold text-sm tracking-tight">aH-Ha</a>
+          <a href={user ? '/now' : '/'} className="font-bold text-sm tracking-tight">aH-Ha</a>
           {user && (
             <>
               <span className="text-xs font-mono text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded-full hidden sm:inline">@{user.username}</span>
@@ -127,14 +127,14 @@ export default function App() {
   }
   if (path === '/') {
     if (!isLoading && user?.username) {
-      window.location.replace(`/${user.username}/spaces`)
+      window.location.replace('/now')
       return null
     }
     return <LandingPage />
   }
   if (path === '/auth') {
     if (!isLoading && user?.username) {
-      window.location.replace(`/${user.username}/spaces`)
+      window.location.replace('/now')
       return null
     }
     return <AuthPage />
