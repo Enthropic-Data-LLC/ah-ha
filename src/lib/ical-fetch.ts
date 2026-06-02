@@ -105,11 +105,9 @@ function parseSource(icalText: string, start: Date, end: Date, source: CalendarS
       } else {
         const evStart = icalTimeToDate(ev.startDate)
         const evEnd   = icalTimeToDate(ev.endDate ?? ev.startDate)
-        // Skip if outside window, or if the event started more than 24h before
-        // the window start — this prevents multi-year background spans from
-        // appearing as "upcoming" even though they technically overlap today.
-        const lookbackCutoff = new Date(start.getTime() - 86_400_000)
-        if (evStart >= end || evEnd <= start || evStart < lookbackCutoff) continue
+        // Include any event that overlaps the window, including multi-day events
+        // that started before the window start but are still ongoing.
+        if (evStart >= end || evEnd <= start) continue
         events.push({
           uid,
           title,
@@ -162,14 +160,11 @@ export async function fetchCalendarEvents(
         await redis.set(eventsKey, JSON.stringify(windowEvents), 'EX', CACHE_TTL_SEC)
       }
 
-      // Filter cached events to the caller's window.
-      // The 24h lookback allows in-progress events (meeting started 30min ago)
-      // while blocking multi-year background spans from appearing as upcoming.
-      const lookbackCutoff = new Date(start.getTime() - 86_400_000)
+      // Filter cached events to the caller's requested window (overlap check).
       const filtered = windowEvents.filter(ev => {
         const evEnd   = new Date(ev.end)
         const evStart = new Date(ev.start)
-        return evEnd > start && evStart < end && evStart >= lookbackCutoff
+        return evEnd > start && evStart < end
       })
       all.push(...filtered)
     } catch (err) {
