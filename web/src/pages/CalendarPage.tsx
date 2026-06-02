@@ -61,7 +61,7 @@ export default function CalendarPage() {
   const { data, mutate } = useSWR<{ data: CalendarSource[] }>('/api/calendar/sources', fetcher)
   const sources = data?.data ?? []
 
-  const eventsKey = sources.length > 0 ? '/api/calendar/events?start=today&end=%2B7d&limit=200' : null
+  const eventsKey = sources.length > 0 ? '/api/calendar/events?end=%2B7d&limit=200' : null
   const { data: eventsData, isLoading: eventsLoading } = useSWR<{ data: CalendarEvent[] }>(
     eventsKey, fetcher, { refreshInterval: 300_000 }
   )
