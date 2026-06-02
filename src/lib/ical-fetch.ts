@@ -72,11 +72,16 @@ function parseSource(icalText: string, start: Date, end: Date, source: CalendarS
         // starting from today instead of their original dates.
         const iter = ev.iterator()
 
-        // Fast-forward cheaply: call next() without getOccurrenceDetails
-        // until we reach the window start.
+        // Fast-forward to 14 days before the window start rather than the
+        // window start itself. ical.js's iterator for INTERVAL=2;BYDAY=MO,FR
+        // can skip a Friday occurrence when the Monday of the same bi-week
+        // falls before the window — going back 14 days ensures we enter the
+        // bi-week cleanly. The occEnd > start check below gates what gets pushed.
+        const ffTarget = new Date(start.getTime() - 14 * 86_400_000)
+        const ffIcal   = ICAL.Time.fromJSDate(ffTarget, false)
         let next: ICAL.Time | null = iter.next()
         let skips = 0
-        while (next && next.compare(startIcal) < 0 && skips++ < 5000) {
+        while (next && next.compare(ffIcal) < 0 && skips++ < 5000) {
           next = iter.next()
         }
 
