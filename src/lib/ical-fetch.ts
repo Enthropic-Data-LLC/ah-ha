@@ -58,12 +58,29 @@ function parseSource(icalText: string, start: Date, end: Date, source: CalendarS
       const desc = typeof rawDesc === 'string' ? rawDesc : undefined
 
       if (ev.isRecurring()) {
-        // Use UTC so ICAL.js can fast-forward through the recurrence rule
-        // without stepping through every past occurrence one-by-one.
         const startIcal = ICAL.Time.fromJSDate(start, true)
         const endIcal   = ICAL.Time.fromJSDate(end, true)
-        const iter = ev.iterator(startIcal)
+
+        // If the rule has an explicit UNTIL before our window, the entire series
+        // ended in the past — skip without iterating.
+        const rrule = vevent.getFirstPropertyValue('rrule') as ICAL.Recur | null
+        if (rrule?.until && rrule.until.compare(startIcal) < 0) continue
+
+        // IMPORTANT: always start from DTSTART, never pass startIcal here.
+        // Passing a custom dtstart resets the recurrence base, causing COUNT-
+        // bounded series (e.g. COUNT=4 from 2013) to regenerate occurrences
+        // starting from today instead of their original dates.
+        const iter = ev.iterator()
+
+        // Fast-forward cheaply: call next() without getOccurrenceDetails
+        // until we reach the window start.
         let next: ICAL.Time | null = iter.next()
+        let skips = 0
+        while (next && next.compare(startIcal) < 0 && skips++ < 5000) {
+          next = iter.next()
+        }
+
+        // Process occurrences within the window
         let safety = 0
         while (next && safety++ < 500) {
           if (next.compare(endIcal) >= 0) break
