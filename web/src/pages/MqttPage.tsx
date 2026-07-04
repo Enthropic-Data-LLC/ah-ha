@@ -17,7 +17,7 @@ const TONES = ['neutral', 'happy', 'sorrow'] as const
 export default function MqttPage() {
   const { data, mutate } = useSWR<{ data: MqttSub[] }>('/api/mqtt/subscriptions', fetcher)
   const [creating, setCreating] = useState(false)
-  const [form, setForm] = useState({ topic_pattern: '', space_ref: '', text_template: '{{payload}}', default_tone: 'neutral' as const })
+  const [form, setForm] = useState<{ topic_pattern: string; space_ref: string; text_template: string; default_tone: 'happy' | 'sorrow' | 'neutral' }>({ topic_pattern: '', space_ref: '', text_template: '{{payload}}', default_tone: 'neutral' })
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
 

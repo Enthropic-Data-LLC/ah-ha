@@ -113,7 +113,7 @@ export default function SharePage({ token }: { token: string }) {
         <h1 className="text-xl font-bold">{data.space.name}</h1>
 
         {data.space.type === 'trail' && (
-          <TrailView entries={content as Parameters<typeof TrailView>[0]['entries']} />
+          <TrailView entries={(content as unknown) as Parameters<typeof TrailView>[0]['entries']} />
         )}
         {data.space.type === 'note' && (
           <NoteView body={(content as { body: string }).body} />
@@ -125,7 +125,7 @@ export default function SharePage({ token }: { token: string }) {
           />
         )}
         {data.space.type === 'list' && (
-          <ListView items={content as Parameters<typeof ListView>[0]['items']} />
+          <ListView items={(content as unknown) as Parameters<typeof ListView>[0]['items']} />
         )}
 
         {data.expires_at && (
