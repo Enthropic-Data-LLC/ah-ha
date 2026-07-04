@@ -78,7 +78,7 @@ function sha256(bytes: Uint8Array): Uint8Array {
 
 async function digest(data: Uint8Array): Promise<Uint8Array> {
   if (window.isSecureContext && window.crypto?.subtle) {
-    const buf = await window.crypto.subtle.digest('SHA-256', data)
+    const buf = await window.crypto.subtle.digest('SHA-256', data as BufferSource)
     return new Uint8Array(buf)
   }
   return sha256(data)
