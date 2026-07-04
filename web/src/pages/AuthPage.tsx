@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { api, ApiError } from '../lib/api'
+import { solvePow } from '../lib/pow'
 
 const IS_DEV = window.location.hostname !== 'ah-ha.app'
 
@@ -9,6 +10,7 @@ export default function AuthPage() {
   const [devLink, setDevLink] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [verifying, setVerifying] = useState(false)
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
@@ -16,7 +18,12 @@ export default function AuthPage() {
     setError('')
     setDevLink('')
     try {
-      await api.post('/auth/magic-link', { email })
+      setVerifying(true)
+      const { challenge, difficulty } = await api.get<{ challenge: string; difficulty: number }>('/auth/pow-challenge')
+      const nonce = await solvePow(challenge, difficulty)
+      setVerifying(false)
+
+      await api.post('/auth/magic-link', { email, challenge, nonce })
       setSent(true)
       if (IS_DEV) {
         const res = await api.get<{ url: string }>(`/auth/dev-link?email=${encodeURIComponent(email)}`)
@@ -25,6 +32,7 @@ export default function AuthPage() {
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Something went wrong')
     } finally {
+      setVerifying(false)
       setLoading(false)
     }
   }
@@ -98,7 +106,7 @@ export default function AuthPage() {
             className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50
                        disabled:cursor-not-allowed text-sm font-semibold rounded-lg transition"
           >
-            {loading ? 'Sending…' : 'Send sign-in link'}
+            {verifying ? 'Verifying…' : loading ? 'Sending…' : 'Send sign-in link'}
           </button>
         </form>
 

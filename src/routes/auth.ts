@@ -5,15 +5,28 @@ import { ObjectId } from 'mongodb'
 import { createMagicToken, consumeMagicToken } from '../lib/magic-link.js'
 import { sendMagicLink } from '../lib/email.js'
 import { signJWT } from '../lib/jwt.js'
+import { issueChallenge, verifyPow } from '../lib/pow.js'
 
 const magicLinkBody = z.object({
   email: z.string().email().toLowerCase(),
+  challenge: z.string(),
+  nonce: z.string(),
 })
 
 const authRoutes: FastifyPluginAsync = async (fastify) => {
+  // GET /auth/pow-challenge — issue a proof-of-work puzzle the client must solve
+  // before /auth/magic-link will accept a request (raises the cost of bulk abuse
+  // without a third-party CAPTCHA dependency).
+  fastify.get('/auth/pow-challenge', async () => {
+    return issueChallenge(fastify.redis)
+  })
+
   // POST /auth/magic-link — request a sign-in link
   fastify.post('/auth/magic-link', async (req, reply) => {
-    const { email } = magicLinkBody.parse(req.body)
+    const { email, challenge, nonce } = magicLinkBody.parse(req.body)
+
+    const powOk = await verifyPow(fastify.redis, challenge, nonce)
+    if (!powOk) return reply.status(400).send({ error: 'Verification failed, please try again' })
 
     const token = await createMagicToken(fastify.redis, email).catch((err: Error) => {
       reply.status(429).send({ error: err.message })
