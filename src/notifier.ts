@@ -3,7 +3,7 @@
  *
  * Delivery channels:
  *   - Node-RED webhook → Telegram (http://otto.local:1880/webhook/ah-ha-notify)
- *   - Email via SMTP (nodemailer)
+ *   - Email via the shared sender in lib/email.ts (EMAIL_PROVIDER)
  *
  * Triggers:
  *   - Daily briefing: cron-style check every minute against user's configured time
@@ -12,18 +12,13 @@
 import 'dotenv/config'
 import { Redis } from 'ioredis'
 import { MongoClient, ObjectId, type Db } from 'mongodb'
-import nodemailer from 'nodemailer'
+import { sendMail } from './lib/email.js'
 
 const MONGO_URI      = process.env['MONGODB_URI']
 const REDIS_URL      = process.env['REDIS_URL']
 const API_BASE       = `http://localhost:${process.env['PORT'] ?? 3100}`
 const BRIDGE_KEY     = process.env['MQTT_BRIDGE_API_KEY']
 const NODERED_URL    = process.env['NODERED_URL'] ?? 'http://otto.local:1880'
-const SMTP_HOST      = process.env['SMTP_HOST']
-const SMTP_PORT      = parseInt(process.env['SMTP_PORT'] ?? '587', 10)
-const SMTP_USER      = process.env['SMTP_USER']
-const SMTP_PASS      = process.env['SMTP_PASS']
-const EMAIL_FROM     = process.env['EMAIL_FROM'] ?? SMTP_USER
 
 if (!MONGO_URI) { process.stderr.write('MONGODB_URI required\n'); process.exit(1) }
 if (!REDIS_URL) { process.stderr.write('REDIS_URL required\n'); process.exit(1) }
@@ -31,18 +26,9 @@ if (!BRIDGE_KEY) { process.stderr.write('MQTT_BRIDGE_API_KEY required\n'); proce
 
 // ── Email transport ────────────────────────────────────────────────────────
 
-const mailer = SMTP_HOST ? nodemailer.createTransport({
-  host: SMTP_HOST,
-  port: SMTP_PORT,
-  secure: false,
-  auth: { user: SMTP_USER, pass: SMTP_PASS },
-}) : null
-
 async function sendEmail(to: string, subject: string, text: string) {
-  if (!mailer) return
   try {
-    await mailer.sendMail({ from: EMAIL_FROM, to, subject, text })
-    console.log(`[notifier] email sent → ${to}`)
+    await sendMail(to, subject, { text })
   } catch (err) {
     console.error(`[notifier] email error → ${to}:`, err)
   }
