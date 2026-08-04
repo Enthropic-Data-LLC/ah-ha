@@ -4,3 +4,11 @@ dist/
 *.env.local
 *.log
 .DS_Store
+
+# env files and their backups (never commit — these hold live Resend/Maileroo keys)
+.env
+.env.*
+*.env.bak*
+
+# incremental TS build state — a build artifact, churns on every build
+*.tsbuildinfo
