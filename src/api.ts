@@ -1,7 +1,9 @@
 import 'dotenv/config'
 import { fileURLToPath } from 'url'
 import { join, dirname } from 'path'
-import Fastify from 'fastify'
+import { STATUS_CODES } from 'node:http'
+import { ZodError } from 'zod'
+import Fastify, { type FastifyError } from 'fastify'
 import staticFiles from '@fastify/static'
 import cookie from '@fastify/cookie'
 import cors from '@fastify/cors'
@@ -66,6 +68,32 @@ await fastify.register(rateLimit, {
     error: 'Too many requests',
     retryAfter: context.after,
   }),
+})
+
+// Zod validation failures are thrown, not returned, so Fastify's default
+// handler treated them as unhandled 500s and serialised the whole ZodError
+// into the response body — the wrong status, and it published the request
+// schema of every endpoint that calls .parse() (about twenty of them).
+// Everything that is not a ZodError keeps Fastify's default shape and status
+// so no existing client sees a different response than it did before.
+fastify.setErrorHandler((err: FastifyError, req, reply) => {
+  if (err instanceof ZodError) {
+    req.log.warn({ url: req.url, issues: err.issues }, 'request validation failed')
+    return reply.status(400).send({
+      error: 'Invalid request',
+      // Field names only — enough for a client to correct the call, without
+      // handing back the expected types and constraints.
+      fields: [...new Set(err.issues.map((i) => i.path.join('.')).filter(Boolean))],
+    })
+  }
+
+  const status = err.statusCode ?? 500
+  if (status >= 500) req.log.error(err)
+  return reply.status(status).send({
+    statusCode: status,
+    error: STATUS_CODES[status] ?? 'Error',
+    message: err.message,
+  })
 })
 
 // Auth endpoints — tight: 10/min by IP
