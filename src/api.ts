@@ -60,11 +60,56 @@ await fastify.register(redisPlugin)
 await fastify.register(authPlugin)
 await fastify.register(auditPlugin)
 
+// Rate-limit tiers are assigned HERE, before @fastify/rate-limit is
+// registered, and this ordering is load-bearing.
+//
+// These tiers used to be set by an onRoute hook inside each sub-plugin below.
+// That silently did nothing: with global:false the plugin decides per route at
+// registration time, using its own onRoute hook, and a hook added to the
+// parent runs before one added later in a child scope. The plugin therefore
+// inspected every route before the child hook attached config.rateLimit, found
+// none, and skipped it. No route in the app was rate limited — the "tight:
+// 10/min" auth limiter included. Verified against fastify 5 / rate-limit 10:
+// child-hook = never 429, this ordering = 429 on the 11th request.
+//
+// Keep this hook above the register() call.
+const TIGHT_AUTH = new Set([
+  '/auth/pow-challenge',
+  '/auth/magic-link',
+  '/auth/claim-username',
+  '/auth/dev-link',
+  '/api/auth/verify',
+])
+
+fastify.addHook('onRoute', (route) => {
+  const methods = Array.isArray(route.method) ? route.method : [route.method]
+
+  if (TIGHT_AUTH.has(route.url)) {
+    // Endpoints that send mail or mint work, keyed by IP. Deliberately does
+    // NOT include /auth/me or /auth/logout: the frontend calls /auth/me on
+    // every page load, and 10/min per IP would break normal use behind a
+    // shared NAT the moment this limiter actually started working.
+    route.config = {
+      ...route.config,
+      rateLimit: { max: 10, timeWindow: '1 minute', keyGenerator: (req: { ip: string }) => req.ip },
+    }
+  } else if (route.url.startsWith('/api/') && methods.some((m) => m === 'GET' || m === 'HEAD')) {
+    // Read traffic, keyed by org via the plugin's default keyGenerator.
+    // Scoped to /api/ so the static assets and SPA fallback served from the
+    // root are not throttled.
+    route.config = { ...route.config, rateLimit: { max: 200, timeWindow: '1 minute' } }
+  }
+})
+
 await fastify.register(rateLimit, {
   global: false,
   redis: fastify.redis,
   keyGenerator: (req) => req.user?.orgId?.toString() ?? req.ip,
+  // statusCode must be on this object: @fastify/rate-limit throws the value
+  // returned here as the error, so it reaches setErrorHandler. Without it the
+  // handler cannot tell a 429 from an unhandled crash and answers 500.
   errorResponseBuilder: (_req, context) => ({
+    statusCode: 429,
     error: 'Too many requests',
     retryAfter: context.after,
   }),
@@ -88,6 +133,16 @@ fastify.setErrorHandler((err: FastifyError, req, reply) => {
   }
 
   const status = err.statusCode ?? 500
+
+  // Rate-limit rejections arrive here as the errorResponseBuilder payload
+  // rather than as an Error; pass it through intact so clients keep retryAfter.
+  if (status === 429) {
+    return reply.status(429).send({
+      error: 'Too many requests',
+      retryAfter: (err as unknown as { retryAfter?: number }).retryAfter,
+    })
+  }
+
   if (status >= 500) req.log.error(err)
   return reply.status(status).send({
     statusCode: status,
@@ -96,21 +151,13 @@ fastify.setErrorHandler((err: FastifyError, req, reply) => {
   })
 })
 
-// Auth endpoints — tight: 10/min by IP
+// Auth endpoints — rate-limit tier assigned by the onRoute hook above.
 await fastify.register(async (sub) => {
-  sub.addHook('onRoute', (route) => {
-    route.config = { ...route.config, rateLimit: { max: 10, timeWindow: '1 minute', keyGenerator: (req: { ip: string }) => req.ip } }
-  })
   await sub.register(authRoutes)
 })
 
-// All other routes — 200/min by org_id
+// All other routes — rate-limit tier assigned by the onRoute hook above.
 await fastify.register(async (sub) => {
-  sub.addHook('onRoute', (route) => {
-    if (['GET', 'HEAD'].includes(route.method as string)) {
-      route.config = { ...route.config, rateLimit: { max: 200, timeWindow: '1 minute' } }
-    }
-  })
   await sub.register(spacesRoutes)
   await sub.register(boardRoutes)
   await sub.register(trailRoutes)
