@@ -1,16 +1,29 @@
 import { Resend } from 'resend'
 
-const FROM     = process.env['EMAIL_FROM'] ?? 'noreply@ah-ha.app'
-const API_KEY  = process.env['RESEND_API_KEY'] ?? ''
-const OVERRIDE = process.env['EMAIL_OVERRIDE']
+// Every one of these is read at call time, never at module load.
+//
+// tsup code-splits the shared email module into a chunk, and the emitted
+// bundle hoists `import "./chunk-*.js"` ABOVE `import "dotenv/config"` —
+// even though dotenv is the first import in api.ts and notifier.ts. Any
+// process.env read at module scope therefore runs before .env is loaded and
+// sees undefined. That silently disabled all magic-link email from the
+// 2026-07-27 build until 2026-08-04: /auth/magic-link still returned
+// {"ok":true}, it just never sent anything.
+const FROM         = () => process.env['EMAIL_FROM'] ?? 'noreply@ah-ha.app'
+const API_KEY      = () => process.env['RESEND_API_KEY'] ?? ''
+const OVERRIDE     = () => process.env['EMAIL_OVERRIDE']
 
 // Provider selection. Defaults to resend so the cutover is a single env flip
 // (EMAIL_PROVIDER=maileroo) once ah-ha.app is DNS-verified in Maileroo.
-const PROVIDER      = (process.env['EMAIL_PROVIDER'] ?? 'resend').toLowerCase()
-const MAILEROO_KEY  = process.env['MAILEROO_SENDING_KEY'] ?? ''
-const MAILEROO_URL  = 'https://smtp.maileroo.com/api/v2/emails'
+const PROVIDER     = () => (process.env['EMAIL_PROVIDER'] ?? 'resend').toLowerCase()
+const MAILEROO_KEY = () => process.env['MAILEROO_SENDING_KEY'] ?? ''
+const MAILEROO_URL = 'https://smtp.maileroo.com/api/v2/emails'
 
-const resend = API_KEY ? new Resend(API_KEY) : null
+let resendClient: Resend | null = null
+function getResend(): Resend | null {
+  if (!resendClient && API_KEY()) resendClient = new Resend(API_KEY())
+  return resendClient
+}
 
 export interface MailBody {
   html?: string
@@ -30,13 +43,14 @@ function magicLinkHtml(url: string): string {
 }
 
 async function sendViaResend(dest: string, subject: string, body: MailBody) {
+  const resend = getResend()
   if (!resend) {
     console.warn('[email] RESEND_API_KEY not set — message not sent')
     return
   }
   try {
     // Resend requires at least one of html/text; the notifier sends text-only.
-    const payload = { from: FROM, to: dest, subject, ...body } as Parameters<typeof resend.emails.send>[0]
+    const payload = { from: FROM(), to: dest, subject, ...body } as Parameters<typeof resend.emails.send>[0]
     const { data, error } = await resend.emails.send(payload)
     if (error) console.error('[email] resend error:', error)
     else console.log('[email] sent via resend:', data?.id, '→', dest)
@@ -46,17 +60,19 @@ async function sendViaResend(dest: string, subject: string, body: MailBody) {
 }
 
 async function sendViaMaileroo(dest: string, subject: string, body: MailBody) {
-  if (!MAILEROO_KEY) {
+  const key = MAILEROO_KEY()
+  if (!key) {
     console.warn('[email] MAILEROO_SENDING_KEY not set — message not sent')
     return
   }
   // "Name <addr>" -> { display_name, address }; bare addr -> { address }
-  const m = /^\s*(.*?)\s*<([^>]+)>\s*$/.exec(FROM)
-  const from = m ? { display_name: m[1], address: m[2] } : { address: FROM }
+  const fromRaw = FROM()
+  const m = /^\s*(.*?)\s*<([^>]+)>\s*$/.exec(fromRaw)
+  const from = m ? { display_name: m[1], address: m[2] } : { address: fromRaw }
   try {
     const res = await fetch(MAILEROO_URL, {
       method: 'POST',
-      headers: { 'X-API-Key': MAILEROO_KEY, 'Content-Type': 'application/json' },
+      headers: { 'X-API-Key': key, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         from,
         to: [{ address: dest }],
@@ -83,12 +99,12 @@ async function sendViaMaileroo(dest: string, subject: string, body: MailBody) {
  * transport until 2026-07-27).
  */
 export async function sendMail(to: string, subject: string, body: MailBody) {
-  const dest = OVERRIDE ?? to
+  const dest = OVERRIDE() ?? to
   if (!body.html && !body.text) {
     console.warn('[email] empty body — message not sent →', dest)
     return
   }
-  if (PROVIDER === 'maileroo') {
+  if (PROVIDER() === 'maileroo') {
     await sendViaMaileroo(dest, subject, body)
   } else {
     await sendViaResend(dest, subject, body)
