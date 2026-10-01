@@ -27,6 +27,8 @@ const actionSchema = z.discriminatedUnion('type', [
   }),
   z.object({ type: z.literal('checkin'), entity_id: z.string().regex(OID) }),
   z.object({ type: z.literal('complete_card'), card_id: z.string().regex(OID) }),
+  // No server-side effect — tells the app which screen to open (e.g. the leaving checklist by the door).
+  z.object({ type: z.literal('open'), view: z.enum(['leave', 'now']) }),
 ])
 type TagAction = z.infer<typeof actionSchema>
 
@@ -74,6 +76,8 @@ const nfcRoutes: FastifyPluginAsync = async (fastify) => {
       case 'complete_card':
         return await db.collection('board_cards').findOne({ ...base, _id: new ObjectId(action.card_id) })
           ? null : 'Card not found'
+      case 'open':
+        return null
     }
   }
 
@@ -112,6 +116,8 @@ const nfcRoutes: FastifyPluginAsync = async (fastify) => {
         const card = await forward(req, 'POST', `/api/cards/${action.card_id}/complete`, {})
         return `Done: ${card['title'] ?? 'card'}`
       }
+      case 'open':
+        return action.view === 'leave' ? 'Heading out' : 'Today'
     }
   }
 
@@ -191,7 +197,12 @@ const nfcRoutes: FastifyPluginAsync = async (fastify) => {
     '/api/nfc/tap/:tagId', { preHandler: fastify.authenticate }, async (req, reply) => {
       const tag = await findTag(req, req.params.tagId)
       if (!tag) return reply.status(404).send({ error: 'Unknown tag' })
-      const summary = { tag_id: tag['tag_id'], name: tag['name'], icon: tag['icon'] }
+      const action = tag['action'] as TagAction
+      // `open` is returned on duplicates too — a second tap should still open the screen.
+      const summary = {
+        tag_id: tag['tag_id'], name: tag['name'], icon: tag['icon'],
+        open: action.type === 'open' ? action.view : null,
+      }
 
       // Claim the tap atomically so concurrent reads can't both run the action.
       const now = new Date()

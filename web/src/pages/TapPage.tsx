@@ -6,7 +6,7 @@ interface NfcTag {
   tag_id: string
   name: string
   icon: string
-  action: { type: 'trail'; space_slug: string; text: string } | { type: 'checkin'; entity_id: string } | { type: 'complete_card'; card_id: string }
+  action: { type: 'trail'; space_slug: string; text: string } | { type: 'checkin'; entity_id: string } | { type: 'complete_card'; card_id: string } | { type: 'open'; view: 'leave' | 'now' }
   tap_count: number
 }
 
@@ -14,6 +14,7 @@ const ACTION_LABEL: Record<NfcTag['action']['type'], string> = {
   trail: 'Log to trail',
   checkin: 'Check in',
   complete_card: 'Complete card',
+  open: 'Open',
 }
 
 // Phones without the Ah-Ha app open the tag's URL here. The action only runs on a
@@ -39,6 +40,11 @@ export default function TapPage({ tagId }: { tagId: string }) {
 
   if (error) {
     return <p className="text-center text-slate-500 py-24">This tag isn't registered to your account.</p>
+  }
+  // "Open" tags have no action to run — on the web, Now (with its Going-to checklist) is the screen.
+  if (tag?.action.type === 'open') {
+    window.location.replace('/now')
+    return null
   }
   if (!tag) {
     return (

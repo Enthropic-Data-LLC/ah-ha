@@ -298,6 +298,21 @@ describe('NFC tags', () => {
   })
 })
 
+describe('NFC open tags', () => {
+  it('an open tag returns the view to open, on duplicate taps too', async () => {
+    const { body } = await req<{ data: { tag_id: string } }>('POST', '/api/nfc/tags', {
+      name: 'Front door', icon: '🚪', action: { type: 'open', view: 'leave' },
+    })
+    const id = (body as { data: { tag_id: string } }).data.tag_id
+    for (const duplicate of [false, true]) {
+      const { status, body: tap } = await req<{ data: { open: string; duplicate: boolean } }>('POST', `/api/nfc/tap/${id}`, {})
+      expect(status).toBe(200)
+      expect((tap as { data: { open: string; duplicate: boolean } }).data).toMatchObject({ open: 'leave', duplicate })
+    }
+    await req('DELETE', `/api/nfc/tags/${id}`)
+  })
+})
+
 // ── Cleanup ──────────────────────────────────────────────────────────────────
 // NOTE: intentionally no afterAll cleanup — the test instance shares the same
 // MongoDB as production. Test spaces linger with slugs like test-trail-{ts}.
