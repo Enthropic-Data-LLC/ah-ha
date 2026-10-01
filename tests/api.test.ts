@@ -19,7 +19,8 @@ async function req<T = unknown>(method: string, path: string, body?: unknown, he
   const res = await fetch(API + path, {
     method,
     headers: {
-      'Content-Type': 'application/json',
+      // Only with a body: Fastify 400s a body-less request that claims to be JSON.
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
       ...(cookie ? { Cookie: cookie } : {}),
       ...headers,
     },
@@ -232,6 +233,68 @@ describe('Table', () => {
   it('POST /api/table/:slug/rows adds a row', async () => {
     const { status } = await req('POST', `/api/table/${tableSlug}/rows`, { cells: {} })
     expect([200, 201]).toContain(status)
+  })
+})
+
+// ── NFC tags ────────────────────────────────────────────────────────────────
+
+describe('NFC tags', () => {
+  let tagId = ''
+  let placeId = ''
+
+  it('POST /api/nfc/tags rejects an action pointing at a missing trail', async () => {
+    const { status } = await req('POST', '/api/nfc/tags', {
+      name: 'Bad tag', action: { type: 'trail', space_slug: 'no-such-trail', text: 'x' },
+    })
+    expect(status).toBe(400)
+  })
+
+  it('POST /api/nfc/tags registers a trail tag and returns its URL', async () => {
+    const { status, body } = await req<{ data: { tag_id: string; url: string } }>('POST', '/api/nfc/tags', {
+      name: 'Meds', icon: '💊', action: { type: 'trail', space_slug: trailSlug, text: 'Took meds', tone: 'happy' },
+    })
+    expect(status).toBe(201)
+    const data = (body as { data: { tag_id: string; url: string } }).data
+    tagId = data.tag_id
+    expect(tagId).toMatch(/^[2-9a-km-z]{20}$/)
+    expect(data.url).toMatch(new RegExp(`/t/${tagId}$`))
+  })
+
+  it('POST /api/nfc/tap/:tagId appends to the trail with source nfc', async () => {
+    const { status, body } = await req<{ data: { duplicate: boolean; message: string } }>('POST', `/api/nfc/tap/${tagId}`, {})
+    expect(status).toBe(200)
+    const data = (body as { data: { duplicate: boolean; message: string } }).data
+    expect(data.duplicate).toBe(false)
+    expect(data.message).toContain('Took meds')
+
+    const { body: entries } = await req<{ data: Array<{ text: string; source: string }> }>('GET', `/api/trail/${trailSlug}/entries?limit=1`)
+    const latest = (entries as { data: Array<{ text: string; source: string }> }).data[0]!
+    expect(latest.text).toBe('Took meds')
+    expect(latest.source).toBe('nfc')
+  })
+
+  it('a second tap within the debounce window is reported as a duplicate', async () => {
+    const { status, body } = await req<{ data: { duplicate: boolean } }>('POST', `/api/nfc/tap/${tagId}`, {})
+    expect(status).toBe(200)
+    expect((body as { data: { duplicate: boolean } }).data.duplicate).toBe(true)
+  })
+
+  it('PATCH re-points the tag to a check-in without changing its id', async () => {
+    const { body: ent } = await req<{ data: { _id: string } }>('POST', '/api/entities', { name: `NFC test place ${Date.now()}` })
+    placeId = (ent as { data: { _id: string } }).data._id
+    const { status, body } = await req<{ data: { tag_id: string; action: { type: string } } }>('PATCH', `/api/nfc/tags/${tagId}`, {
+      action: { type: 'checkin', entity_id: placeId },
+    })
+    expect(status).toBe(200)
+    const data = (body as { data: { tag_id: string; action: { type: string } } }).data
+    expect(data.tag_id).toBe(tagId)
+    expect(data.action.type).toBe('checkin')
+  })
+
+  it('DELETE /api/nfc/tags/:tagId removes it; taps then 404', async () => {
+    expect((await req('DELETE', `/api/nfc/tags/${tagId}`)).status).toBe(200)
+    expect((await req('POST', `/api/nfc/tap/${tagId}`, {})).status).toBe(404)
+    await req('DELETE', `/api/entities/${placeId}`)
   })
 })
 
