@@ -1,0 +1,71 @@
+#!/bin/sh
+# aha-presence — logs household arrivals/departures to an Ah-Ha trail.
+#
+# Runs on the OpenWrt router (procd service /etc/init.d/aha-presence). Every POLL
+# seconds it reads which phones are associated to any of the router's APs.
+#   arrived — logged the first poll a phone is seen
+#   left    — logged once it has been unseen for AWAY_AFTER seconds; hostapd
+#             already waits out its own inactivity timer before dropping a
+#             station, and the extra margin absorbs Wi-Fi toggles and reboots
+# A phone whose state is unknown (service just started) is recorded silently,
+# so a router reboot doesn't log everyone at home as "got home".
+#
+# Config /etc/aha-presence.conf (mode 600 — holds an API key):
+#   AHA_URL=https://ah-ha.app
+#   AHA_KEY=aha_live_…
+#   TRAIL=log
+#   POLL=20
+#   AWAY_AFTER=300
+#   PHONE_e4:26:d5:92:62:7a=David
+#
+# Ah-Ha source repo: Enthropic-Data-LLC/ah-ha, scripts/router/ (copy of this file).
+
+CONF=/etc/aha-presence.conf
+# PHONE_<mac> lines are not valid shell names, so only the plain settings are sourced.
+eval "$(grep -E '^[A-Z_]+=' "$CONF")"
+STATE=/tmp/aha-presence
+mkdir -p "$STATE"
+
+watched() { sed -n 's/^PHONE_\([0-9a-f:]\{17\}\)=.*/\1/p' "$CONF"; }
+name_of() { sed -n "s/^PHONE_$1=//p" "$CONF"; }
+
+associated() {
+	for ap in $(ubus list 'hostapd.*'); do
+		ubus call "$ap" get_clients | grep -o '"[0-9a-f:]\{17\}"' | tr -d '"'
+	done
+}
+
+log_trail() {  # $1=mac $2=home|away
+	who=$(name_of "$1")
+	if [ "$2" = home ]; then text="🏠 $who got home"; else text="🚶 $who left home"; fi
+	body="{\"text\":\"$text\",\"tone\":\"neutral\",\"source\":\"presence\",\"tags\":[\"presence\",\"$2\"],\"meta\":{\"person\":\"$who\",\"mac\":\"$1\"}}"
+	if uclient-fetch -q -O /dev/null -T 15 \
+		--header="Authorization: Bearer $AHA_KEY" --header='Content-Type: application/json' \
+		--post-data="$body" "$AHA_URL/api/trail/$TRAIL/append"; then
+		logger -t aha-presence "$text"
+	else
+		logger -t aha-presence "failed to log '$text' — will retry next poll"
+		return 1
+	fi
+}
+
+while :; do
+	now=$(date +%s)
+	seen=$(associated)
+	for mac in $(watched); do
+		prev=$(cat "$STATE/$mac" 2>/dev/null || echo unknown)
+		if echo "$seen" | grep -qx "$mac"; then
+			echo "$now" > "$STATE/$mac.seen"
+			if [ "$prev" = unknown ]; then echo home > "$STATE/$mac"
+			elif [ "$prev" = away ]; then log_trail "$mac" home && echo home > "$STATE/$mac"
+			fi
+		else
+			last=$(cat "$STATE/$mac.seen" 2>/dev/null || echo 0)
+			if [ "$prev" = unknown ]; then echo away > "$STATE/$mac"
+			elif [ "$prev" = home ] && [ $((now - last)) -ge "$AWAY_AFTER" ]; then
+				log_trail "$mac" away && echo away > "$STATE/$mac"
+			fi
+		fi
+	done
+	sleep "$POLL"
+done
