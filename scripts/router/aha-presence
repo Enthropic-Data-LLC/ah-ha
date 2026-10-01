@@ -39,12 +39,16 @@ log_trail() {  # $1=mac $2=home|away
 	who=$(name_of "$1")
 	if [ "$2" = home ]; then text="🏠 $who got home"; else text="🚶 $who left home"; fi
 	body="{\"text\":\"$text\",\"tone\":\"neutral\",\"source\":\"presence\",\"tags\":[\"presence\",\"$2\"],\"meta\":{\"person\":\"$who\",\"mac\":\"$1\"}}"
-	if uclient-fetch -q -O /dev/null -T 15 \
+	# uclient-fetch exits 8 on any status but 200/204 — including the 201 an append
+	# returns — and -q hides which status it was. Judge success by the message, or
+	# every successful post looks failed and is re-sent each poll (2026-10-01: ~470 dupes).
+	out=$(uclient-fetch -O /dev/null -T 15 \
 		--header="Authorization: Bearer $AHA_KEY" --header='Content-Type: application/json' \
-		--post-data="$body" "$AHA_URL/api/trail/$TRAIL/append"; then
+		--post-data="$body" "$AHA_URL/api/trail/$TRAIL/append" 2>&1)
+	if [ $? -eq 0 ] || echo "$out" | grep -q 'HTTP error 201'; then
 		logger -t aha-presence "$text"
 	else
-		logger -t aha-presence "failed to log '$text' — will retry next poll"
+		logger -t aha-presence "failed to log '$text' ($(echo "$out" | tail -1)) — will retry next poll"
 		return 1
 	fi
 }
