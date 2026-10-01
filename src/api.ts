@@ -37,6 +37,7 @@ import entityRoutes from './routes/entities.js'
 import recurrenceRoutes from './routes/recurrence.js'
 import calendarRoutes from './routes/calendar.js'
 import nfcRoutes from './routes/nfc.js'
+import summaryRoutes from './routes/summary.js'
 import { setupTrailSchema, closePool } from './lib/timescale.js'
 
 const isProd = process.env['NODE_ENV'] === 'production'
@@ -180,6 +181,7 @@ await fastify.register(async (sub) => {
   await sub.register(recurrenceRoutes)
   await sub.register(calendarRoutes)
   await sub.register(nfcRoutes)
+  await sub.register(summaryRoutes)
 })
 
 fastify.get('/healthz', async () => ({ ok: true, ts: new Date().toISOString() }))

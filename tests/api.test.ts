@@ -329,6 +329,31 @@ describe('Check-in TTL', () => {
   })
 })
 
+describe('Reminders + day summary', () => {
+  it('upcoming lists a card due soon; completing it shows in the day summary', async () => {
+    const { body: cols } = await req<{ data: Array<{ _id: string }> }>('GET', `/api/board/${boardSlug}/columns`)
+    const columnId = (cols as { data: Array<{ _id: string }> }).data[0]!._id
+    const title = `Reminder test ${Date.now()}`
+    const due = new Date(Date.now() + 2 * 3_600_000).toISOString()
+    const { body: created } = await req<{ data: { _id: string } }>('POST', `/api/board/${boardSlug}/cards`, { title, column_id: columnId, due_date: due })
+    const cardId = (created as { data: { _id: string } }).data._id
+
+    const { status, body: up } = await req<{ data: Array<{ _id: string; title: string }> }>('GET', '/api/cards/upcoming?hours=3')
+    expect(status).toBe(200)
+    expect((up as { data: Array<{ title: string }> }).data.map(c => c.title)).toContain(title)
+
+    const since = new Date(Date.now() - 3_600_000).toISOString()
+    expect((await req('POST', `/api/cards/${cardId}/complete`, {})).status).toBe(200)
+    const { status: s2, body: sum } = await req<{ data: { completed: Array<{ title: string }>; trail: { total: number } } }>(
+      'GET', `/api/day-summary?since=${encodeURIComponent(since)}`)
+    expect(s2).toBe(200)
+    expect((sum as { data: { completed: Array<{ title: string }> } }).data.completed.map(c => c.title)).toContain(title)
+
+    const { body: after } = await req<{ data: Array<{ title: string }> }>('GET', '/api/cards/upcoming?hours=3')
+    expect((after as { data: Array<{ title: string }> }).data.map(c => c.title)).not.toContain(title)
+  })
+})
+
 // ── Cleanup ──────────────────────────────────────────────────────────────────
 // NOTE: intentionally no afterAll cleanup — the test instance shares the same
 // MongoDB as production. Test spaces linger with slugs like test-trail-{ts}.

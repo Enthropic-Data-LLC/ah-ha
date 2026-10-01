@@ -74,8 +74,9 @@ const recurrenceRoutes: FastifyPluginAsync = async (fastify) => {
       const now = new Date()
 
       const updates: Record<string, unknown> = {
-        updated_at:  now,
-        defer_until: null,  // clear any active snooze on completion
+        updated_at:   now,
+        completed_at: now,   // when it was last finished — the evening wrap-up counts these
+        defer_until:  null,  // clear any active snooze on completion
       }
 
       if (!rec) {
@@ -148,6 +149,29 @@ const recurrenceRoutes: FastifyPluginAsync = async (fastify) => {
       )
       if (result.matchedCount === 0) return reply.status(404).send({ error: 'Card not found' })
       return { ok: true }
+    }
+  )
+
+  // GET /api/cards/upcoming?hours=24 — open cards due in the next N hours, for phone reminders.
+  // Snoozed cards are left out unless the snooze ends before they're due.
+  fastify.get<{ Querystring: { hours?: string } }>(
+    '/api/cards/upcoming',
+    { preHandler: fastify.authenticate },
+    async (req) => {
+      const hours = Math.min(Math.max(Number(req.query.hours) || 24, 1), 72)
+      const now = new Date()
+      const until = new Date(now.getTime() + hours * 3_600_000)
+      const cards = await fastify.mongo.collection('board_cards').find({
+        org_id: req.user!.orgId,
+        deleted_at: { $exists: false },
+        done: { $ne: true },
+        due_date: { $gt: now, $lte: until },
+      }).sort({ due_date: 1 }).limit(100).toArray()
+      return {
+        data: cards
+          .filter(c => !c['defer_until'] || new Date(c['defer_until'] as Date) <= new Date(c['due_date'] as Date))
+          .map(c => ({ _id: c['_id'], title: c['title'], due_date: c['due_date'], ref: c['ref'], recurrence: c['recurrence'] ?? null })),
+      }
     }
   )
 
