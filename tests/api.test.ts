@@ -313,6 +313,22 @@ describe('NFC open tags', () => {
   })
 })
 
+describe('Check-in TTL', () => {
+  it('defaults to 4h and accepts ttl_hours for GPS arrivals', async () => {
+    // Check-in is keyed by username; the dev test user may never have been through onboarding.
+    expect([200, 409]).toContain((await req('POST', '/auth/claim-username', { username: 'ahha-test-runner' })).status)
+    const { body } = await req<{ data: { _id: string } }>('POST', '/api/entities', { name: `TTL test place ${Date.now()}` })
+    const id = (body as { data: { _id: string } }).data._id
+    const plain = await req<{ expires_in: number }>('POST', `/api/entities/${id}/checkin`)
+    expect((plain.body as { expires_in: number }).expires_in).toBe(4 * 3600)
+    const long = await req<{ expires_in: number }>('POST', `/api/entities/${id}/checkin`, { ttl_hours: 12 })
+    expect((long.body as { expires_in: number }).expires_in).toBe(12 * 3600)
+    expect((await req('POST', `/api/entities/${id}/checkin`, { ttl_hours: 48 })).status).toBe(400)
+    await req('DELETE', '/api/entities/checkin')
+    await req('DELETE', `/api/entities/${id}`)
+  })
+})
+
 // ── Cleanup ──────────────────────────────────────────────────────────────────
 // NOTE: intentionally no afterAll cleanup — the test instance shares the same
 // MongoDB as production. Test spaces linger with slugs like test-trail-{ts}.
