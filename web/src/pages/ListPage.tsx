@@ -96,26 +96,29 @@ export default function ListPage({ slug }: { slug: string }) {
             <div className="flex items-center gap-3 px-4 py-2.5 group">
               <button onClick={() => toggleDone(item)} className="w-5 h-5 rounded border-2 border-slate-600 hover:border-indigo-400 flex-shrink-0 transition" />
               <span className="flex-1 text-sm">{item.title}</span>
-              {/* Entity context chips — show active ones */}
-              {(item.contexts ?? []).map(c => {
-                const ent = entities.find(e => e._id === c.entity_id)
-                return ent ? (
-                  <span key={c.entity_id} className="text-xs bg-indigo-500/10 text-indigo-400 px-1.5 py-0.5 rounded flex-shrink-0">
-                    {ent.icon}
-                  </span>
-                ) : null
-              })}
               {item.due_at && <span className="text-xs text-slate-500 flex-shrink-0">{new Date(item.due_at).toLocaleDateString()}</span>}
-              {/* Entity tag button — only show if entities exist */}
-              {entities.length > 0 && (
-                <button
-                  onClick={() => setExpandedItem(expandedItem === item._id ? null : item._id)}
-                  className="text-slate-700 hover:text-indigo-400 opacity-0 group-hover:opacity-100 text-xs transition flex-shrink-0"
-                  title="Tag to a place"
-                >
-                  📍
-                </button>
-              )}
+              {/* Place: tagged → chips (tap to change); untagged → a visible button. Never hover-only:
+                  phones have no hover, so a hover-revealed button is invisible there. */}
+              {entities.length > 0 && (() => {
+                const tagged = (item.contexts ?? [])
+                  .map(c => entities.find(e => e._id === c.entity_id))
+                  .filter((e): e is Entity => !!e)
+                return (
+                  <button
+                    onClick={() => setExpandedItem(expandedItem === item._id ? null : item._id)}
+                    className="flex items-center gap-1 flex-shrink-0"
+                    title={tagged.length ? 'Change place' : 'Tag to a place'}
+                  >
+                    {tagged.length > 0
+                      ? tagged.map(e => (
+                          <span key={e._id} className="text-xs bg-indigo-500/10 text-indigo-400 px-1.5 py-0.5 rounded">
+                            {e.icon} {e.name}
+                          </span>
+                        ))
+                      : <span className="text-xs text-slate-500 hover:text-indigo-400 border border-dashed border-slate-700 px-1.5 py-0.5 rounded transition">📍 Where?</span>}
+                  </button>
+                )
+              })()}
               <button onClick={() => deleteItem(item._id)} className="text-slate-700 hover:text-red-400 opacity-0 group-hover:opacity-100 text-xs transition flex-shrink-0">✕</button>
             </div>
             {/* Inline entity picker */}
