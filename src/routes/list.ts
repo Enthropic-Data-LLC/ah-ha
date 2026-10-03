@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { ObjectId } from 'mongodb'
 import { between, initial } from '../lib/lexorank.js'
 import { annotate, currentPlace, orgPlaces, resolveAt, taggedTo } from '../lib/places.js'
+import { canSee } from '../lib/scopes.js'
 
 const listRoutes: FastifyPluginAsync = async (fastify) => {
   // GET /api/list/:slug/items — location-aware: each item gets `places` and `here`,
@@ -14,7 +15,11 @@ const listRoutes: FastifyPluginAsync = async (fastify) => {
     { preHandler: fastify.authenticate },
     async (req) => {
       const orgId = req.user!.orgId
-      const [here, places] = await Promise.all([currentPlace(fastify, req.user!.id, orgId), orgPlaces(fastify, orgId)])
+      // A connected app sees the current place only with situation:place.
+      const [here, places] = await Promise.all([
+        canSee(req, 'situation:place') ? currentPlace(fastify, req.user!.id, orgId) : null,
+        orgPlaces(fastify, orgId),
+      ])
       const meta: Record<string, unknown> = { location: here }
 
       const space = await getSpace(fastify, req.params.slug, orgId)

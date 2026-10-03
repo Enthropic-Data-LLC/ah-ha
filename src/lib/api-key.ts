@@ -21,6 +21,8 @@ export async function validateApiKey(db: Db, incoming: string) {
     revoked_at: { $exists: false },
   })
   if (!key) return null
+  // Expiry was stored but never checked: an expired key kept working (fixed 2026-10-03).
+  if (key['expires_at'] && (key['expires_at'] as Date) <= new Date()) return null
   const valid = await argon2.verify(key['hash'] as string, incoming)
   if (!valid) return null
 
@@ -34,5 +36,6 @@ export async function validateApiKey(db: Db, incoming: string) {
     username: (user?.['username'] as string) ?? '',
     scope: key['scope'] as string,
     access: key['access'] as string,
+    scopes: Array.isArray(key['scopes']) ? (key['scopes'] as string[]) : null,
   }
 }

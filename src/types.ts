@@ -114,5 +114,7 @@ declare module 'fastify' {
       username: string
     }
     apiKeyId?: ObjectId
+    /** Set for keys made by /connect: the only scopes this request may use. null = full-access key. */
+    apiKeyScopes?: string[] | null
   }
 }

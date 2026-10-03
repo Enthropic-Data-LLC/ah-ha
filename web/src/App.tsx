@@ -3,6 +3,7 @@ import { useMe } from './hooks/useMe'
 import LandingPage from './pages/LandingPage'
 import AuthPage from './pages/AuthPage'
 import VerifyPage from './pages/VerifyPage'
+import ConnectPage, { rememberReturn } from './pages/ConnectPage'
 import OnboardingPage from './pages/OnboardingPage'
 import SpacesPage from './pages/SpacesPage'
 import BoardPage from './pages/BoardPage'
@@ -210,6 +211,12 @@ export default function App() {
         <div className="w-5 h-5 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
       </div>
     )
+  }
+
+  // An app asking to connect: needs a signed-in user, so remember the request across sign-in.
+  if (path === '/connect') {
+    if (isLoggedOut) { rememberReturn(); window.location.href = '/auth'; return null }
+    return <ConnectPage />
   }
 
   // Redirect to auth if logged out

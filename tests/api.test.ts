@@ -371,6 +371,86 @@ describe('Location-aware reads', () => {
   })
 })
 
+describe('Connect flow (scoped app keys)', () => {
+  // Bearer-only requests: the shared req() helper sends the session cookie, which would win.
+  const asKey = async (key: string, method: string, path: string, body?: unknown) => {
+    const res = await fetch(API + path, {
+      method,
+      headers: { Authorization: `Bearer ${key}`, ...(body ? { 'Content-Type': 'application/json' } : {}) },
+      body: body ? JSON.stringify(body) : undefined,
+    })
+    return { status: res.status, body: await res.json().catch(() => ({})) as any }
+  }
+  const { createHash, randomBytes } = require('node:crypto') as typeof import('node:crypto')
+  const pkce = () => {
+    const verifier = randomBytes(32).toString('base64url')
+    return { verifier, challenge: createHash('sha256').update(verifier).digest('base64url') }
+  }
+  const app = { client_id: 'com.example.testcart', client_name: 'Ah! Test', device: `runner ${Date.now()}`, redirect_uri: 'ahtest://connected' }
+  const authorize = async (challenge: string, scopes = ['lists:read', 'lists:check', 'trail:write']) =>
+    ((await req<{ data: { code: string } }>('POST', '/api/connect/authorize', { ...app, scopes, code_challenge: challenge, code_challenge_method: 'S256' })).body as any).data.code as string
+  const token = (code: string, verifier: string) =>
+    fetch(API + '/api/connect/token', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code, code_verifier: verifier, client_id: app.client_id, redirect_uri: app.redirect_uri }) })
+      .then(async r => ({ status: r.status, body: await r.json() as any }))
+
+  let key = ''
+
+  it('rejects a wrong verifier, and a code works only once', async () => {
+    const p = pkce()
+    const code = await authorize(p.challenge)
+    expect((await token(code, pkce().verifier)).status).toBe(400)
+    expect((await token(code, p.verifier)).status).toBe(400)   // consumed by the failed attempt
+  })
+
+  it('refuses unknown permissions and unsafe return addresses', async () => {
+    const p = pkce()
+    expect((await req('POST', '/api/connect/authorize', { ...app, scopes: ['everything'], code_challenge: p.challenge, code_challenge_method: 'S256' })).status).toBe(400)
+    expect((await req('POST', '/api/connect/authorize', { ...app, redirect_uri: 'javascript:alert(1)', scopes: ['lists:read'], code_challenge: p.challenge, code_challenge_method: 'S256' })).status).toBe(400)
+  })
+
+  it('issues a key limited to the approved scopes', async () => {
+    const p = pkce()
+    const r = await token(await authorize(p.challenge), p.verifier)
+    expect(r.status).toBe(200)
+    key = r.body.data.key
+    expect(r.body.data.scopes).toEqual(['lists:read', 'lists:check', 'trail:write'])
+
+    const items = await asKey(key, 'GET', `/api/list/${listSlug}/items`)
+    expect(items.status).toBe(200)
+    expect(items.body.meta.location).toBeNull()            // no situation:place granted
+    expect((await asKey(key, 'GET', '/auth/me')).status).toBe(200)
+    expect((await asKey(key, 'POST', `/api/trail/${trailSlug}/append`, { text: 'connect-flow test', source: 'ah-test' })).status).toBe(201)
+
+    const first = items.body.data[0]
+    if (first) expect((await asKey(key, 'DELETE', `/api/list/${listSlug}/items/${first._id}`)).status).toBe(403)
+    expect((await asKey(key, 'GET', '/api/entities')).status).toBe(403)
+    expect((await asKey(key, 'GET', '/api/here')).status).toBe(403)
+    expect((await asKey(key, 'POST', '/api/keys', { name: 'escalate' })).status).toBe(403)
+    expect((await asKey(key, 'GET', '/api/keys')).status).toBe(403)
+  })
+
+  it('reconnecting the same app on the same device replaces its key', async () => {
+    const p = pkce()
+    const r = await token(await authorize(p.challenge), p.verifier)
+    expect(r.status).toBe(200)
+    expect((await asKey(key, 'GET', '/auth/me')).status).toBe(401)
+    const fresh = r.body.data.key as string
+    const keys = ((await req<{ data: Array<{ _id: string; name: string }> }>('GET', '/api/keys')).body as any).data as Array<{ _id: string; name: string }>
+    const mine = keys.filter(k => k.name === `${app.client_name} — ${app.device}`)
+    expect(mine).toHaveLength(1)
+    await req('DELETE', `/api/keys/${mine[0]!._id}`)
+    expect((await asKey(fresh, 'GET', '/auth/me')).status).toBe(401)
+  })
+
+  it('a read-only key can no longer write (access was never enforced before)', async () => {
+    const made = (await req<{ data: { id: string; key: string } }>('POST', '/api/keys', { name: `ro test ${Date.now()}`, access: 'read' })).body as any
+    expect((await asKey(made.data.key, 'GET', `/api/list/${listSlug}/items`)).status).toBe(200)
+    expect((await asKey(made.data.key, 'POST', `/api/trail/${trailSlug}/append`, { text: 'should fail' })).status).toBe(403)
+    await req('DELETE', `/api/keys/${made.data.id}`)
+  })
+})
+
 describe('Reminders + day summary', () => {
   it('upcoming lists a card due soon; completing it shows in the day summary', async () => {
     const { body: cols } = await req<{ data: Array<{ _id: string }> }>('GET', `/api/board/${boardSlug}/columns`)
