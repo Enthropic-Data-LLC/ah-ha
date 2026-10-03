@@ -4,6 +4,7 @@ import { getPool } from '../lib/timescale.js'
 import { fetchCalendarEvents } from '../lib/ical-fetch.js'
 import type { CalendarSource } from '../lib/ical-fetch.js'
 import { placeFromPresence, presenceRaw as readPresence } from '../lib/places.js'
+import { streak } from '../lib/streak.js'
 
 const TIME_CHUNKS: Record<string, (h: number, dow: number) => boolean> = {
   wakeup:          (h)     => h >= 5  && h < 8,
@@ -299,6 +300,9 @@ const nowRoutes: FastifyPluginAsync = async (fastify) => {
       }
       if (!hasWork) briefing = null
 
+      // A bad tz or a down trail store leaves the streak out rather than failing Today.
+      const streakInfo = await streak(fastify, orgId, tz).catch(() => null)
+
       return {
         data: {
           context: {
@@ -319,6 +323,7 @@ const nowRoutes: FastifyPluginAsync = async (fastify) => {
           trail_pulse: trailPulse,
           calendar_events: calendarEvents,
           briefing,
+          streak: streakInfo,
         }
       }
     }
