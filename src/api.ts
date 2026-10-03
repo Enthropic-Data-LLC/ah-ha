@@ -39,6 +39,7 @@ import calendarRoutes from './routes/calendar.js'
 import nfcRoutes from './routes/nfc.js'
 import summaryRoutes from './routes/summary.js'
 import connectRoutes from './routes/connect.js'
+import situationRoutes from './routes/situation.js'
 import { setupTrailSchema, closePool } from './lib/timescale.js'
 
 const isProd = process.env['NODE_ENV'] === 'production'
@@ -184,6 +185,7 @@ await fastify.register(async (sub) => {
   await sub.register(nfcRoutes)
   await sub.register(summaryRoutes)
   await sub.register(connectRoutes)
+  await sub.register(situationRoutes)
 })
 
 fastify.get('/healthz', async () => ({ ok: true, ts: new Date().toISOString() }))

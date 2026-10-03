@@ -5,6 +5,8 @@ import { fetchCalendarEvents } from '../lib/ical-fetch.js'
 import type { CalendarSource } from '../lib/ical-fetch.js'
 import { placeFromPresence, presenceRaw as readPresence } from '../lib/places.js'
 import { streak } from '../lib/streak.js'
+import { situation } from '../lib/situation.js'
+import { pickFocus, type Candidate, type Focus } from '../lib/focus.js'
 
 const TIME_CHUNKS: Record<string, (h: number, dow: number) => boolean> = {
   wakeup:          (h)     => h >= 5  && h < 8,
@@ -228,6 +230,53 @@ const nowRoutes: FastifyPluginAsync = async (fastify) => {
         }
       } catch { /* calendar unavailable */ }
 
+      // Situation + focus: the one thing for right now, with reasons (lib/situation.ts, lib/focus.ts).
+      const sit = await situation(fastify, { orgId, tz, tod, place: presencePlace, calendar: calendarEvents })
+        .catch(err => { req.log.warn({ err }, 'situation unavailable'); return null })
+      let focus: Focus | null = null
+      if (sit) {
+        const cardC = (c: Record<string, unknown>, base: number, why: string): Candidate => ({
+          kind: 'card', id: String(c['_id']), title: c['title'] as string,
+          tags: (c['tags'] as string[] | undefined) ?? [], due: (c['due_date'] as Date | null) ?? null, base, reasons: [why],
+        })
+        const itemC = (i: { _id: unknown; title: unknown }, base: number, why: string): Candidate => ({
+          kind: 'list_item', id: String(i._id), title: i.title as string, base, reasons: [why],
+        })
+        // Items tagged to a person entity who the router says is home.
+        const homeNames = sit.people.filter(p => p.home).map(p => p.name.toLowerCase())
+        const personC: Candidate[] = []
+        if (homeNames.length) {
+          const persons = await fastify.mongo.collection('entities')
+            .find({ org_id: orgId, entity_type: 'person', deleted_at: { $exists: false } }).toArray()
+          for (const p of persons.filter(p => homeNames.includes(String(p['name']).toLowerCase()))) {
+            const pid = String(p['_id']); const who = `${p['name'] as string} is home`
+            const open = { org_id: orgId, deleted_at: { $exists: false }, 'contexts.entity_id': pid }
+            const [cs, is] = await Promise.all([
+              fastify.mongo.collection('board_cards').find({ ...open, done: { $ne: true } }).limit(5).toArray(),
+              fastify.mongo.collection('list_items').find({ ...open, done: false }).limit(5).toArray(),
+            ])
+            personC.push(...cs.map(c => cardC(c, 3, who)), ...is.map(i => itemC(i as { _id: unknown; title: unknown }, 3, who)))
+          }
+        }
+        const here = presencePlace?.name ?? 'here'
+        const all: Candidate[] = [
+          ...urgent.map(c => cardC(c, 5, 'overdue')),
+          ...dueToday.map(c => cardC(c, 3, 'due today')),
+          ...habits.map(c => cardC(c, 2, 'a habit for this time of day')),
+          ...locationCards.map(c => itemC(c, 3, `tagged to ${here}`)).map(c => ({ ...c, kind: 'card' as const })),
+          ...entityListItems.map(i => itemC(i, 2, `pick up at ${here}`)),
+          ...listItems.map(i => itemC(i as { _id: unknown; title: unknown }, 2, 'due today')),
+          ...personC,
+        ]
+        // The same item from several sections: keep the strongest, merge the reasons.
+        const byId = new Map<string, Candidate>()
+        for (const c of all) {
+          const prev = byId.get(c.id)
+          byId.set(c.id, prev ? { ...prev, base: Math.max(prev.base, c.base) + 1, reasons: [...prev.reasons, ...c.reasons] } : c)
+        }
+        focus = pickFocus([...byId.values()], sit, tz)
+      }
+
       // AI briefing — see BRIEFING_* above for when it is regenerated
       const cacheKey = `aha:briefing:${req.user!.orgId}`
       const cached = await fastify.redis.get(cacheKey)
@@ -324,6 +373,8 @@ const nowRoutes: FastifyPluginAsync = async (fastify) => {
           calendar_events: calendarEvents,
           briefing,
           streak: streakInfo,
+          situation: sit,
+          focus,
         }
       }
     }

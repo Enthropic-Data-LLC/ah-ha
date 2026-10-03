@@ -451,6 +451,36 @@ describe('Connect flow (scoped app keys)', () => {
   })
 })
 
+describe('Situation + focus', () => {
+  type Now = { data: { situation: { energy: { level: string; why: string; override: string | null }; day: { off: boolean } } | null; focus: unknown } }
+  const now = async () => ((await req<Now>('GET', '/api/now?tz=America/New_York')).body as Now).data
+
+  it('/api/now carries a situation and (possibly null) focus', async () => {
+    const d = await now()
+    expect(d.situation).toBeTruthy()
+    expect(d).toHaveProperty('focus')
+  })
+
+  it('an energy override wins over every other signal, latest one counts', async () => {
+    expect((await req('POST', '/api/situation/energy', { level: 'low' })).status).toBe(200)
+    let s = (await now()).situation!
+    expect(s.energy.level).toBe('low')
+    expect(s.energy.why).toBe('you said so')
+    await req('POST', '/api/situation/energy', { level: 'high' })
+    s = (await now()).situation!
+    expect(s.energy.override).toBe('high')
+    await req('POST', '/api/situation/energy', { level: 'normal' })
+    expect((await req('POST', '/api/situation/energy', { level: 'exhausted' })).status).toBe(400)
+  })
+
+  it('a day off sets day.off until switched back', async () => {
+    await req('POST', '/api/situation/day', { off: true })
+    expect((await now()).situation!.day.off).toBe(true)
+    await req('POST', '/api/situation/day', { off: false })
+    expect((await now()).situation!.day.off).toBe(false)
+  })
+})
+
 describe('Reminders + day summary', () => {
   it('upcoming lists a card due soon; completing it shows in the day summary', async () => {
     const { body: cols } = await req<{ data: Array<{ _id: string }> }>('GET', `/api/board/${boardSlug}/columns`)
