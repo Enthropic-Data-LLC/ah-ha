@@ -21,6 +21,7 @@ import SharePage from './pages/SharePage'
 import NowPage from './pages/NowPage'
 import TapPage from './pages/TapPage'
 import EntityPage from './pages/EntityPage'
+import SkipLink from './components/SkipLink'
 
 // SVG icons for bottom nav
 const Icons = {
@@ -82,6 +83,7 @@ function Shell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex flex-col min-h-screen">
+      <SkipLink />
       {/* Top bar */}
       <header className="border-b border-slate-800 px-4 h-12 flex items-center justify-between flex-shrink-0 z-30 relative">
         <div className="flex items-center gap-4">
@@ -157,7 +159,7 @@ function Shell({ children }: { children: React.ReactNode }) {
       )}
 
       {/* Main content */}
-      <main className="flex-1 flex flex-col overflow-hidden pb-16 sm:pb-0">{children}</main>
+      <main id="main-content" tabIndex={-1} className="flex-1 flex flex-col overflow-hidden pb-16 sm:pb-0 focus:outline-none">{children}</main>
 
       {/* Mobile bottom tab bar */}
       {user && (

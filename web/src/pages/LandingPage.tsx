@@ -1,3 +1,4 @@
+import SkipLink from '../components/SkipLink'
 const SPACES = [
   {
     name: 'Trail',
@@ -70,6 +71,7 @@ export default function LandingPage() {
   return (
     <div className="min-h-screen flex flex-col bg-slate-950 text-slate-100" style={{ fontFamily: "'DM Mono', 'Fira Code', 'Cascadia Code', monospace" }}>
 
+      <SkipLink />
       {/* Nav */}
       <header className="border-b border-slate-800/60 px-6 h-14 flex items-center justify-between sticky top-0 bg-slate-950/90 backdrop-blur z-10">
         <span className="font-bold tracking-tight text-slate-100">aH-Ha</span>
@@ -94,7 +96,7 @@ export default function LandingPage() {
         </div>
       </header>
 
-      <main className="flex-1 flex flex-col">
+      <main id="main-content" tabIndex={-1} className="flex-1 flex flex-col focus:outline-none">
 
         {/* Hero */}
         <section className="flex flex-col items-center justify-center text-center px-6 pt-24 pb-20 gap-8 relative overflow-hidden">

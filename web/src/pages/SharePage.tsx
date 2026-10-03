@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import SkipLink from '../components/SkipLink'
 
 interface ShareData {
   space: { name: string; type: string; ref: string }
@@ -99,6 +100,7 @@ export default function SharePage({ token }: { token: string }) {
 
   return (
     <div className="min-h-screen flex flex-col">
+      <SkipLink />
       <header className="border-b border-slate-800 px-4 h-12 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <a href="/" className="font-bold text-sm tracking-tight">aH-Ha</a>
@@ -109,7 +111,7 @@ export default function SharePage({ token }: { token: string }) {
         <span className="text-xs text-slate-600">read-only</span>
       </header>
 
-      <main className="flex-1 max-w-3xl w-full mx-auto px-4 py-8 space-y-4">
+      <main id="main-content" tabIndex={-1} className="flex-1 max-w-3xl w-full mx-auto px-4 py-8 space-y-4 focus:outline-none">
         <h1 className="text-xl font-bold">{data.space.name}</h1>
 
         {data.space.type === 'trail' && (
