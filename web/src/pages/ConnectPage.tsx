@@ -54,6 +54,8 @@ export default function ConnectPage() {
   const { data: labels } = useSWR<{ data: Record<string, string> }>('/api/connect/scopes', fetcher)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  // The app takes over after the redirect; this tab stays behind, so say it's finished.
+  const [done, setDone] = useState<'allowed' | 'cancelled' | null>(null)
 
   const problem =
     !redirect ? 'This connect link has no valid return address.' :
@@ -69,6 +71,7 @@ export default function ConnectPage() {
         redirect_uri: q.get('redirect_uri'), code_challenge: challenge, code_challenge_method: method,
       })
       sendBack(redirect!, { code: res.data.code, state })
+      setDone('allowed')
     } catch (err) {
       setBusy(false)
       setError(err instanceof ApiError ? err.message : 'Could not connect. Try again from the app.')
@@ -78,7 +81,12 @@ export default function ConnectPage() {
   return (
     <div className="min-h-screen flex items-center justify-center px-4">
       <div className="max-w-sm w-full space-y-6">
-        {problem ? (
+        {done ? (
+          <div className="text-center space-y-2">
+            <h1 className="text-xl font-bold text-slate-100">{done === 'allowed' ? `${name} is connected` : 'Not connected'}</h1>
+            <p className="text-sm text-slate-400">Back in {name} now. You can close this tab.</p>
+          </div>
+        ) : problem ? (
           <div className="text-center space-y-2">
             <h1 className="text-xl font-bold text-slate-100">Can't connect</h1>
             <p className="text-sm text-slate-400">{problem}</p>
@@ -111,7 +119,7 @@ export default function ConnectPage() {
 
             <div className="flex gap-3">
               <button
-                onClick={() => sendBack(redirect!, { error: 'access_denied', state })}
+                onClick={() => { sendBack(redirect!, { error: 'access_denied', state }); setDone('cancelled') }}
                 disabled={busy}
                 className="flex-1 px-4 py-3 border border-slate-700 hover:border-slate-500 text-slate-300 rounded-xl transition"
               >
