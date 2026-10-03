@@ -20,6 +20,7 @@ export const SCOPES = {
   'spaces:read':     { label: 'see the names of your spaces',           routes: [['GET', '/api/spaces']] },
   'lists:read':      { label: 'read your lists',                         routes: [['GET', '/api/list/:slug/items']] },
   'lists:check':     { label: 'check items off your lists',              routes: [['PATCH', '/api/list/:slug/items/:id/check']] },
+  'lists:add':       { label: 'add items to your lists',                 routes: [['POST', '/api/list/:slug/items']] },
   'lists:write':     { label: 'add, change and remove list items',       routes: [
     ['POST', '/api/list/:slug/items'], ['PATCH', '/api/list/:slug/items/:id'],
     ['PATCH', '/api/list/:slug/items/:id/check'], ['PATCH', '/api/list/:slug/items/:id/move'],
