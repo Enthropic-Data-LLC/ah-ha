@@ -25,7 +25,8 @@ export interface Focus {
   reasons: string[]
 }
 
-const OUTDOOR = /\b(mow|lawn|yard|garden|weed|rake|gutter|hedge|outside|outdoor|walk|run|bike|hike|wash (the )?car|grill|deck|fence|plant)\b/i
+// Word starts, so "mower", "mowing", "gardening" and "planting" count too.
+const OUTDOOR = /\b(mow|lawn|yard|garden|weed|rake|gutter|hedge|outside|outdoor|walk|run|bike|hike|grill|deck|fence|plant)\w*|\bwash (the )?car\b/i
 
 const clock = (iso: string, tz: string) =>
   new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: tz })
