@@ -1,12 +1,26 @@
-import type { FastifyPluginAsync } from 'fastify'
+import type { FastifyInstance, FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
 import { ObjectId } from 'mongodb'
+import { currentPlace } from '../lib/places.js'
 
 const signatureSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('gps'), lat: z.number(), lng: z.number(), radius_m: z.number().default(100) }),
   z.object({ kind: z.literal('network'), external_ip: z.string() }),
   z.object({ kind: z.literal('bluetooth_le'), local_name: z.string(), uuid: z.string().optional() }),
 ])
+
+/** Open list items and cards tagged to a place — what to do or get there. */
+async function taggedOpen(fastify: FastifyInstance, orgId: ObjectId, entityIdStr: string) {
+  const [listItems, cards] = await Promise.all([
+    fastify.mongo.collection('list_items').find({
+      org_id: orgId, done: false, deleted_at: { $exists: false }, 'contexts.entity_id': entityIdStr,
+    }).sort({ position: 1 }).toArray(),
+    fastify.mongo.collection('board_cards').find({
+      org_id: orgId, done: { $ne: true }, deleted_at: { $exists: false }, 'contexts.entity_id': entityIdStr,
+    }).toArray(),
+  ])
+  return { listItems, cards }
+}
 
 function haversineM(lat1: number, lng1: number, lat2: number, lng2: number): number {
   const R = 6371000
@@ -211,6 +225,27 @@ const entityRoutes: FastifyPluginAsync = async (fastify) => {
     return { ip: req.ip }
   })
 
+  // GET /api/here — where the user is checked in and what's tagged there.
+  // Lets an API/MCP caller answer "what do I need here?" in one call.
+  fastify.get('/api/here', { preHandler: fastify.authenticate }, async (req) => {
+    const orgId = req.user!.orgId
+    const place = await currentPlace(fastify, req.user!.id, orgId)
+    if (!place) return { data: { location: null, list_items: [], cards: [], total: 0 } }
+    const { listItems, cards } = await taggedOpen(fastify, orgId, place._id)
+    const spaces = await fastify.mongo.collection('spaces')
+      .find({ _id: { $in: [...new Set(listItems.map(i => String(i['space_id'])))].map(id => new ObjectId(id)) } })
+      .project({ slug: 1, name: 1 }).toArray()
+    const listOf = new Map(spaces.map(s => [String(s['_id']), s['slug'] as string]))
+    return {
+      data: {
+        location: place,
+        list_items: listItems.map(i => ({ _id: String(i['_id']), title: i['title'], list: listOf.get(String(i['space_id'])) ?? null })),
+        cards: cards.map(c => ({ _id: String(c['_id']), title: c['title'], ref: c['ref'], due_date: c['due_date'] ?? null })),
+        total: listItems.length + cards.length,
+      },
+    }
+  })
+
   // GET /api/entities/going-to?ids=id1,id2 — merged checklist for multiple destinations
   fastify.get<{ Querystring: { ids?: string } }>(
     '/api/entities/going-to',
@@ -236,15 +271,7 @@ const entityRoutes: FastifyPluginAsync = async (fastify) => {
         })
         if (!entity) continue
 
-        const listItems = await fastify.mongo.collection('list_items').find({
-          org_id: orgId, done: false, deleted_at: { $exists: false },
-          'contexts.entity_id': idStr,
-        }).toArray()
-
-        const cards = await fastify.mongo.collection('board_cards').find({
-          org_id: orgId, done: { $ne: true }, deleted_at: { $exists: false },
-          'contexts.entity_id': idStr,
-        }).toArray()
+        const { listItems, cards } = await taggedOpen(fastify, orgId, idStr)
 
         sections.push({
           entity: { _id: entity['_id'].toString(), name: entity['name'] as string, icon: entity['icon'] as string },
@@ -272,21 +299,7 @@ const entityRoutes: FastifyPluginAsync = async (fastify) => {
       const entityIdStr = entityId.toString()
       const orgId = req.user!.orgId
 
-      // List items tagged to this entity that aren't done
-      const listItems = await fastify.mongo.collection('list_items').find({
-        org_id: orgId,
-        done: false,
-        deleted_at: { $exists: false },
-        'contexts.entity_id': entityIdStr,
-      }).toArray()
-
-      // Board cards tagged to this entity that aren't done
-      const cards = await fastify.mongo.collection('board_cards').find({
-        org_id: orgId,
-        done: { $ne: true },
-        deleted_at: { $exists: false },
-        'contexts.entity_id': entityIdStr,
-      }).toArray()
+      const { listItems, cards } = await taggedOpen(fastify, orgId, entityIdStr)
 
       return {
         data: {

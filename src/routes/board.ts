@@ -2,6 +2,7 @@ import type { FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
 import { ObjectId } from 'mongodb'
 import { between, initial } from '../lib/lexorank.js'
+import { annotate, currentPlace, orgPlaces, resolveAt, taggedTo } from '../lib/places.js'
 
 function publish(fastify: { redis: import('ioredis').Redis }, spaceRef: string, op: Record<string, unknown>) {
   fastify.redis.publish(`ws:${spaceRef}`, JSON.stringify(op)).catch(() => {})
@@ -56,20 +57,35 @@ const boardRoutes: FastifyPluginAsync = async (fastify) => {
     }
   )
 
-  // GET /api/board/:slug/cards
-  fastify.get<{ Params: { slug: string }; Querystring: { column_id?: string } }>(
+  // GET /api/board/:slug/cards — location-aware like list items: `places`, `here`,
+  // `meta.location`, and `?at=here|<place name>|<id>`. Order is left alone (the board's
+  // drag-and-drop ranks cards by their neighbours as returned).
+  fastify.get<{ Params: { slug: string }; Querystring: { column_id?: string; at?: string } }>(
     '/api/board/:slug/cards',
     { preHandler: fastify.authenticate },
     async (req) => {
-      const space = await getSpace(fastify, req.params.slug, req.user!.orgId)
-      if (!space) return { data: [] }
+      const orgId = req.user!.orgId
+      const [here, places] = await Promise.all([currentPlace(fastify, req.user!.id, orgId), orgPlaces(fastify, orgId)])
+      const meta: Record<string, unknown> = { location: here }
+
+      const space = await getSpace(fastify, req.params.slug, orgId)
+      if (!space) return { data: [], meta }
 
       const filter: Record<string, unknown> = {
         space_id: space._id,
-        org_id: req.user!.orgId,
+        org_id: orgId,
         deleted_at: { $exists: false },
       }
       if (req.query.column_id) filter['column_id'] = new ObjectId(req.query.column_id)
+      if (req.query.at) {
+        const at = resolveAt(req.query.at, places, here)
+        if (!at) {
+          meta['note'] = at === null ? 'Not checked in anywhere, so nothing is "here"' : `No place named "${req.query.at}"`
+          return { data: [], meta }
+        }
+        Object.assign(filter, taggedTo(at))
+        meta['at'] = at
+      }
 
       const now = new Date()
       const view = (req.query as Record<string, string>).view
@@ -92,7 +108,7 @@ const boardRoutes: FastifyPluginAsync = async (fastify) => {
         .find(filter)
         .sort({ column_id: 1, position: 1 })
         .toArray()
-      return { data: cards }
+      return { data: annotate(cards, places, here), meta }
     }
   )
 

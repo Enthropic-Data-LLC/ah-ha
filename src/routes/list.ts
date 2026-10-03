@@ -2,29 +2,49 @@ import type { FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
 import { ObjectId } from 'mongodb'
 import { between, initial } from '../lib/lexorank.js'
+import { annotate, currentPlace, orgPlaces, resolveAt, taggedTo } from '../lib/places.js'
 
 const listRoutes: FastifyPluginAsync = async (fastify) => {
-  // GET /api/list/:slug/items
-  fastify.get<{ Params: { slug: string }; Querystring: { done?: string } }>(
+  // GET /api/list/:slug/items — location-aware: each item gets `places` and `here`,
+  // items tagged to where the user is checked in sort first among the open ones, and
+  // `meta.location` says where that is. `?at=here|<place name>|<id>` keeps only items
+  // tagged to that place.
+  fastify.get<{ Params: { slug: string }; Querystring: { done?: string; at?: string } }>(
     '/api/list/:slug/items',
     { preHandler: fastify.authenticate },
     async (req) => {
-      const space = await getSpace(fastify, req.params.slug, req.user!.orgId)
-      if (!space) return { data: [] }
+      const orgId = req.user!.orgId
+      const [here, places] = await Promise.all([currentPlace(fastify, req.user!.id, orgId), orgPlaces(fastify, orgId)])
+      const meta: Record<string, unknown> = { location: here }
+
+      const space = await getSpace(fastify, req.params.slug, orgId)
+      if (!space) return { data: [], meta }
 
       const filter: Record<string, unknown> = {
         space_id: space._id,
-        org_id: req.user!.orgId,
+        org_id: orgId,
         deleted_at: { $exists: false },
       }
       if (req.query.done === 'true') filter['done'] = true
       if (req.query.done === 'false') filter['done'] = false
+      if (req.query.at) {
+        const at = resolveAt(req.query.at, places, here)
+        if (!at) {
+          meta['note'] = at === null ? 'Not checked in anywhere, so nothing is "here"' : `No place named "${req.query.at}"`
+          return { data: [], meta }
+        }
+        Object.assign(filter, taggedTo(at))
+        meta['at'] = at
+      }
 
       const items = await fastify.mongo.collection('list_items')
         .find(filter)
         .sort({ done: 1, position: 1 })
         .toArray()
-      return { data: items }
+      const annotated = annotate(items, places, here)
+      // Stable: within done/open, "here" items move up and keep their own order.
+      annotated.sort((a, b) => Number(a['done'] ?? false) - Number(b['done'] ?? false) || Number(b.here) - Number(a.here))
+      return { data: annotated, meta }
     }
   )
 

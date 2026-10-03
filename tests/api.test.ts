@@ -329,6 +329,48 @@ describe('Check-in TTL', () => {
   })
 })
 
+describe('Location-aware reads', () => {
+  it('list items and /api/here follow the check-in; ?at= filters by place', async () => {
+    expect([200, 409]).toContain((await req('POST', '/auth/claim-username', { username: 'ahha-test-runner' })).status)
+    const name = `Loc test store ${Date.now()}`
+    const place = ((await req<{ data: { _id: string } }>('POST', '/api/entities', { name })).body as { data: { _id: string } }).data._id
+    const add = async (title: string) =>
+      ((await req<{ data: { _id: string } }>('POST', `/api/list/${listSlug}/items`, { title })).body as { data: { _id: string } }).data._id
+    await add('untagged first')
+    const tagged = await add('tagged second')
+    await req('PATCH', `/api/list/${listSlug}/items/${tagged}`, { contexts: [{ entity_id: place, time_chunks: [] }] })
+
+    type Item = { _id: string; here: boolean; places: Array<{ name: string }> }
+    type Res = { data: Item[]; meta: { location: { name: string } | null; at?: { _id: string }; note?: string } }
+    const list = async (q = '') => (await req<Res>('GET', `/api/list/${listSlug}/items?done=false${q}`)).body as Res
+
+    await req('DELETE', '/api/entities/checkin')
+    let r = await list()
+    expect(r.meta.location).toBeNull()
+    expect(r.data.find(i => i._id === tagged)!.places[0]!.name).toBe(name)
+    expect(r.data.find(i => i._id === tagged)!.here).toBe(false)
+    expect((await list('&at=here')).meta.note).toMatch(/Not checked in/)
+
+    await req('POST', `/api/entities/${place}/checkin`)
+    r = await list()
+    expect(r.meta.location!.name).toBe(name)
+    expect(r.data[0]!._id).toBe(tagged)          // "here" items sort first
+    expect(r.data[0]!.here).toBe(true)
+    const here = await list('&at=here')
+    expect(here.data.map(i => i._id)).toEqual([tagged])
+    expect((await list(`&at=${encodeURIComponent(name.toLowerCase())}`)).data.map(i => i._id)).toEqual([tagged])
+    expect((await list('&at=nowhere-at-all')).meta.note).toMatch(/No place named/)
+
+    const h = (await req<{ data: { location: { name: string }; list_items: Array<{ _id: string; list: string }> } }>('GET', '/api/here')).body as
+      { data: { location: { name: string }; list_items: Array<{ _id: string; list: string }> } }
+    expect(h.data.location.name).toBe(name)
+    expect(h.data.list_items).toContainEqual(expect.objectContaining({ _id: tagged, list: listSlug }))
+
+    await req('DELETE', '/api/entities/checkin')
+    await req('DELETE', `/api/entities/${place}`)
+  })
+})
+
 describe('Reminders + day summary', () => {
   it('upcoming lists a card due soon; completing it shows in the day summary', async () => {
     const { body: cols } = await req<{ data: Array<{ _id: string }> }>('GET', `/api/board/${boardSlug}/columns`)

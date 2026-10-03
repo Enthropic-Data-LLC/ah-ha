@@ -15,13 +15,17 @@ export function registerBoardTools(server: McpServer) {
 
   server.tool(
     'aha_board_list_cards',
-    'List cards in a board space, optionally filtered by column',
+    'List cards in a board space, optionally filtered by column. Location-aware: meta.location is where the user is checked in; each card has `places` and `here` (tagged to the current place).',
     {
       slug: z.string().describe('Board slug'),
       column_id: z.string().optional().describe('Filter by column ID'),
+      at: z.string().optional().describe('Only cards tagged to this place: "here" (where the user is checked in), a place name like "walmart", or a place id'),
     },
-    async ({ slug, column_id }) => {
-      const data = await get(`/api/board/${slug}/cards`, column_id ? { column_id } : undefined)
+    async ({ slug, column_id, at }) => {
+      const query: Record<string, string> = {}
+      if (column_id) query['column_id'] = column_id
+      if (at) query['at'] = at
+      const data = await get(`/api/board/${slug}/cards`, query)
       return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] }
     },
   )

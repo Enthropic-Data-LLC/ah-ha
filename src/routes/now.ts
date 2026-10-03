@@ -3,6 +3,7 @@ import { ObjectId } from 'mongodb'
 import { getPool } from '../lib/timescale.js'
 import { fetchCalendarEvents } from '../lib/ical-fetch.js'
 import type { CalendarSource } from '../lib/ical-fetch.js'
+import { placeFromPresence, presenceRaw as readPresence } from '../lib/places.js'
 
 const TIME_CHUNKS: Record<string, (h: number, dow: number) => boolean> = {
   wakeup:          (h)     => h >= 5  && h < 8,
@@ -65,24 +66,11 @@ const nowRoutes: FastifyPluginAsync = async (fastify) => {
       const tod = TIME_OF_DAY(localHour)
 
       // Presence: query param override > Redis
-      let presenceRaw = req.query.presence as string | undefined
-      if (!presenceRaw) {
-        const user = await fastify.mongo.collection('users').findOne({ _id: req.user!.id })
-        const username = user?.['username'] as string | undefined
-        if (username) {
-          const raw = await fastify.redis.get(`aha:presence:state:${username}`)
-          presenceRaw = raw ?? 'unknown'
-        }
-      }
+      const presenceRaw = req.query.presence || await readPresence(fastify, req.user!.id)
 
       // Resolve entity if presence looks like an ObjectId
-      let presenceEntity: { _id: string; name: string; icon: string; time_chunks: string[] } | null = null
-      if (presenceRaw && OID_RE.test(presenceRaw)) {
-        try {
-          const ent = await fastify.mongo.collection('entities').findOne({ _id: new ObjectId(presenceRaw) })
-          if (ent) presenceEntity = { _id: ent['_id'].toString(), name: ent['name'] as string, icon: ent['icon'] as string, time_chunks: [] }
-        } catch { /* entity not found */ }
-      }
+      const presencePlace = await placeFromPresence(fastify, req.user!.orgId, presenceRaw)
+      const presenceEntity = presencePlace ? { ...presencePlace, time_chunks: [] as string[] } : null
 
       const orgId = req.user!.orgId
       const todayStart = new Date(now); todayStart.setHours(0, 0, 0, 0)
