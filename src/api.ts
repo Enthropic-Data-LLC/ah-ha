@@ -40,10 +40,13 @@ import nfcRoutes from './routes/nfc.js'
 import summaryRoutes from './routes/summary.js'
 import connectRoutes from './routes/connect.js'
 import situationRoutes from './routes/situation.js'
+import linkRoutes from './routes/link.js'
+import { startEngine, type Engine } from './link/engine.js'
 import { setupTrailSchema, closePool } from './lib/timescale.js'
 
 const isProd = process.env['NODE_ENV'] === 'production'
 
+let linkEngine: Engine | null = null
 const fastify = Fastify({
   logger: {
     level: isProd ? 'info' : 'debug',
@@ -186,11 +189,15 @@ await fastify.register(async (sub) => {
   await sub.register(summaryRoutes)
   await sub.register(connectRoutes)
   await sub.register(situationRoutes)
+  await sub.register(linkRoutes, { engine: () => linkEngine })
 })
 
 fastify.get('/healthz', async () => ({ ok: true, ts: new Date().toISOString() }))
 
 const webDist = join(dirname(fileURLToPath(import.meta.url)), '..', 'web', 'dist')
+// Ah! Link runs inside the API process; it starts once routes are ready (it acts through fastify.inject).
+fastify.addHook('onReady', async () => { linkEngine = startEngine(fastify) })
+
 await fastify.register(staticFiles, { root: webDist })
 fastify.setNotFoundHandler(async (_req, reply) => {
   return reply.sendFile('index.html')

@@ -1,4 +1,5 @@
 import type { FastifyPluginAsync } from 'fastify'
+import { emit } from '../link/engine.js'
 import { z } from 'zod'
 import { createHash } from 'crypto'
 import { getPool } from '../lib/timescale.js'
@@ -72,6 +73,10 @@ const trailRoutes: FastifyPluginAsync = async (fastify) => {
       )
 
       const entry = result.rows[0]!
+      emit(fastify.redis, {
+        kind: 'trail', org_id: req.user!.orgId.toString(),
+        entry: { id: entry.id, text: body.text, tone: body.tone, source, tags: body.tags, meta: body.meta, ts: new Date(entry.ts).toISOString() },
+      })
       reply.status(201)
       return {
         data: {

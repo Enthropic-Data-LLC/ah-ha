@@ -481,6 +481,68 @@ describe('Situation + focus', () => {
   })
 })
 
+describe('Ah! Link', () => {
+  const tag = `lt${Date.now()}`
+  type Entry = { text: string; tags: string[]; meta: Record<string, unknown> }
+  const entries = async () => ((await req<{ data: Entry[] }>('GET', `/api/trail/${trailSlug}/entries?limit=50`)).body as { data: Entry[] }).data
+  const until = async (pred: (es: Entry[]) => boolean) => {
+    for (let i = 0; i < 20; i++) { const es = await entries(); if (pred(es)) return es; await new Promise(r => setTimeout(r, 250)) }
+    return entries()
+  }
+  let flowId = ''; let slug = ''
+
+  it('creates a workflow note from a flow', async () => {
+    const flow = {
+      type: 'ah-link/flow@1', name: `Ping pong ${tag}`, about: 'test', on: true,
+      trigger: { block: 'trail_entry', tag },
+      steps: [{ block: 'if', cond: { block: 'compare', left: '{event.text}', op: 'contains', right: 'ping' },
+        then: [{ block: 'log', text: 'pong: {event.text}', tags: [tag], trail: trailSlug }],
+        else: [{ block: 'log', text: 'no ping', tags: [`${tag}-else`], trail: trailSlug }] }],
+    }
+    const r = await req<{ data: { id: string; slug: string } }>('POST', '/api/link/flows', { flow })
+    expect(r.status).toBe(201)
+    ;({ id: flowId, slug } = (r.body as { data: { id: string; slug: string } }).data)
+    const note = (await req<{ data: { format: string } }>('GET', `/api/note/${slug}`)).body as { data: { format: string } }
+    expect(note.data.format).toBe('workflow')
+  })
+
+  it('runs on a matching trail entry, and never on its own output (one pong, not a loop)', async () => {
+    await req('POST', `/api/trail/${trailSlug}/append`, { text: 'ping from test', tags: [tag] })
+    const es = await until(es => es.some(e => e.text === 'pong: ping from test'))
+    expect(es.filter(e => e.text.startsWith('pong:')).length).toBe(1)   // its own "pong" (also tagged) did not re-trigger it
+    await new Promise(r => setTimeout(r, 800))
+    expect((await entries()).filter(e => e.text.startsWith('pong:')).length).toBe(1)
+  })
+
+  it('a dry run evaluates but changes nothing', async () => {
+    const before = (await entries()).length
+    const r = await req<{ data: { status: string; actions: string[] } }>('POST', `/api/link/flows/${flowId}/run`, { dry_run: true })
+    const d = (r.body as { data: { status: string; actions: string[] } }).data
+    expect(d.status).toBe('done')
+    expect(d.actions[0]).toMatch(/^log “no ping”/)   // manual event has no text → else branch
+    expect((await entries()).length).toBe(before)
+  })
+
+  it('format switching: text stops the flow and allows free edits; back to workflow validates', async () => {
+    expect((await req('PUT', `/api/note/${slug}`, { body: 'not json' })).status).toBe(400)
+    expect((await req('PATCH', `/api/note/${slug}/format`, { format: 'text' })).status).toBe(200)
+    const listed = ((await req<{ data: Array<{ id: string }> }>('GET', '/api/link/flows')).body as { data: Array<{ id: string }> }).data
+    expect(listed.some(f => f.id === flowId)).toBe(false)
+    const original = ((await req<{ data: { body: string } }>('GET', `/api/note/${slug}`)).body as { data: { body: string } }).data.body
+    expect((await req('PUT', `/api/note/${slug}`, { body: original.replace('"steps"', '"stepz"') })).status).toBe(200)
+    expect((await req('PATCH', `/api/note/${slug}/format`, { format: 'workflow' })).status).toBe(400)
+    await req('PUT', `/api/note/${slug}`, { body: original.replace('"on": true', '"on": false') })
+    expect((await req('PATCH', `/api/note/${slug}/format`, { format: 'workflow' })).status).toBe(200)
+  })
+
+  it('validate reports the first problem in words', async () => {
+    const r = await req<{ data: { valid: boolean; error: string } }>('POST', '/api/link/validate', { flow: { type: 'ah-link/flow@1', name: 'x', trigger: { block: 'teleport' }, steps: [] } })
+    const d = (r.body as { data: { valid: boolean; error: string } }).data
+    expect(d.valid).toBe(false)
+    expect(d.error).toMatch(/trigger/)
+  })
+})
+
 describe('Reminders + day summary', () => {
   it('upcoming lists a card due soon; completing it shows in the day summary', async () => {
     const { body: cols } = await req<{ data: Array<{ _id: string }> }>('GET', `/api/board/${boardSlug}/columns`)

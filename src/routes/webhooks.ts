@@ -12,6 +12,7 @@
  *         raw string                       — treated as trail entry text
  */
 import type { FastifyPluginAsync } from 'fastify'
+import { emit } from '../link/engine.js'
 import { z } from 'zod'
 import { ObjectId } from 'mongodb'
 import { createHmac, timingSafeEqual } from 'crypto'
@@ -161,6 +162,10 @@ const webhooksRoutes: FastifyPluginAsync = async (fastify) => {
         )
         const entry = inserted.rows[0]!
         result = { ok: true, ref: `${spaceRef}#entry_${entry.id}`, ts: entry.ts }
+        emit(fastify.redis, {
+          kind: 'trail', org_id: String(wh['org_id']),
+          entry: { id: entry.id, text, tone, source: 'webhook', tags, meta: meta as Record<string, unknown>, ts: new Date(entry.ts).toISOString() },
+        })
 
         // Audit
         fastify.audit({

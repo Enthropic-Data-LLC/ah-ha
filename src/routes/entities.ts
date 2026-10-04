@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
 import { ObjectId } from 'mongodb'
 import { currentPlace } from '../lib/places.js'
+import { emit } from '../link/engine.js'
 
 const signatureSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('gps'), lat: z.number(), lng: z.number(), radius_m: z.number().default(100) }),
@@ -169,11 +170,10 @@ const entityRoutes: FastifyPluginAsync = async (fastify) => {
       if (best && best.score >= 2) {
         const user = await fastify.mongo.collection('users').findOne({ _id: req.user!.id })
         if (user?.['username']) {
-          await fastify.redis.setex(
-            `aha:presence:state:${user['username']}`,
-            4 * 3600,
-            best.entity['_id'].toString()
-          )
+          const key = `aha:presence:state:${user['username']}`
+          const prev = await fastify.redis.get(key)
+          await fastify.redis.setex(key, 4 * 3600, best.entity['_id'].toString())
+          if (prev !== best.entity['_id'].toString()) emit(fastify.redis, { kind: 'place', org_id: req.user!.orgId.toString(), from: prev, to: best.entity['_id'].toString() })
         }
       }
 
@@ -206,7 +206,11 @@ const entityRoutes: FastifyPluginAsync = async (fastify) => {
       // Manual check-ins last 4h; the phone asks for longer on a GPS arrival and clears it on exit.
       const { ttl_hours } = z.object({ ttl_hours: z.number().min(0.25).max(24).optional() }).parse(req.body ?? {})
       const ttl = Math.round((ttl_hours ?? 4) * 3600)
-      await fastify.redis.setex(`aha:presence:state:${user['username']}`, ttl, id.toString())
+      const key = `aha:presence:state:${user['username']}`
+      const prev = await fastify.redis.get(key)
+      await fastify.redis.setex(key, ttl, id.toString())
+      // A renewal (same place) is not an arrival.
+      if (prev !== id.toString()) emit(fastify.redis, { kind: 'place', org_id: req.user!.orgId.toString(), from: prev, to: id.toString() })
       return { ok: true, entity_id: id.toString(), expires_in: ttl }
     }
   )
@@ -215,7 +219,10 @@ const entityRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.delete('/api/entities/checkin', { preHandler: fastify.authenticate }, async (req) => {
     const user = await fastify.mongo.collection('users').findOne({ _id: req.user!.id })
     if (user?.['username']) {
-      await fastify.redis.del(`aha:presence:state:${user['username']}`)
+      const key = `aha:presence:state:${user['username']}`
+      const prev = await fastify.redis.get(key)
+      await fastify.redis.del(key)
+      if (prev) emit(fastify.redis, { kind: 'place', org_id: req.user!.orgId.toString(), from: prev, to: null })
     }
     return { ok: true }
   })

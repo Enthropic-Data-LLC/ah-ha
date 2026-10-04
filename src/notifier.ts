@@ -13,12 +13,12 @@ import 'dotenv/config'
 import { Redis } from 'ioredis'
 import { MongoClient, ObjectId, type Db } from 'mongodb'
 import { sendMail } from './lib/email.js'
+import { postToNodeRed } from './lib/nodered.js'
 
 const MONGO_URI      = process.env['MONGODB_URI']
 const REDIS_URL      = process.env['REDIS_URL']
 const API_BASE       = `http://localhost:${process.env['PORT'] ?? 3100}`
 const BRIDGE_KEY     = process.env['MQTT_BRIDGE_API_KEY']
-const NODERED_URL    = process.env['NODERED_URL'] ?? 'http://otto.local:1880'
 
 if (!MONGO_URI) { process.stderr.write('MONGODB_URI required\n'); process.exit(1) }
 if (!REDIS_URL) { process.stderr.write('REDIS_URL required\n'); process.exit(1) }
@@ -35,20 +35,6 @@ async function sendEmail(to: string, subject: string, text: string) {
 }
 
 // ── Node-RED delivery ──────────────────────────────────────────────────────
-
-async function postToNodeRed(type: string, username: string, data: unknown) {
-  try {
-    const res = await fetch(`${NODERED_URL}/webhook/ah-ha-notify`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type, username, data }),
-    })
-    if (!res.ok) console.error(`[notifier] node-red error: ${res.status}`)
-    else console.log(`[notifier] node-red → ${type} for ${username}`)
-  } catch (err) {
-    console.error('[notifier] node-red unreachable:', err)
-  }
-}
 
 // ── API helpers ────────────────────────────────────────────────────────────
 
