@@ -1,4 +1,5 @@
 import { Resend } from 'resend'
+import nodemailer from 'nodemailer'
 
 // Every one of these is read at call time, never at module load.
 //
@@ -18,6 +19,10 @@ const OVERRIDE     = () => process.env['EMAIL_OVERRIDE']
 const PROVIDER     = () => (process.env['EMAIL_PROVIDER'] ?? 'resend').toLowerCase()
 const MAILEROO_KEY = () => process.env['MAILEROO_SENDING_KEY'] ?? ''
 const MAILEROO_URL = 'https://smtp.maileroo.com/api/v2/emails'
+// EMAIL_PROVIDER=smtp is for dev/test: plain SMTP to the Mailpit trap
+// (mailpit.lan:1025 on saul), so a dev sign-in never leaves the homelab.
+const SMTP_HOST    = () => process.env['SMTP_HOST'] ?? 'mailpit.lan'
+const SMTP_PORT    = () => Number(process.env['SMTP_PORT'] ?? 1025)
 
 let resendClient: Resend | null = null
 function getResend(): Resend | null {
@@ -92,6 +97,16 @@ async function sendViaMaileroo(dest: string, subject: string, body: MailBody) {
   }
 }
 
+async function sendViaSmtp(dest: string, subject: string, body: MailBody) {
+  try {
+    const transport = nodemailer.createTransport({ host: SMTP_HOST(), port: SMTP_PORT(), secure: false })
+    const info = await transport.sendMail({ from: FROM(), to: dest, subject, ...body })
+    console.log('[email] sent via smtp:', info.messageId, '→', dest, `(${SMTP_HOST()}:${SMTP_PORT()})`)
+  } catch (err) {
+    console.error('[email] smtp exception:', (err as Error).message)
+  }
+}
+
 /**
  * Single outbound path for every ah-ha email. Honours EMAIL_PROVIDER and
  * EMAIL_OVERRIDE so auth mail and notifier mail can never drift onto
@@ -106,6 +121,8 @@ export async function sendMail(to: string, subject: string, body: MailBody) {
   }
   if (PROVIDER() === 'maileroo') {
     await sendViaMaileroo(dest, subject, body)
+  } else if (PROVIDER() === 'smtp') {
+    await sendViaSmtp(dest, subject, body)
   } else {
     await sendViaResend(dest, subject, body)
   }
