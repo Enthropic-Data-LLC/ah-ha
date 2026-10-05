@@ -143,7 +143,7 @@ const nowRoutes: FastifyPluginAsync = async (fastify) => {
         deleted_at: { $exists: false },
         due_at: { $lte: todayEnd },
         $or: [{ defer_until: null }, { defer_until: { $lte: now } }],
-      }).limit(5).toArray()
+      }).sort({ due_at: 1 }).limit(10).toArray()
 
       // Entity-tagged list items — surface when checked in, regardless of due date
       let entityListItems: Array<{ _id: string; title: string; space_ref?: string; contexts: unknown }> = []
@@ -265,7 +265,13 @@ const nowRoutes: FastifyPluginAsync = async (fastify) => {
           ...habits.map(c => cardC(c, 2, 'a habit for this time of day')),
           ...locationCards.map(c => itemC(c, 3, `tagged to ${here}`)).map(c => ({ ...c, kind: 'card' as const })),
           ...entityListItems.map(i => itemC(i, 2, `pick up at ${here}`)),
-          ...listItems.map(i => itemC(i as { _id: unknown; title: unknown }, 2, 'due today')),
+          // Timed list items (Ah! Rhythm's, or any with a due time) rank higher once their time has come.
+          ...listItems.map(i => {
+            const due = i['due_at'] as Date | null | undefined
+            const now_ = due && due.getTime() <= now.getTime()
+            return itemC(i as { _id: unknown; title: unknown }, now_ ? 3 : 2,
+              now_ ? `due ${due!.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: tz })}` : 'due today')
+          }),
           ...personC,
         ]
         // The same item from several sections: keep the strongest, merge the reasons.
