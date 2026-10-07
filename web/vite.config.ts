@@ -10,7 +10,7 @@ export default defineConfig({
     VitePWA({
       registerType: 'prompt',
       workbox: { skipWaiting: true, clientsClaim: true },
-      includeAssets: ['favicon.ico', 'icons/*.png'],
+      includeAssets: ['favicon.ico', 'favicon.svg', 'icons/*.png'],
       manifest: {
         name: 'Ah-Ha',
         short_name: 'Ah-Ha',
@@ -21,6 +21,7 @@ export default defineConfig({
         icons: [
           { src: '/icons/192.png', sizes: '192x192', type: 'image/png' },
           { src: '/icons/512.png', sizes: '512x512', type: 'image/png' },
+          { src: '/icons/512-maskable.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
         ],
       },
     }),

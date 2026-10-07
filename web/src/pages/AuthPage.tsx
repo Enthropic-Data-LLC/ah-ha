@@ -61,7 +61,7 @@ export default function AuthPage() {
           )}
           <button
             onClick={() => { setSent(false); setEmail(''); setDevLink('') }}
-            className="text-sm text-slate-500 hover:text-slate-300 underline"
+            className="text-sm text-slate-400 hover:text-slate-300 underline"
           >
             Use a different email
           </button>
@@ -111,8 +111,13 @@ export default function AuthPage() {
           </button>
         </form>
 
-        <p className="text-center text-xs text-slate-600">
+        <p className="text-center text-xs text-slate-400">
           No password. No friction.
+        </p>
+        <p className="text-center text-xs text-slate-400">
+          By signing in you agree to the{' '}
+          <a href="/terms" className="underline underline-offset-4 hover:text-slate-200">Terms</a> and{' '}
+          <a href="/privacy" className="underline underline-offset-4 hover:text-slate-200">Privacy Policy</a>.
         </p>
       </div>
     </div>

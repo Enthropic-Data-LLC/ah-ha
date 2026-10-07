@@ -199,7 +199,14 @@ const webDist = join(dirname(fileURLToPath(import.meta.url)), '..', 'web', 'dist
 fastify.addHook('onReady', async () => { linkEngine = startEngine(fastify) })
 
 await fastify.register(staticFiles, { root: webDist })
-fastify.setNotFoundHandler(async (_req, reply) => {
+// Page routes get the SPA shell; anything that looks like a file or an API call and
+// matched nothing is a real 404 (it used to be a 200 HTML page, which hid broken icons).
+const FILE_LIKE = /\.(png|jpe?g|gif|webp|avif|svg|ico|xml|txt|json|js|mjs|css|map|webmanifest|woff2?|ttf|apk|zip|gz|pdf|php|asp|aspx|env|ya?ml|bak|sql)$/i
+fastify.setNotFoundHandler(async (req, reply) => {
+  const path = req.url.split('?')[0] ?? ''
+  if (path.startsWith('/api/') || FILE_LIKE.test(path)) {
+    return reply.status(404).send({ data: null, error: { code: 'NOT_FOUND', message: 'Not found' } })
+  }
   return reply.sendFile('index.html')
 })
 

@@ -13,6 +13,13 @@ const magicLinkBody = z.object({
   nonce: z.string(),
 })
 
+// Top-level paths the web app owns; a user with one of these names would be unreachable at /:username.
+const RESERVED_USERNAMES = new Set([
+  'accessibility', 'android', 'api', 'assets', 'audit', 'auth', 'calendar', 'connect', 'download',
+  'healthz', 'icons', 'keys', 'mqtt', 'now', 'onboarding', 'privacy', 'search', 'settings', 'spaces',
+  'terms', 'webhooks',
+])
+
 function devLinkAllowed(addr: string | undefined): boolean {
   if (process.env['ALLOW_DEV_LINK'] !== '1') return false
   if (process.env['NODE_ENV'] === 'production') return false
@@ -104,6 +111,7 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
     preHandler: fastify.authenticate,
   }, async (req, reply) => {
     const body = z.object({ username: z.string().min(3).max(32).regex(/^[a-z0-9-]+$/) }).parse(req.body)
+    if (RESERVED_USERNAMES.has(body.username)) return reply.status(409).send({ error: 'Username taken' })
 
     const existing = await fastify.mongo.collection('users').findOne({ username: body.username })
     if (existing) return reply.status(409).send({ error: 'Username taken' })

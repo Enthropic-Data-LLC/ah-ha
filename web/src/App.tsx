@@ -22,6 +22,7 @@ import SharePage from './pages/SharePage'
 import NowPage from './pages/NowPage'
 import TapPage from './pages/TapPage'
 import EntityPage from './pages/EntityPage'
+import { PrivacyPage, TermsPage, AccessibilityPage, AndroidPage } from './pages/PublicPages'
 import SkipLink from './components/SkipLink'
 
 // SVG icons for bottom nav
@@ -185,6 +186,12 @@ export default function App() {
   if (shareMatch) {
     return <SharePage token={shareMatch[1]!} />
   }
+
+  // Public pages, readable signed in or out (the names are reserved in /auth/claim-username)
+  if (path === '/privacy') return <PrivacyPage />
+  if (path === '/terms') return <TermsPage />
+  if (path === '/accessibility') return <AccessibilityPage />
+  if (path === '/android') return <AndroidPage />
 
   if (path === '/auth/verify' || path.startsWith('/auth/verify?')) {
     return <VerifyPage />
