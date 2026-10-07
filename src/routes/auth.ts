@@ -13,6 +13,13 @@ const magicLinkBody = z.object({
   nonce: z.string(),
 })
 
+function devLinkAllowed(addr: string | undefined): boolean {
+  if (process.env['ALLOW_DEV_LINK'] !== '1') return false
+  if (process.env['NODE_ENV'] === 'production') return false
+  const a = (addr ?? '').replace(/^::ffff:/, '')
+  return a === '127.0.0.1' || a === '::1' || a.startsWith('192.168.10.')
+}
+
 const authRoutes: FastifyPluginAsync = async (fastify) => {
   // GET /auth/pow-challenge — issue a proof-of-work puzzle the client must solve
   // before /auth/magic-link will accept a request (raises the cost of bulk abuse
@@ -126,9 +133,14 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
     return { ok: true, username: body.username }
   })
 
-  // GET /auth/dev-link?email= — returns the verify URL directly (non-production only)
+  // GET /auth/dev-link?email= — returns the verify URL directly. It signs in as anyone,
+  // so it fails closed: it needs ALLOW_DEV_LINK=1, NODE_ENV other than production, and a
+  // caller on loopback or the LAN. The socket address is checked, not req.ip, because
+  // trustProxy makes req.ip spoofable; requests via the Linode edge (dev.ah-ha.app)
+  // arrive from 10.9.0.x and are refused. Live ran NODE_ENV=development until
+  // 2026-10-07, which left this open on ah-ha.app.
   fastify.get<{ Querystring: { email: string } }>('/auth/dev-link', async (req, reply) => {
-    if (process.env['NODE_ENV'] === 'production') return reply.status(404).send()
+    if (!devLinkAllowed(req.socket.remoteAddress)) return reply.status(404).send()
     const { email } = req.query
     if (!email) return reply.status(400).send({ error: 'email required' })
     const token = await createMagicToken(fastify.redis, email, true).catch(() => null)

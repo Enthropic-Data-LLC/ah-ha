@@ -26,8 +26,9 @@ export default function AuthPage() {
       await api.post('/auth/magic-link', { email, challenge, nonce })
       setSent(true)
       if (IS_DEV) {
-        const res = await api.get<{ url: string }>(`/auth/dev-link?email=${encodeURIComponent(email)}`)
-        setDevLink(res.url)
+        // Optional shortcut: the server refuses it unless ALLOW_DEV_LINK=1 on a LAN caller.
+        const res = await api.get<{ url: string }>(`/auth/dev-link?email=${encodeURIComponent(email)}`).catch(() => null)
+        if (res) setDevLink(res.url)
       }
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Something went wrong')
