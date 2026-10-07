@@ -5,7 +5,8 @@ module.exports = {
       script: 'dist/api.js',
       cwd: '/home/pi/projects/ah-ha',
       interpreter: 'node',
-      env: { NODE_ENV: 'development' },
+      // NODE_ENV comes from each host's .env (dotenv never overrides a PM2-set value,
+      // so hard-coding it here ran live as development until 2026-10-07).
       log_file: '/home/pi/logs/ah-ha-api.log',
       error_file: '/home/pi/logs/ah-ha-api-error.log',
       time: true,
