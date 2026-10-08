@@ -11,8 +11,8 @@ import type { ReactNode } from 'react'
 export const ANDROID = {
   url: '/download/ah-ha.apk',
   version: '0.2.0',
-  sizeMb: 0,
-  sha256: '',
+  sizeMb: 29.5,
+  sha256: '726952517a9b1e1134f49430e2c9142e6391d7c6178da3fb06f1e78a69649782',
   minAndroid: '10',
 }
 
