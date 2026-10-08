@@ -9,7 +9,9 @@ export default defineConfig({
     tailwindcss(),
     VitePWA({
       registerType: 'prompt',
-      workbox: { skipWaiting: true, clientsClaim: true },
+      // navigateFallbackDenylist: the APK download is a navigation too; without this the
+      // service worker answered it with index.html and phones got an "APK" that will not parse.
+      workbox: { skipWaiting: true, clientsClaim: true, navigateFallbackDenylist: [/^\/download\//, /^\/api\//, /^\/healthz/] },
       includeAssets: ['favicon.ico', 'favicon.svg', 'icons/*.png'],
       manifest: {
         name: 'Ah-Ha',
