@@ -69,7 +69,9 @@ const INTEGRATIONS = [
 
 const GH = 'https://github.com/Enthropic-Data-LLC/ah-ha'
 
-export default function LandingPage() {
+/** Signed in, the page still shows (from the app's Home link); its buttons open Ah! Today instead. */
+export default function LandingPage({ signedIn = false }: { signedIn?: boolean }) {
+  const cta = signedIn ? { href: '/now', short: 'Open Ah! Today', long: 'Open Ah! Today' } : null
   return (
     <div className="min-h-screen flex flex-col bg-slate-950 text-slate-100" style={{ fontFamily: "'DM Mono', 'Fira Code', 'Cascadia Code', monospace" }}>
 
@@ -84,6 +86,9 @@ export default function LandingPage() {
           >
             Android app
           </a>
+          <a href="/help" className="px-3 py-1.5 text-xs text-slate-400 hover:text-slate-200 border border-slate-800 hover:border-slate-600 rounded-lg transition">
+            Help
+          </a>
           <a
             href={GH}
             target="_blank"
@@ -96,10 +101,10 @@ export default function LandingPage() {
             GitHub
           </a>
           <a
-            href="/auth"
+            href={cta?.href ?? '/auth'}
             className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold rounded-lg transition"
           >
-            Sign in
+            {cta?.short ?? 'Sign in'}
           </a>
         </div>
       </header>
@@ -133,11 +138,11 @@ export default function LandingPage() {
 
             <div className="flex items-center justify-center gap-3 pt-2">
               <a
-                href="/auth"
+                href={cta?.href ?? '/auth'}
                 className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-sm font-semibold rounded-xl transition"
                 style={{ fontFamily: "'DM Sans', sans-serif" }}
               >
-                Get started free
+                {cta?.long ?? 'Get started free'}
               </a>
               <a
                 href={GH}
@@ -222,8 +227,8 @@ export default function LandingPage() {
               Self-host in 5 minutes or use the hosted version. MIT licensed. No lock-in.
             </p>
             <div className="flex items-center justify-center gap-3 pt-1">
-              <a href="/auth" className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-sm font-semibold rounded-xl transition" style={{ fontFamily: "'DM Sans', sans-serif" }}>
-                Create an account
+              <a href={cta?.href ?? '/auth'} className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-sm font-semibold rounded-xl transition" style={{ fontFamily: "'DM Sans', sans-serif" }}>
+                {cta?.long ?? 'Create an account'}
               </a>
               <a href={GH} target="_blank" rel="noreferrer" className="px-6 py-2.5 border border-slate-700 hover:border-slate-500 text-sm text-slate-400 hover:text-slate-200 rounded-xl transition" style={{ fontFamily: "'DM Sans', sans-serif" }}>
                 Self-host

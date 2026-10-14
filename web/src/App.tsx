@@ -23,6 +23,7 @@ import NowPage from './pages/NowPage'
 import TapPage from './pages/TapPage'
 import EntityPage from './pages/EntityPage'
 import { PrivacyPage, TermsPage, AccessibilityPage, AndroidPage } from './pages/PublicPages'
+import HelpPage from './pages/HelpPage'
 import SkipLink from './components/SkipLink'
 
 // SVG icons for bottom nav
@@ -93,7 +94,7 @@ function Shell({ children }: { children: React.ReactNode }) {
           {user && (
             <>
               <span className="text-xs font-mono text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded-full hidden sm:inline">@{user.username}</span>
-              {navLink('/now', 'Now')}
+              {navLink('/now', 'Ah! Today')}
               {navLink(spacesHref, 'Spaces')}
               {navLink(entitiesHref, 'Entities')}
               {navLink('/search', 'Search')}
@@ -107,6 +108,7 @@ function Shell({ children }: { children: React.ReactNode }) {
               {navLink('/keys', 'API Keys')}
               {navLink('/calendar', 'Calendar')}
               {navLink('/settings', 'Settings')}
+              {navLink('/help', 'Help')}
               {/* Hamburger — mobile only */}
               <button
                 onClick={() => setMenuOpen(true)}
@@ -144,7 +146,7 @@ function Shell({ children }: { children: React.ReactNode }) {
             {/* Nav items */}
             <nav className="flex-1 px-3 py-4 space-y-0.5">
               <p className="text-[10px] font-mono uppercase tracking-wider text-slate-600 px-3 pb-1">Main</p>
-              {drawerLink('/now', '⏱  Now')}
+              {drawerLink('/now', '⏱  Ah! Today')}
               {drawerLink(spacesHref, '⊞  Spaces')}
               {drawerLink(entitiesHref, '📍  Entities')}
               {drawerLink('/search', '⌕  Search')}
@@ -155,6 +157,9 @@ function Shell({ children }: { children: React.ReactNode }) {
               {drawerLink('/audit', '📋  Audit Log')}
               {drawerLink('/mqtt', '📡  MQTT')}
               {drawerLink('/webhooks', '🔗  Webhooks')}
+              <p className="text-[10px] font-mono uppercase tracking-wider text-slate-600 px-3 pb-1 pt-3">More</p>
+              {drawerLink('/help', '❓  Help')}
+              {drawerLink('/', '🏠  Home page')}
             </nav>
           </div>
         </div>
@@ -166,7 +171,7 @@ function Shell({ children }: { children: React.ReactNode }) {
       {/* Mobile bottom tab bar */}
       {user && (
         <nav className="sm:hidden fixed bottom-0 left-0 right-0 h-16 bg-slate-950 border-t border-slate-800 flex items-center justify-around px-2 z-40">
-          {tabLink('/now', Icons.now, 'Now')}
+          {tabLink('/now', Icons.now, 'Today')}
           {tabLink(spacesHref, Icons.spaces, 'Spaces')}
           {tabLink('/search', Icons.search, 'Search')}
           {tabLink('/settings', Icons.settings, 'Settings')}
@@ -192,17 +197,13 @@ export default function App() {
   if (path === '/terms') return <TermsPage />
   if (path === '/accessibility') return <AccessibilityPage />
   if (path === '/android') return <AndroidPage />
+  if (path === '/help' || path.startsWith('/help/')) return <HelpPage path={path} />
 
   if (path === '/auth/verify' || path.startsWith('/auth/verify?')) {
     return <VerifyPage />
   }
-  if (path === '/') {
-    if (!isLoading && user?.username) {
-      window.location.replace('/now')
-      return null
-    }
-    return <LandingPage />
-  }
+  // Home: signed in or out (the installed web app starts at /now, see vite.config.ts).
+  if (path === '/') return <LandingPage signedIn={!!user?.username} />
   if (path === '/auth') {
     if (!isLoading && user?.username) {
       window.location.replace('/now')

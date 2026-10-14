@@ -5,4 +5,19 @@
   <url><loc>https://ah-ha.app/privacy</loc><changefreq>yearly</changefreq></url>
   <url><loc>https://ah-ha.app/terms</loc><changefreq>yearly</changefreq></url>
   <url><loc>https://ah-ha.app/accessibility</loc><changefreq>yearly</changefreq></url>
+  <url><loc>https://ah-ha.app/help</loc><changefreq>weekly</changefreq></url>
+  <url><loc>https://ah-ha.app/help/ah-cart</loc><changefreq>monthly</changefreq></url>
+  <url><loc>https://ah-ha.app/help/ah-rhythm</loc><changefreq>monthly</changefreq></url>
+  <url><loc>https://ah-ha.app/help/ah-today</loc><changefreq>monthly</changefreq></url>
+  <url><loc>https://ah-ha.app/help/connect-apps</loc><changefreq>monthly</changefreq></url>
+  <url><loc>https://ah-ha.app/help/heading-out</loc><changefreq>monthly</changefreq></url>
+  <url><loc>https://ah-ha.app/help/helpers</loc><changefreq>monthly</changefreq></url>
+  <url><loc>https://ah-ha.app/help/install-android</loc><changefreq>monthly</changefreq></url>
+  <url><loc>https://ah-ha.app/help/lists</loc><changefreq>monthly</changefreq></url>
+  <url><loc>https://ah-ha.app/help/nfc-tags</loc><changefreq>monthly</changefreq></url>
+  <url><loc>https://ah-ha.app/help/places</loc><changefreq>monthly</changefreq></url>
+  <url><loc>https://ah-ha.app/help/sign-in</loc><changefreq>monthly</changefreq></url>
+  <url><loc>https://ah-ha.app/help/troubleshooting</loc><changefreq>monthly</changefreq></url>
+  <url><loc>https://ah-ha.app/help/welcome</loc><changefreq>monthly</changefreq></url>
+  <url><loc>https://ah-ha.app/help/your-data</loc><changefreq>monthly</changefreq></url>
 </urlset>

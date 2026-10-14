@@ -2,19 +2,22 @@ import type { ReactNode } from 'react'
 import SkipLink from '../components/SkipLink'
 import SiteFooter from '../components/SiteFooter'
 import AndroidInstall from '../components/AndroidInstall'
+import { useMe } from '../hooks/useMe'
 
 const CONTACT = 'dbrown@enthropicdata.com'
-const UPDATED = '7 October 2026'
+const UPDATED = '14 October 2026'
 
 /** Shell for the public, signed-out pages: same header and footer as the landing page. */
-function PublicLayout({ children }: { children: ReactNode }) {
+export function PublicLayout({ children }: { children: ReactNode }) {
+  const { user } = useMe()
+  const signedIn = !!user?.username
   return (
     <div className="min-h-screen flex flex-col bg-slate-950 text-slate-100">
       <SkipLink />
       <header className="border-b border-slate-800/60 px-6 h-14 flex items-center justify-between">
         <a href="/" className="font-bold tracking-tight text-slate-100 py-2">aH-Ha</a>
-        <a href="/auth" className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold rounded-lg transition">
-          Sign in
+        <a href={signedIn ? '/now' : '/auth'} className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold rounded-lg transition">
+          {signedIn ? 'Open Ah! Today' : 'Sign in'}
         </a>
       </header>
       <main id="main-content" tabIndex={-1} className="flex-1 w-full pt-10 focus:outline-none">
@@ -75,7 +78,7 @@ export function PrivacyPage() {
       <h2>Who else processes your data</h2>
       <ul>
         <li><strong>Email delivery</strong> (Resend, Maileroo): your email address and the sign-in link or notification we send you.</li>
-        <li><strong>AI features</strong> (Anthropic): the daily briefing and smart capture send the items they summarise (for example task titles, upcoming events and your current place) to Anthropic&apos;s API. If you add your own Anthropic key in Settings, your key is used instead of ours.</li>
+        <li><strong>AI features</strong> (Anthropic): the daily briefing and smart capture send the items they summarise (for example task titles, upcoming events and your current place) to Anthropic&apos;s API, and Follow-through sends the title of an item you have snoozed three times, to suggest a first step. If you add your own Anthropic key in Settings, your key is used instead of ours.</li>
         <li><strong>Weather</strong> (Open-Meteo): coordinates rounded to about 1 km, with no account information attached.</li>
         <li><strong>Telegram</strong>, only if you turn on Telegram notifications: the notification text.</li>
         <li><strong>Hosting:</strong> our own servers and a Linode (Akamai) server in the United States.</li>
