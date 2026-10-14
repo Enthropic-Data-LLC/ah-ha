@@ -1,6 +1,4 @@
-import type { FastifyInstance } from 'fastify'
-import type { ObjectId } from 'mongodb'
-import { getPool } from './timescale.js'
+import type { Caller, Core } from '../core/index.js'
 
 /**
  * The streak: consecutive days (in the user's time zone) with at least one thing
@@ -23,25 +21,18 @@ export interface Streak { current: number; best: number; today: boolean }
 const localDay = (d: Date, tz: string) =>
   new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).format(d)
 
-export async function streak(fastify: FastifyInstance, orgId: ObjectId, tz: string): Promise<Streak> {
+export async function streak(c: Core, caller: Caller, tz: string): Promise<Streak> {
   const since = new Date(Date.now() - LOOKBACK_DAYS * 86_400_000)
   const days = new Set<string>()
 
   const [trail, items, cards] = await Promise.all([
-    getPool().query<{ day: string }>(
-      `SELECT DISTINCT to_char(ts AT TIME ZONE $3, 'YYYY-MM-DD') AS day
-         FROM trail_entries
-        WHERE org_id = $1 AND ts >= $2 AND NOT (source = ANY($4))`,
-      [orgId.toString(), since, tz, AUTOMATIC_SOURCES],
-    ).catch(() => ({ rows: [] as Array<{ day: string }> })),   // trail store down: still count the rest
-    fastify.mongo.collection('list_items')
-      .find({ org_id: orgId, done_at: { $gte: since } }).project({ done_at: 1 }).toArray(),
-    fastify.mongo.collection('board_cards')
-      .find({ org_id: orgId, completed_at: { $gte: since } }).project({ completed_at: 1 }).toArray(),
+    c.trail.activeDays(caller, since, tz, AUTOMATIC_SOURCES).catch(() => [] as string[]),   // trail store down: still count the rest
+    c.lists.doneTimes(caller, since),
+    c.cards.completionTimes(caller, since),
   ])
-  for (const r of trail.rows) days.add(r.day)
-  for (const i of items) days.add(localDay(i['done_at'] as Date, tz))
-  for (const c of cards) days.add(localDay(c['completed_at'] as Date, tz))
+  for (const d of trail) days.add(d)
+  for (const i of items) days.add(localDay(i.done_at, tz))
+  for (const k of cards) days.add(localDay(k.completed_at, tz))
 
   const dayBefore = (d: string) => {
     const t = new Date(`${d}T12:00:00Z`); t.setUTCDate(t.getUTCDate() - 1)

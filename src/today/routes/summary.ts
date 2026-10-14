@@ -1,6 +1,6 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
-import { getPool } from '../lib/timescale.js'
+import { core, callerOf } from '../../core/index.js'
 
 /**
  * GET /api/day-summary?since=<ISO> — what got done, for the evening wrap-up.
@@ -8,31 +8,20 @@ import { getPool } from '../lib/timescale.js'
  * Built from completions and the trail only — deliberately no AI call.
  */
 const summaryRoutes: FastifyPluginAsync = async (fastify) => {
+  const c = core(fastify)
   fastify.get<{ Querystring: { since?: string } }>(
     '/api/day-summary',
     { preHandler: fastify.authenticate },
     async (req) => {
       const { since: sinceRaw } = z.object({ since: z.string().datetime({ offset: true }).optional() }).parse(req.query)
       const since = sinceRaw ? new Date(sinceRaw) : new Date(Date.now() - 24 * 3_600_000)
-      const orgId = req.user!.orgId
+      const caller = callerOf(req)
 
       const [cards, listDone, habits, trail] = await Promise.all([
-        fastify.mongo.collection('board_cards').find({
-          org_id: orgId,
-          deleted_at: { $exists: false },
-          $or: [{ completed_at: { $gte: since } }, { 'recurrence.last_completed_at': { $gte: since } }],
-        }).toArray(),
-        fastify.mongo.collection('list_items').find({
-          org_id: orgId, deleted_at: { $exists: false }, done_at: { $gte: since },   // not done: true — a reopened "always" item still counts the day
-        }).toArray(),
-        fastify.mongo.collection('board_cards').find({
-          org_id: orgId, deleted_at: { $exists: false },
-          'recurrence.archetype': 'habit', 'recurrence.streak_count': { $gte: 2 },
-        }).sort({ 'recurrence.streak_count': -1 }).limit(3).toArray(),
-        getPool().query<{ text: string; tone: string; source: string; meta: Record<string, unknown>; ts: Date }>(
-          `SELECT text, tone, source, meta, ts FROM trail_entries WHERE org_id = $1 AND ts >= $2 ORDER BY ts`,
-          [orgId.toString(), since],
-        ).then(r => r.rows),
+        c.cards.completedSince(caller, since),
+        c.lists.doneSince(caller, since),
+        c.cards.habitStreaks(caller, 2, 3),
+        c.trail.entriesSince(caller, since),
       ])
 
       const tones = { happy: 0, neutral: 0, sorrow: 0 } as Record<string, number>

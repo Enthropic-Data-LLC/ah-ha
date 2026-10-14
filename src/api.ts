@@ -32,14 +32,12 @@ import webhooksRoutes from './routes/webhooks.js'
 import shareRoutes from './routes/share.js'
 import settingsRoutes from './routes/settings.js'
 import { captureRoute } from './routes/capture.js'
-import nowRoutes from './routes/now.js'
+import today from './today/index.js'
 import entityRoutes from './routes/entities.js'
 import recurrenceRoutes from './routes/recurrence.js'
 import calendarRoutes from './routes/calendar.js'
 import nfcRoutes from './routes/nfc.js'
-import summaryRoutes from './routes/summary.js'
 import connectRoutes from './routes/connect.js'
-import situationRoutes from './routes/situation.js'
 import linkRoutes from './routes/link.js'
 import { startEngine, type Engine } from './link/engine.js'
 import { setupTrailSchema, closePool } from './lib/timescale.js'
@@ -181,14 +179,12 @@ await fastify.register(async (sub) => {
   await sub.register(shareRoutes)
   await sub.register(settingsRoutes)
   await sub.register(captureRoute)
-  await sub.register(nowRoutes)
+  await sub.register(today)
   await sub.register(entityRoutes)
   await sub.register(recurrenceRoutes)
   await sub.register(calendarRoutes)
   await sub.register(nfcRoutes)
-  await sub.register(summaryRoutes)
   await sub.register(connectRoutes)
-  await sub.register(situationRoutes)
   await sub.register(linkRoutes, { engine: () => linkEngine })
 })
 

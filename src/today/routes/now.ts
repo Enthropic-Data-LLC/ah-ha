@@ -1,13 +1,7 @@
 import type { FastifyPluginAsync } from 'fastify'
-import { ObjectId } from 'mongodb'
-import { getPool } from '../lib/timescale.js'
-import { fetchCalendarEvents } from '../lib/ical-fetch.js'
-import type { CalendarSource } from '../lib/ical-fetch.js'
-import { placeFromPresence, presenceRaw as readPresence } from '../lib/places.js'
-import { streak } from '../lib/streak.js'
-import { situation } from '../lib/situation.js'
-import { pickFocus, type Candidate, type Focus } from '../lib/focus.js'
-import { reopenAlways } from '../lib/repeat.js'
+import { core, callerOf } from '../../core/index.js'
+import { streak } from '../streak.js'
+import { pickFocus, type Candidate, type Focus } from '../focus.js'
 
 const TIME_CHUNKS: Record<string, (h: number, dow: number) => boolean> = {
   wakeup:          (h)     => h >= 5  && h < 8,
@@ -57,13 +51,16 @@ const BRIEFING_DAILY_CAP = 30
 interface CachedBriefing { text: string; presence: string; tod: string; ts: string }
 
 const nowRoutes: FastifyPluginAsync = async (fastify) => {
+  const c = core(fastify)
+  const briefings = c.kv('briefing')
   fastify.get<{ Querystring: { presence?: string; tz?: string; fresh?: string } }>(
     '/api/now',
     { preHandler: fastify.authenticate },
     async (req) => {
       const now = new Date()
       const tz = req.query.tz ?? 'UTC'
-      await reopenAlways(fastify, req.user!.orgId, req.user!.id, req.query.tz)
+      const caller = callerOf(req)
+      await c.lists.reopenAlways(caller, req.query.tz)
       const localHour = parseInt(
         new Intl.DateTimeFormat('en-US', { timeZone: tz, hour: 'numeric', hour12: false }).format(now)
       )
@@ -71,10 +68,10 @@ const nowRoutes: FastifyPluginAsync = async (fastify) => {
       const tod = TIME_OF_DAY(localHour)
 
       // Presence: query param override > Redis
-      const presenceRaw = req.query.presence || await readPresence(fastify, req.user!.id)
+      const presenceRaw = req.query.presence || await c.places.presence(caller)
 
       // Resolve entity if presence looks like an ObjectId
-      const presencePlace = await placeFromPresence(fastify, req.user!.orgId, presenceRaw)
+      const presencePlace = await c.places.fromPresence(caller, presenceRaw)
       const presenceEntity = presencePlace ? { ...presencePlace, time_chunks: [] as string[] } : null
 
       const orgId = req.user!.orgId
@@ -82,51 +79,21 @@ const nowRoutes: FastifyPluginAsync = async (fastify) => {
       const todayEnd   = new Date(now); todayEnd.setHours(23, 59, 59, 999)
 
       // Overdue cards (max 3, sorted by most overdue first)
-      const urgent = await fastify.mongo.collection('board_cards').find({
-        org_id: orgId,
-        done: { $ne: true },
-        deleted_at: { $exists: false },
-        due_date: { $lt: todayStart },
-        $or: [{ defer_until: null }, { defer_until: { $lte: now } }],
-      }).sort({ due_date: 1 }).limit(3).toArray()
+      const urgent = await c.cards.overdue(caller, todayStart, now, 3)
 
       // Due today
-      const dueToday = await fastify.mongo.collection('board_cards').find({
-        org_id: orgId,
-        done: { $ne: true },
-        deleted_at: { $exists: false },
-        due_date: { $gte: todayStart, $lte: todayEnd },
-        $or: [{ defer_until: null }, { defer_until: { $lte: now } }],
-      }).sort({ priority: -1 }).limit(5).toArray()
+      const dueToday = await c.cards.dueBetween(caller, todayStart, todayEnd, now, 5)
 
       // Habit cards for this time of day
-      const habits = await fastify.mongo.collection('board_cards').find({
-        org_id: orgId,
-        done: { $ne: true },
-        deleted_at: { $exists: false },
-        'recurrence.archetype': 'habit',
-        'recurrence.time_anchor': tod === 'morning' ? 'morning'
-          : tod === 'active' ? 'midday'
-          : tod === 'evening' ? 'evening' : 'night',
-      }).limit(3).toArray()
+      const habits = await c.cards.habitsAt(caller,
+        tod === 'morning' ? 'morning' : tod === 'active' ? 'midday' : tod === 'evening' ? 'evening' : 'night', 3)
 
       // Recently resurfaced (defer expired in last hour)
       const oneHourAgo = new Date(now.getTime() - 3600_000)
-      const resurfaced = await fastify.mongo.collection('board_cards').find({
-        org_id: orgId,
-        done: { $ne: true },
-        deleted_at: { $exists: false },
-        defer_until: { $gte: oneHourAgo, $lte: now },
-      }).limit(3).toArray()
+      const resurfaced = await c.cards.resurfaced(caller, oneHourAgo, now, 3)
 
       // Interval nudges (at 80% of interval) — filter in Node, not $where (no JS eval in prod)
-      const allIntervalCards = await fastify.mongo.collection('board_cards').find({
-        org_id: orgId,
-        done: { $ne: true },
-        deleted_at: { $exists: false },
-        'recurrence.archetype': { $in: ['interval', 'seasonal'] },
-        $or: [{ defer_until: null }, { defer_until: { $lte: now } }],
-      }).toArray()
+      const allIntervalCards = await c.cards.recurring(caller, ['interval', 'seasonal'], now)
 
       type IntervalRec = { interval_days?: number; last_completed_at?: Date | string | null }
       const nudges = allIntervalCards.filter(c => {
@@ -139,24 +106,12 @@ const nowRoutes: FastifyPluginAsync = async (fastify) => {
       }).slice(0, 5)
 
       // List items due today
-      const listItems = await fastify.mongo.collection('list_items').find({
-        org_id: orgId,
-        done: false,
-        deleted_at: { $exists: false },
-        due_at: { $lte: todayEnd },
-        $or: [{ defer_until: null }, { defer_until: { $lte: now } }],
-      }).sort({ due_at: 1 }).limit(10).toArray()
+      const listItems = await c.lists.dueBy(caller, todayEnd, now, 10)
 
       // Entity-tagged list items — surface when checked in, regardless of due date
       let entityListItems: Array<{ _id: string; title: string; space_ref?: string; contexts: unknown; repeat: string }> = []
       if (presenceRaw && OID_RE.test(presenceRaw)) {
-        const raw = await fastify.mongo.collection('list_items').find({
-          org_id: orgId,
-          done: false,
-          deleted_at: { $exists: false },
-          'contexts.entity_id': presenceRaw,
-          $or: [{ defer_until: null }, { defer_until: { $lte: now } }],
-        }).limit(20).toArray()
+        const raw = await c.lists.taggedTo(caller, presenceRaw, 20, now)
 
         // Filter by time_chunks on the context entry (same logic as card contexts)
         entityListItems = raw.filter(item => {
@@ -180,13 +135,7 @@ const nowRoutes: FastifyPluginAsync = async (fastify) => {
       let locationCards: Array<{ _id: string; title: string; ref?: string }> = []
       if (presenceRaw && OID_RE.test(presenceRaw)) {
         // Fetch all cards that have a context entry for this entity
-        const raw = await fastify.mongo.collection('board_cards').find({
-          org_id: orgId,
-          done: { $ne: true },
-          deleted_at: { $exists: false },
-          'contexts.entity_id': presenceRaw,
-          $or: [{ defer_until: null }, { defer_until: { $lte: now } }],
-        }).limit(20).toArray()
+        const raw = await c.cards.taggedTo(caller, presenceRaw, 20, now)
 
         // Filter by time_chunks on the specific context entry
         const filtered = raw.filter(c => {
@@ -206,16 +155,9 @@ const nowRoutes: FastifyPluginAsync = async (fastify) => {
       // Trail pulse — last entry tone
       let trailPulse: { recent_tone: string; total_today: number } | null = null
       try {
-        const pool = getPool()
-        const trailSpace = await fastify.mongo.collection('spaces').findOne({
-          org_id: orgId, type: 'trail', deleted_at: { $exists: false }
-        })
+        const trailSpace = await c.trail.defaultTrail(caller)
         if (trailSpace) {
-          const res = await pool.query(
-            `SELECT tone, count(*) as cnt FROM trail_entries WHERE space_ref = $1 AND ts >= $2 GROUP BY tone`,
-            [trailSpace['ref'], todayStart]
-          )
-          const totals = res.rows.reduce<Record<string, number>>((a, r) => { a[r.tone] = parseInt(r.cnt); return a }, {})
+          const totals = await c.trail.toneCounts(caller, trailSpace['ref'] as string, todayStart)
           const total = Object.values(totals).reduce((s, n) => s + n, 0)
           const topTone = Object.entries(totals).sort((a, b) => b[1] - a[1])[0]?.[0] ?? 'neutral'
           trailPulse = { recent_tone: topTone, total_today: total }
@@ -225,16 +167,11 @@ const nowRoutes: FastifyPluginAsync = async (fastify) => {
       // Upcoming calendar events — next 8 hours
       let calendarEvents: Array<{ uid: string; title: string; start: string; end: string; all_day: boolean; location?: string; calendar: string; color: string }> = []
       try {
-        const calSources = await fastify.mongo.collection<CalendarSource>('calendar_sources')
-          .find({ user_id: req.user!.id }).toArray()
-        if (calSources.length > 0) {
-          const calEnd = new Date(now.getTime() + 16 * 3_600_000)
-          calendarEvents = await fetchCalendarEvents(calSources, now, calEnd, fastify.redis)
-        }
+        calendarEvents = await c.calendar.events(caller, now, new Date(now.getTime() + 16 * 3_600_000))
       } catch { /* calendar unavailable */ }
 
       // Situation + focus: the one thing for right now, with reasons (lib/situation.ts, lib/focus.ts).
-      const sit = await situation(fastify, { orgId, tz, tod, place: presencePlace, calendar: calendarEvents })
+      const sit = await c.context.situation(caller, { tz, tod, place: presencePlace, calendar: calendarEvents })
         .catch(err => { req.log.warn({ err }, 'situation unavailable'); return null })
       let focus: Focus | null = null
       if (sit) {
@@ -249,15 +186,10 @@ const nowRoutes: FastifyPluginAsync = async (fastify) => {
         const homeNames = sit.people.filter(p => p.home).map(p => p.name.toLowerCase())
         const personC: Candidate[] = []
         if (homeNames.length) {
-          const persons = await fastify.mongo.collection('entities')
-            .find({ org_id: orgId, entity_type: 'person', deleted_at: { $exists: false } }).toArray()
+          const persons = await c.entities.people(caller)
           for (const p of persons.filter(p => homeNames.includes(String(p['name']).toLowerCase()))) {
             const pid = String(p['_id']); const who = `${p['name'] as string} is home`
-            const open = { org_id: orgId, deleted_at: { $exists: false }, 'contexts.entity_id': pid }
-            const [cs, is] = await Promise.all([
-              fastify.mongo.collection('board_cards').find({ ...open, done: { $ne: true } }).limit(5).toArray(),
-              fastify.mongo.collection('list_items').find({ ...open, done: false }).limit(5).toArray(),
-            ])
+            const [cs, is] = await Promise.all([c.cards.taggedTo(caller, pid, 5), c.lists.taggedTo(caller, pid, 5)])
             personC.push(...cs.map(c => cardC(c, 3, who)), ...is.map(i => itemC(i as { _id: unknown; title: unknown }, 3, who)))
           }
         }
@@ -287,8 +219,8 @@ const nowRoutes: FastifyPluginAsync = async (fastify) => {
       }
 
       // AI briefing — see BRIEFING_* above for when it is regenerated
-      const cacheKey = `aha:briefing:${req.user!.orgId}`
-      const cached = await fastify.redis.get(cacheKey)
+      const cacheKey = String(orgId)
+      const cached = await briefings.get(cacheKey)
         .then(raw => (raw ? JSON.parse(raw) as CachedBriefing : null)).catch(() => null)
       const age = cached ? now.getTime() - Date.parse(cached.ts) : Infinity
       const place = presenceRaw ?? 'unknown'
@@ -302,12 +234,9 @@ const nowRoutes: FastifyPluginAsync = async (fastify) => {
 
       let briefing: string | null = cached?.text ?? null
       const hasWork = (urgent.length + dueToday.length + habits.length + calendarEvents.length) > 0
-      const settings = reason && hasWork
-        ? await fastify.mongo.collection('user_settings').findOne({ user_id: req.user!.id })
-        : null
-      const apiKey = (settings?.['anthropic_api_key'] as string | null) ?? process.env['ANTHROPIC_API_KEY']
-      const countKey = `aha:briefing:calls:${req.user!.orgId}:${now.toISOString().slice(0, 10)}`
-      const callsToday = reason && hasWork ? Number(await fastify.redis.get(countKey) ?? 0) : 0
+      const apiKey = reason && hasWork ? await c.settings.anthropicKey(caller) : process.env['ANTHROPIC_API_KEY']
+      const countKey = `calls:${orgId}:${now.toISOString().slice(0, 10)}`
+      const callsToday = reason && hasWork ? Number(await briefings.get(countKey) ?? 0) : 0
 
       if (reason && hasWork && callsToday >= BRIEFING_DAILY_CAP) {
         req.log.warn({ reason, callsToday }, 'briefing: daily cap reached, reusing cached text')
@@ -344,9 +273,9 @@ const nowRoutes: FastifyPluginAsync = async (fastify) => {
             if (text) {
               briefing = text
               const entry: CachedBriefing = { text, presence: place, tod, ts: now.toISOString() }
-              await fastify.redis.set(cacheKey, JSON.stringify(entry), 'EX', 24 * 3600)
-              const calls = await fastify.redis.incr(countKey)
-              if (calls === 1) await fastify.redis.expire(countKey, 8 * 24 * 3600)
+              await briefings.set(cacheKey, JSON.stringify(entry), 24 * 3600)
+              const calls = await briefings.incr(countKey)
+              if (calls === 1) await briefings.expire(countKey, 8 * 24 * 3600)
               req.log.info({ reason, callsToday: calls }, 'briefing generated')
             }
           } else {
@@ -359,7 +288,7 @@ const nowRoutes: FastifyPluginAsync = async (fastify) => {
       if (!hasWork) briefing = null
 
       // A bad tz or a down trail store leaves the streak out rather than failing Today.
-      const streakInfo = await streak(fastify, orgId, tz).catch(() => null)
+      const streakInfo = await streak(c, caller, tz).catch(() => null)
 
       return {
         data: {

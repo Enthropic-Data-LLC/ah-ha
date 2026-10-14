@@ -1,4 +1,4 @@
-import type { Situation } from './situation.js'
+import type { Situation } from '../lib/situation.js'
 
 /**
  * Picks the one thing for right now from Today's candidates, scoring every signal
