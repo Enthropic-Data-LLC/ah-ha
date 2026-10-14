@@ -49,6 +49,22 @@ export const APPS: AndroidApp[] = [
     minAndroid: '10',
     beta: true,
   },
+  {
+    id: 'ah-cart',
+    name: 'Ah! Cart',
+    blurb: (
+      <>
+        Shop on the cash in your pocket: a running total with sales tax as things go in the cart, so you know before
+        the register. Works on its own; connect it to Ah-Ha to shop from your list, with the store picked from where you are.
+      </>
+    ),
+    url: '/download/ah-cart.apk',
+    version: '0.2.0',
+    sizeMb: 30.8,
+    sha256: '616e5fcacf2e752bcd5bf265407cebceeebed0750df5b6d6a3ddaf7d264447b0',
+    minAndroid: '10',
+    beta: true,
+  },
 ]
 
 /** Kept for anything still reading the single-app shape. */
@@ -80,7 +96,7 @@ const STEPS: { title: string; body: ReactNode }[] = [
     body: (
       <>
         Ah-Ha: sign in at ah-ha.app, open <a href="/keys" className="text-indigo-300 underline underline-offset-4 hover:text-indigo-200">Keys</a>, create a key named after your phone and copy it, then paste it into the app.
-        <span className="block mt-1 text-slate-400">Ah! Rhythm: open ⚙️ in the app and tap <strong>Connect</strong> (optional; it works on its own).</span>
+        <span className="block mt-1 text-slate-400">Ah! Rhythm and Ah! Cart: tap <strong>Connect</strong> in the app's settings (optional; both work on their own).</span>
       </>
     ),
   },
@@ -149,7 +165,7 @@ export default function AndroidInstall({ headingLevel = 2 }: { headingLevel?: 1 
             Android apps
           </H>
           <p className="text-sm text-amber-200/90" style={{ fontFamily: "'DM Sans', sans-serif" }}>
-            Both apps are in beta: they work and we use them daily, but they are still changing and you may hit rough edges.
+            All three apps are in beta: they work and we use them daily, but they are still changing and you may hit rough edges.
             Don&apos;t make Ah! Rhythm your only reminder for a prescription medicine.
           </p>
         </div>
