@@ -1,20 +1,58 @@
 import type { ReactNode } from 'react'
 
 /**
- * Android download + sideload instructions. Shown on the landing page and at /android
+ * Android downloads + sideload instructions. Shown on the landing page and at /android
  * (the landing page redirects signed-in users to /now, so they need their own route).
  *
- * The APK is served by the Linode edge from /var/www/ah-ha.app/download/, not by the app:
- * a 40 MB file has no business crossing the WireGuard tunnel on every download.
- * Update ANDROID below whenever a new APK is published there.
+ * The APKs are served by the Linode edge from /var/www/ah-ha.app/download/, not by the app:
+ * a 30 MB file has no business crossing the WireGuard tunnel on every download.
+ * Update APPS below whenever a new APK is published there.
  */
-export const ANDROID = {
-  url: '/download/ah-ha.apk',
-  version: '0.2.0',
-  sizeMb: 29.5,
-  sha256: '726952517a9b1e1134f49430e2c9142e6391d7c6178da3fb06f1e78a69649782',
-  minAndroid: '10',
+export interface AndroidApp {
+  id: string
+  name: string
+  blurb: ReactNode
+  url: string
+  version: string
+  sizeMb: number
+  sha256: string
+  minAndroid: string
+  beta: boolean
 }
+
+export const APPS: AndroidApp[] = [
+  {
+    id: 'ah-ha',
+    name: 'Ah-Ha for Android',
+    blurb: <>Today screen, home-screen widget, reminders, NFC tags and automatic check-ins. Works offline and syncs when you&apos;re back.</>,
+    url: '/download/ah-ha.apk',
+    version: '0.2.1',
+    sizeMb: 29.5,
+    sha256: '6edc76085f03c350e17911aaabc56b0b75b4ce51a2069b1de31f05e01194cfaa',
+    minAndroid: '10',
+    beta: true,
+  },
+  {
+    id: 'ah-rhythm',
+    name: 'Ah! Rhythm',
+    blurb: (
+      <>
+        Your daily rhythm: supplements and meds, walks and workouts, eating windows. Grouped by Wake-up, Breakfast,
+        Midday, Dinner and Bedtime, so one tap (or one NFC tag) checks off a whole group. Works on its own; connect it
+        to Ah-Ha to log to your trail and show it on Today.
+      </>
+    ),
+    url: '/download/ah-rhythm.apk',
+    version: '0.2.0',
+    sizeMb: 29.4,
+    sha256: 'd3bf47eb9e00ba520330d0025e9314bc6c2df7a6583e86bfde2df3ff01b18b83',
+    minAndroid: '10',
+    beta: true,
+  },
+]
+
+/** Kept for anything still reading the single-app shape. */
+export const ANDROID = APPS[0]!
 
 const STEPS: { title: string; body: ReactNode }[] = [
   {
@@ -35,52 +73,92 @@ const STEPS: { title: string; body: ReactNode }[] = [
   },
   {
     title: 'Install',
-    body: <>Tap <strong>Install</strong>. If Google Play Protect says it doesn&apos;t recognise the developer, tap <strong>More details</strong> → <strong>Install anyway</strong>. Ah-Ha isn&apos;t on the Play Store yet, so Play Protect has never seen it.</>,
+    body: <>Tap <strong>Install</strong>. If Google Play Protect says it doesn&apos;t recognise the developer, tap <strong>More details</strong> → <strong>Install anyway</strong>. These apps aren&apos;t on the Play Store yet, so Play Protect has never seen them.</>,
   },
   {
     title: 'Connect it to your account',
-    body: <>Sign in at ah-ha.app, open <a href="/keys" className="text-indigo-300 underline underline-offset-4 hover:text-indigo-200">Keys</a>, create a key named after your phone and copy it. Open Ah-Ha on the phone and paste the key.</>,
+    body: (
+      <>
+        Ah-Ha: sign in at ah-ha.app, open <a href="/keys" className="text-indigo-300 underline underline-offset-4 hover:text-indigo-200">Keys</a>, create a key named after your phone and copy it, then paste it into the app.
+        <span className="block mt-1 text-slate-400">Ah! Rhythm: open ⚙️ in the app and tap <strong>Connect</strong> (optional; it works on its own).</span>
+      </>
+    ),
   },
   {
     title: 'Turn the permission back off (optional)',
-    body: <>Once Ah-Ha is installed you can switch <strong>Allow from this source</strong> off again. You only need it on when you install an update.</>,
+    body: <>Once the app is installed you can switch <strong>Allow from this source</strong> off again. You only need it on when you install an update.</>,
   },
 ]
 
+function BetaBadge() {
+  return (
+    <span className="text-[10px] uppercase tracking-wider font-semibold text-amber-300 border border-amber-500/40 bg-amber-500/10 rounded px-1.5 py-0.5 align-middle">
+      Beta
+    </span>
+  )
+}
+
+function AppCard({ app, H }: { app: AndroidApp; H: 'h1' | 'h2' | 'h3' }) {
+  return (
+    <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-5 space-y-3">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="space-y-1">
+          <H id={`${app.id}-heading`} className="text-lg font-semibold text-slate-100 flex items-center gap-2" style={{ fontFamily: "'DM Sans', sans-serif" }}>
+            {app.name} {app.beta && <BetaBadge />}
+          </H>
+          <p className="text-slate-300 text-sm" style={{ fontFamily: "'DM Sans', sans-serif" }}>{app.blurb}</p>
+        </div>
+        <a
+          href={app.url}
+          download
+          className="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-sm font-semibold rounded-xl transition shrink-0"
+          style={{ fontFamily: "'DM Sans', sans-serif" }}
+          aria-label={`Download ${app.name}${app.beta ? ' (beta)' : ''} for Android`}
+        >
+          <svg viewBox="0 0 24 24" className="w-4 h-4 fill-current" aria-hidden="true">
+            <path d="M12 16l-5-5h3V4h4v7h3l-5 5zm-7 2h14v2H5v-2z" />
+          </svg>
+          Download
+        </a>
+      </div>
+      <p className="text-xs text-slate-400 font-mono">
+        Version {app.version}{app.beta && ' beta'}
+        {app.sizeMb > 0 && <> · {app.sizeMb} MB</>}
+        {' '}· Android {app.minAndroid} or newer · not on the Play Store yet
+      </p>
+      {app.sha256 && (
+        <details className="text-xs text-slate-400">
+          <summary className="cursor-pointer hover:text-slate-200 py-1">Check the download (SHA-256)</summary>
+          <code className="block mt-2 break-all font-mono text-slate-300 bg-slate-900 px-3 py-2 rounded-lg border border-slate-800">
+            {app.sha256}
+          </code>
+        </details>
+      )}
+    </div>
+  )
+}
+
 export default function AndroidInstall({ headingLevel = 2 }: { headingLevel?: 1 | 2 }) {
   const H = headingLevel === 1 ? 'h1' : 'h2'
+  const Sub = headingLevel === 1 ? 'h2' : 'h3'
   return (
     <section id="android" aria-labelledby="android-heading" className="max-w-4xl mx-auto w-full px-6 pb-16 scroll-mt-20">
       <div className="rounded-2xl border border-slate-800 bg-slate-900/40 p-6 sm:p-8 space-y-6">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div className="space-y-1">
-            <H id="android-heading" className="text-lg font-semibold text-slate-100" style={{ fontFamily: "'DM Sans', sans-serif" }}>
-              Ah-Ha for Android
-            </H>
-            <p className="text-slate-300 text-sm" style={{ fontFamily: "'DM Sans', sans-serif" }}>
-              Today screen, home-screen widget, reminders, NFC tags and automatic check-ins. Works offline and syncs when you&apos;re back.
-            </p>
-          </div>
-          <a
-            href={ANDROID.url}
-            download
-            className="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-sm font-semibold rounded-xl transition shrink-0"
-            style={{ fontFamily: "'DM Sans', sans-serif" }}
-          >
-            <svg viewBox="0 0 24 24" className="w-4 h-4 fill-current" aria-hidden="true">
-              <path d="M12 16l-5-5h3V4h4v7h3l-5 5zm-7 2h14v2H5v-2z" />
-            </svg>
-            Download for Android
-          </a>
+        <div className="space-y-1">
+          <H id="android-heading" className="text-lg font-semibold text-slate-100" style={{ fontFamily: "'DM Sans', sans-serif" }}>
+            Android apps
+          </H>
+          <p className="text-sm text-amber-200/90" style={{ fontFamily: "'DM Sans', sans-serif" }}>
+            Both apps are in beta: they work and we use them daily, but they are still changing and you may hit rough edges.
+            Don&apos;t make Ah! Rhythm your only reminder for a prescription medicine.
+          </p>
         </div>
 
-        <p className="text-xs text-slate-400 font-mono">
-          Version {ANDROID.version}
-          {ANDROID.sizeMb > 0 && <> · {ANDROID.sizeMb} MB</>}
-          {' '}· Android {ANDROID.minAndroid} or newer · not on the Play Store yet
-        </p>
+        <div className="space-y-4">
+          {APPS.map(app => <AppCard key={app.id} app={app} H={Sub} />)}
+        </div>
 
-        <ol className="space-y-4">
+        <ol className="space-y-4" aria-label="How to install">
           {STEPS.map((s, i) => (
             <li key={s.title} className="flex gap-4">
               <span className="w-7 h-7 rounded-full bg-indigo-950 border border-indigo-800 text-indigo-300 text-xs font-mono flex items-center justify-center shrink-0" aria-hidden="true">
@@ -93,15 +171,6 @@ export default function AndroidInstall({ headingLevel = 2 }: { headingLevel?: 1 
             </li>
           ))}
         </ol>
-
-        {ANDROID.sha256 && (
-          <details className="text-xs text-slate-400">
-            <summary className="cursor-pointer hover:text-slate-200 py-1">Check the download (SHA-256)</summary>
-            <code className="block mt-2 break-all font-mono text-slate-300 bg-slate-900 px-3 py-2 rounded-lg border border-slate-800">
-              {ANDROID.sha256}
-            </code>
-          </details>
-        )}
       </div>
     </section>
   )
