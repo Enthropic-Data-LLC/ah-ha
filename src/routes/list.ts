@@ -4,6 +4,7 @@ import { ObjectId } from 'mongodb'
 import { between, initial } from '../lib/lexorank.js'
 import { annotate, currentPlace, orgPlaces, resolveAt, taggedTo } from '../lib/places.js'
 import { canSee } from '../lib/scopes.js'
+import { REPEATS, reopenAlways } from '../lib/repeat.js'
 
 const listRoutes: FastifyPluginAsync = async (fastify) => {
   // GET /api/list/:slug/items — location-aware: each item gets `places` and `here`,
@@ -15,6 +16,7 @@ const listRoutes: FastifyPluginAsync = async (fastify) => {
     { preHandler: fastify.authenticate },
     async (req) => {
       const orgId = req.user!.orgId
+      await reopenAlways(fastify, orgId, req.user!.id)
       // A connected app sees the current place only with situation:place.
       const [here, places] = await Promise.all([
         canSee(req, 'situation:place') ? currentPlace(fastify, req.user!.id, orgId) : null,
@@ -24,6 +26,7 @@ const listRoutes: FastifyPluginAsync = async (fastify) => {
 
       const space = await getSpace(fastify, req.params.slug, orgId)
       if (!space) return { data: [], meta }
+      meta['default_repeat'] = (space['settings'] as { default_repeat?: string } | undefined)?.default_repeat ?? 'once'
 
       const filter: Record<string, unknown> = {
         space_id: space._id,
@@ -62,6 +65,8 @@ const listRoutes: FastifyPluginAsync = async (fastify) => {
         title:    z.string().min(1).max(500),
         due_at:   z.string().datetime().optional(),
         contexts: z.array(z.object({ entity_id: z.string(), time_chunks: z.array(z.string()).default([]) })).default([]),
+        // Unset: the list's own default (settings.default_repeat), else "once".
+        repeat:   z.enum(REPEATS).optional(),
       }).parse(req.body)
 
       const space = await getSpace(fastify, req.params.slug, req.user!.orgId)
@@ -81,6 +86,7 @@ const listRoutes: FastifyPluginAsync = async (fastify) => {
         done_at:  null,
         due_at:   body.due_at ? new Date(body.due_at) : null,
         contexts: body.contexts,
+        repeat:   body.repeat ?? ((space['settings'] as { default_repeat?: string } | undefined)?.default_repeat === 'always' ? 'always' : 'once'),
         position: last ? (last['position'] as number) + 1.0 : initial(),
         created_by:  req.user!.id,
         created_at:  new Date(),
@@ -91,7 +97,7 @@ const listRoutes: FastifyPluginAsync = async (fastify) => {
     }
   )
 
-  // PATCH /api/list/:slug/items/:id — update title, due_at
+  // PATCH /api/list/:slug/items/:id — update title, due_at, repeat
   fastify.patch<{ Params: { slug: string; id: string } }>(
     '/api/list/:slug/items/:id',
     { preHandler: fastify.authenticate },
@@ -101,6 +107,7 @@ const listRoutes: FastifyPluginAsync = async (fastify) => {
         due_at:      z.string().datetime().nullable().optional(),
         defer_until: z.string().datetime().nullable().optional(),
         contexts:    z.array(z.object({ entity_id: z.string(), time_chunks: z.array(z.string()).default([]) })).optional(),
+        repeat:      z.enum(REPEATS).optional(),
       }).parse(req.body)
 
       const update: Record<string, unknown> = {}
@@ -108,12 +115,28 @@ const listRoutes: FastifyPluginAsync = async (fastify) => {
       if (body.due_at !== undefined) update['due_at'] = body.due_at ? new Date(body.due_at) : null
       if (body.defer_until !== undefined) update['defer_until'] = body.defer_until ? new Date(body.defer_until) : null
       if (body.contexts !== undefined) update['contexts'] = body.contexts
+      if (body.repeat !== undefined) update['repeat'] = body.repeat
 
       const result = await fastify.mongo.collection('list_items').updateOne(
         { _id: new ObjectId(req.params.id), org_id: req.user!.orgId, deleted_at: { $exists: false } },
         { $set: update }
       )
       if (result.matchedCount === 0) return reply.status(404).send({ error: 'Not found' })
+      return { ok: true }
+    }
+  )
+
+  // PATCH /api/list/:slug/settings — what new items default to ("once" | "always")
+  fastify.patch<{ Params: { slug: string } }>(
+    '/api/list/:slug/settings',
+    { preHandler: fastify.authenticate },
+    async (req, reply) => {
+      const { default_repeat } = z.object({ default_repeat: z.enum(REPEATS) }).parse(req.body)
+      const result = await fastify.mongo.collection('spaces').updateOne(
+        { slug: req.params.slug, type: 'list', org_id: req.user!.orgId, deleted_at: { $exists: false } },
+        { $set: { 'settings.default_repeat': default_repeat, updated_at: new Date() } },
+      )
+      if (result.matchedCount === 0) return reply.status(404).send({ error: 'List not found' })
       return { ok: true }
     }
   )

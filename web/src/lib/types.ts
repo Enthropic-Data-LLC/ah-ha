@@ -106,4 +106,6 @@ export interface ListItem {
   due_at: string | null
   defer_until?: string | null
   contexts?: Array<{ entity_id: string; time_chunks: string[] }>
+  /** "always" comes back open the next day after it's checked; "once" (or unset) stays done. */
+  repeat?: 'once' | 'always'
 }

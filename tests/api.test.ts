@@ -220,6 +220,32 @@ describe('List', () => {
     const { status } = await req('PATCH', `/api/list/${listSlug}/items/${itemId}/check`, { done: true })
     expect(status).toBe(200)
   })
+
+  it('items are 1x by default; "always" can be set per item or as the list default', async () => {
+    type Item = { _id: string; repeat?: string; done: boolean }
+    type Res = { data: Item[]; meta: { default_repeat: string } }
+    const add = async (body: Record<string, unknown>) =>
+      ((await req<{ data: Item }>('POST', `/api/list/${listSlug}/items`, body)).body as { data: Item }).data
+    expect((await add({ title: 'Return the book' })).repeat).toBe('once')
+    const laptop = await add({ title: 'Laptop', repeat: 'always' })
+    expect(laptop.repeat).toBe('always')
+
+    // Checked "always" items stay checked today (they reopen tomorrow).
+    await req('PATCH', `/api/list/${listSlug}/items/${laptop._id}/check`, { done: true })
+    let r = (await req<Res>('GET', `/api/list/${listSlug}/items`)).body as Res
+    expect(r.data.find(i => i._id === laptop._id)?.done).toBe(true)
+    expect(r.meta.default_repeat).toBe('once')
+
+    expect((await req('PATCH', `/api/list/${listSlug}/settings`, { default_repeat: 'always' })).status).toBe(200)
+    expect((await add({ title: 'Badge' })).repeat).toBe('always')
+    expect((await add({ title: 'Cake for Friday', repeat: 'once' })).repeat).toBe('once')
+    r = (await req<Res>('GET', `/api/list/${listSlug}/items`)).body as Res
+    expect(r.meta.default_repeat).toBe('always')
+
+    expect((await req('PATCH', `/api/list/${listSlug}/items/${laptop._id}`, { repeat: 'once' })).status).toBe(200)
+    expect((await req('PATCH', `/api/list/${listSlug}/settings`, { default_repeat: 'sometimes' })).status).toBe(400)
+    await req('PATCH', `/api/list/${listSlug}/settings`, { default_repeat: 'once' })
+  })
 })
 
 // ── Table ───────────────────────────────────────────────────────────────────

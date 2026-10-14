@@ -35,7 +35,7 @@ export async function streak(fastify: FastifyInstance, orgId: ObjectId, tz: stri
       [orgId.toString(), since, tz, AUTOMATIC_SOURCES],
     ).catch(() => ({ rows: [] as Array<{ day: string }> })),   // trail store down: still count the rest
     fastify.mongo.collection('list_items')
-      .find({ org_id: orgId, done: true, done_at: { $gte: since } }).project({ done_at: 1 }).toArray(),
+      .find({ org_id: orgId, done_at: { $gte: since } }).project({ done_at: 1 }).toArray(),
     fastify.mongo.collection('board_cards')
       .find({ org_id: orgId, completed_at: { $gte: since } }).project({ completed_at: 1 }).toArray(),
   ])

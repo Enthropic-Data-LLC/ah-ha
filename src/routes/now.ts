@@ -7,6 +7,7 @@ import { placeFromPresence, presenceRaw as readPresence } from '../lib/places.js
 import { streak } from '../lib/streak.js'
 import { situation } from '../lib/situation.js'
 import { pickFocus, type Candidate, type Focus } from '../lib/focus.js'
+import { reopenAlways } from '../lib/repeat.js'
 
 const TIME_CHUNKS: Record<string, (h: number, dow: number) => boolean> = {
   wakeup:          (h)     => h >= 5  && h < 8,
@@ -62,6 +63,7 @@ const nowRoutes: FastifyPluginAsync = async (fastify) => {
     async (req) => {
       const now = new Date()
       const tz = req.query.tz ?? 'UTC'
+      await reopenAlways(fastify, req.user!.orgId, req.user!.id, req.query.tz)
       const localHour = parseInt(
         new Intl.DateTimeFormat('en-US', { timeZone: tz, hour: 'numeric', hour12: false }).format(now)
       )

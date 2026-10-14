@@ -23,7 +23,7 @@ const summaryRoutes: FastifyPluginAsync = async (fastify) => {
           $or: [{ completed_at: { $gte: since } }, { 'recurrence.last_completed_at': { $gte: since } }],
         }).toArray(),
         fastify.mongo.collection('list_items').find({
-          org_id: orgId, deleted_at: { $exists: false }, done: true, done_at: { $gte: since },
+          org_id: orgId, deleted_at: { $exists: false }, done_at: { $gte: since },   // not done: true — a reopened "always" item still counts the day
         }).toArray(),
         fastify.mongo.collection('board_cards').find({
           org_id: orgId, deleted_at: { $exists: false },

@@ -32,14 +32,15 @@ export function registerListTools(server: McpServer) {
 
   server.tool(
     'aha_list_add',
-    'Add a new item to a List space',
+    'Add a new item to a List space. repeat "always" = a standing item (e.g. "laptop" on an always-take list): checking it means "have it this time" and it comes back open the next day; "once" = done for good when checked. Unset uses the list\'s default.',
     {
       slug: z.string().describe('List slug'),
       text: z.string().min(1).max(500).describe('Item text'),
+      repeat: z.enum(['once', 'always']).optional().describe('"always" comes back the next day after being checked; "once" stays done. Default: the list\'s setting'),
     },
     // Backend expects { title } — map from user-friendly param name `text`
-    async ({ slug, text }) => {
-      const data = await post(`/api/list/${slug}/items`, { title: text })
+    async ({ slug, text, repeat }) => {
+      const data = await post(`/api/list/${slug}/items`, { title: text, ...(repeat ? { repeat } : {}) })
       return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] }
     },
   )
@@ -60,15 +61,16 @@ export function registerListTools(server: McpServer) {
 
   server.tool(
     'aha_list_update',
-    'Update a list item title',
+    'Update a list item: its title and/or whether it is "always" (comes back the next day after being checked) or "once"',
     {
       slug: z.string().describe('List slug'),
       id: z.string().describe('Item ID'),
-      text: z.string().min(1).max(500).describe('New item text'),
+      text: z.string().min(1).max(500).optional().describe('New item text'),
+      repeat: z.enum(['once', 'always']).optional().describe('"always" or "once"'),
     },
     // Backend expects { title } — map from `text`
-    async ({ slug, id, text }) => {
-      const data = await patch(`/api/list/${slug}/items/${id}`, { title: text })
+    async ({ slug, id, text, repeat }) => {
+      const data = await patch(`/api/list/${slug}/items/${id}`, { ...(text ? { title: text } : {}), ...(repeat ? { repeat } : {}) })
       return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] }
     },
   )

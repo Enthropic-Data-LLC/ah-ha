@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
 import { ObjectId } from 'mongodb'
 import { currentPlace } from '../lib/places.js'
+import { reopenAlways } from '../lib/repeat.js'
 import { emit } from '../link/engine.js'
 
 const signatureSchema = z.discriminatedUnion('kind', [
@@ -11,7 +12,8 @@ const signatureSchema = z.discriminatedUnion('kind', [
 ])
 
 /** Open list items and cards tagged to a place — what to do or get there. */
-async function taggedOpen(fastify: FastifyInstance, orgId: ObjectId, entityIdStr: string) {
+async function taggedOpen(fastify: FastifyInstance, orgId: ObjectId, userId: ObjectId, entityIdStr: string) {
+  await reopenAlways(fastify, orgId, userId)
   const [listItems, cards] = await Promise.all([
     fastify.mongo.collection('list_items').find({
       org_id: orgId, done: false, deleted_at: { $exists: false }, 'contexts.entity_id': entityIdStr,
@@ -238,7 +240,7 @@ const entityRoutes: FastifyPluginAsync = async (fastify) => {
     const orgId = req.user!.orgId
     const place = await currentPlace(fastify, req.user!.id, orgId)
     if (!place) return { data: { location: null, list_items: [], cards: [], total: 0 } }
-    const { listItems, cards } = await taggedOpen(fastify, orgId, place._id)
+    const { listItems, cards } = await taggedOpen(fastify, orgId, req.user!.id, place._id)
     const spaces = await fastify.mongo.collection('spaces')
       .find({ _id: { $in: [...new Set(listItems.map(i => String(i['space_id'])))].map(id => new ObjectId(id)) } })
       .project({ slug: 1, name: 1 }).toArray()
@@ -278,7 +280,7 @@ const entityRoutes: FastifyPluginAsync = async (fastify) => {
         })
         if (!entity) continue
 
-        const { listItems, cards } = await taggedOpen(fastify, orgId, idStr)
+        const { listItems, cards } = await taggedOpen(fastify, orgId, req.user!.id, idStr)
 
         sections.push({
           entity: { _id: entity['_id'].toString(), name: entity['name'] as string, icon: entity['icon'] as string },
@@ -306,7 +308,7 @@ const entityRoutes: FastifyPluginAsync = async (fastify) => {
       const entityIdStr = entityId.toString()
       const orgId = req.user!.orgId
 
-      const { listItems, cards } = await taggedOpen(fastify, orgId, entityIdStr)
+      const { listItems, cards } = await taggedOpen(fastify, orgId, req.user!.id, entityIdStr)
 
       return {
         data: {
