@@ -37,7 +37,7 @@ You never have to tick items one at a time:
 
 - On Today, tap **Take all** next to a time.
 - On the reminder, tap **Took all**.
-- Or tap an [[nfc-tags|NFC tag]] (Ah! Rhythm needs to be connected to Ah-Ha for this). A tag naming a time ("Bedtime vitamins") ticks off that time. A tag that names nothing ticks off the group nearest to now.
+- Or use an [[nfc-tags|NFC tag or QR code]] (Ah! Rhythm needs to be connected to Ah-Ha for this). A tag naming a time ("Bedtime vitamins") ticks off that time. A tag that names nothing ticks off the group nearest to now.
 
 If you're connected to Ah-Ha, each group also shows on [[ah-today|Ah! Today]], and ticking it there counts in Ah! Rhythm too.
 

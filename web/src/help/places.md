@@ -18,7 +18,7 @@ The phone has to be allowed to use your location for this. You can change the si
 
 ## Check in by hand
 
-You can also check in yourself, or with an [[nfc-tags|NFC tag]] by the door.
+You can also check in yourself, or with an [[nfc-tags|NFC tag or QR code]] by the door.
 
 ## Tag things to a place
 

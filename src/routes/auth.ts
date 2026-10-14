@@ -17,7 +17,7 @@ const magicLinkBody = z.object({
 const RESERVED_USERNAMES = new Set([
   'accessibility', 'android', 'api', 'assets', 'audit', 'auth', 'calendar', 'connect', 'download',
   'healthz', 'help', 'icons', 'keys', 'mqtt', 'now', 'onboarding', 'privacy', 'search', 'settings', 'spaces',
-  'terms', 'webhooks',
+  'tags', 'terms', 'webhooks',
 ])
 
 function devLinkAllowed(addr: string | undefined): boolean {

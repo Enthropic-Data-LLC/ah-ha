@@ -190,6 +190,17 @@ await fastify.register(async (sub) => {
   await sub.register(linkRoutes, { engine: () => linkEngine })
 })
 
+// Android App Links: lets the Ah-Ha app open tag links (https://ah-ha.app/t/<id>) straight
+// from a QR scan, the way an NFC tap does. The fingerprint is the release signing key's.
+const ANDROID_APP_CERTS = (process.env['ANDROID_APP_CERT_SHA256'] ?? '50:95:B4:E8:1F:1B:88:E6:58:0C:5D:80:13:29:66:99:9D:0F:AE:A1:66:1C:90:AC:38:89:29:05:50:F2:9F:AE').split(',')
+fastify.get('/.well-known/assetlinks.json', async (_req, reply) => {
+  reply.header('cache-control', 'public, max-age=3600')
+  return [{
+    relation: ['delegate_permission/common.handle_all_urls'],
+    target: { namespace: 'android_app', package_name: 'app.ahha.android', sha256_cert_fingerprints: ANDROID_APP_CERTS },
+  }]
+})
+
 fastify.get('/healthz', async () => ({ ok: true, ts: new Date().toISOString() }))
 
 const webDist = join(dirname(fileURLToPath(import.meta.url)), '..', 'web', 'dist')

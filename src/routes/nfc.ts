@@ -104,7 +104,9 @@ const nfcRoutes: FastifyPluginAsync = async (fastify) => {
           tone: action.tone,
           source: 'nfc',
           tags: ['nfc'],
-          meta: { nfc_tag: tag['tag_id'], nfc_name: tag['name'] },
+          // source stays "nfc" for every way in, so everything that reads tag taps (Ah! Rhythm,
+          // the day summary) counts QR scans too; `via` says which it was.
+          meta: { nfc_tag: tag['tag_id'], nfc_name: tag['name'], via: (req as FastifyRequest & { tapVia?: string }).tapVia ?? 'nfc' },
         })
         return `Logged: ${action.text}`
       case 'checkin': {
@@ -195,6 +197,9 @@ const nfcRoutes: FastifyPluginAsync = async (fastify) => {
   // POST /api/nfc/tap/:tagId — run the tag's action
   fastify.post<{ Params: { tagId: string } }>(
     '/api/nfc/tap/:tagId', { preHandler: fastify.authenticate }, async (req, reply) => {
+      // How it was used: an NFC tap (default, older apps send nothing), a QR scan, or the web page.
+      const via = (req.body as { via?: string } | null)?.via
+      ;(req as FastifyRequest & { tapVia?: string }).tapVia = via === 'qr' || via === 'web' ? via : 'nfc'
       const tag = await findTag(req, req.params.tagId)
       if (!tag) return reply.status(404).send({ error: 'Unknown tag' })
       const action = tag['action'] as TagAction

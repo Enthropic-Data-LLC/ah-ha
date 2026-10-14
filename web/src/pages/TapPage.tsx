@@ -29,7 +29,7 @@ export default function TapPage({ tagId }: { tagId: string }) {
   async function runTag() {
     setRunning(true); setFailure(null)
     try {
-      const res = await api.post<{ data: { message: string } }>(`/api/nfc/tap/${tagId}`, {})
+      const res = await api.post<{ data: { message: string } }>(`/api/nfc/tap/${tagId}`, { via: 'web' })
       setResult(res.data.message)
     } catch (err) {
       setFailure(err instanceof ApiError ? err.message : 'Something went wrong')

@@ -23,6 +23,8 @@ import NowPage from './pages/NowPage'
 import TapPage from './pages/TapPage'
 import EntityPage from './pages/EntityPage'
 import { PrivacyPage, TermsPage, AccessibilityPage, AndroidPage } from './pages/PublicPages'
+import TagsPage from './pages/TagsPage'
+import TagsPrintPage from './pages/TagsPrintPage'
 import HelpPage from './pages/HelpPage'
 import SkipLink from './components/SkipLink'
 
@@ -105,6 +107,7 @@ function Shell({ children }: { children: React.ReactNode }) {
         <div className="flex items-center gap-3">
           {user && (
             <>
+              {navLink('/tags', 'Tags')}
               {navLink('/keys', 'API Keys')}
               {navLink('/calendar', 'Calendar')}
               {navLink('/settings', 'Settings')}
@@ -150,6 +153,7 @@ function Shell({ children }: { children: React.ReactNode }) {
               {drawerLink(spacesHref, '⊞  Spaces')}
               {drawerLink(entitiesHref, '📍  Entities')}
               {drawerLink('/search', '⌕  Search')}
+              {drawerLink('/tags', '🏷️  Tags & QR codes')}
               <p className="text-[10px] font-mono uppercase tracking-wider text-slate-600 px-3 pb-1 pt-3">Settings</p>
               {drawerLink('/calendar', '📅  Calendar')}
               {drawerLink('/settings', '🔔  Notifications')}
@@ -227,8 +231,9 @@ export default function App() {
     return <ConnectPage />
   }
 
-  // Redirect to auth if logged out
+  // Redirect to auth if logged out (a scanned tag link comes back here after sign-in)
   if (isLoggedOut) {
+    if (/^\/t\/[2-9a-km-z]{20}$/.test(path)) rememberReturn()
     window.location.href = '/auth'
     return null
   }
@@ -295,6 +300,8 @@ export default function App() {
   if (path === '/keys') {
     return <Shell><KeysPage /></Shell>
   }
+  if (path === '/tags') return <Shell><TagsPage /></Shell>
+  if (path === '/tags/print') return <TagsPrintPage />
 
   // /:username — redirect to /:username/spaces
   const userHomeMatch = path.match(/^\/([^/]+)$/)

@@ -14,13 +14,13 @@ export function rememberReturn() {
   try { localStorage.setItem(RETURN_KEY, JSON.stringify({ to: location.pathname + location.search, at: Date.now() })) } catch { /* private mode */ }
 }
 
-/** The /connect URL to resume after sign-in, if one was saved in the last 30 minutes. */
+/** The /connect URL or tag link (/t/<id>, e.g. a scanned QR code) to resume after sign-in, if saved in the last 30 minutes. */
 export function takeReturn(): string | null {
   try {
     const raw = localStorage.getItem(RETURN_KEY)
     localStorage.removeItem(RETURN_KEY)
     const r = raw ? JSON.parse(raw) as { to: string; at: number } : null
-    return r && Date.now() - r.at < 30 * 60_000 && r.to.startsWith('/connect?') ? r.to : null
+    return r && Date.now() - r.at < 30 * 60_000 && (r.to.startsWith('/connect?') || /^\/t\/[2-9a-km-z]{20}$/.test(r.to)) ? r.to : null
   } catch { return null }
 }
 

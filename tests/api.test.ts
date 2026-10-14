@@ -643,3 +643,32 @@ describe('Modules', () => {
     expect((r.body as Ran).data).toHaveProperty('ah-restock')
   })
 })
+
+// ── Tags as QR codes ────────────────────────────────────────────────────────
+
+describe('Tags: NFC and QR', () => {
+  it('a QR scan runs the tag like an NFC tap and says so in the trail entry', async () => {
+    type Tag = { data: { tag_id: string; url: string } }
+    const made = ((await req<Tag>('POST', '/api/nfc/tags', { name: `QR test ${Date.now()}`, icon: '🧪', action: { type: 'trail', space_slug: trailSlug, text: `qr-scan-${Date.now()}` } })).body as Tag).data
+    expect(made.url).toMatch(/\/t\/[2-9a-km-z]{20}$/)
+    type Tap = { data: { duplicate: boolean; message: string } }
+    const tap = (await req<Tap>('POST', `/api/nfc/tap/${made.tag_id}`, { via: 'qr' })).body as Tap
+    expect(tap.data.duplicate).toBe(false)
+    type Entries = { data: Array<{ source: string; meta: { nfc_tag?: string; via?: string } }> }
+    const entries = ((await req<Entries>('GET', `/api/trail/${trailSlug}/entries?limit=20`)).body as Entries).data
+    const e = entries.find(x => x.meta?.nfc_tag === made.tag_id)
+    expect(e?.source).toBe('nfc')        // every way in counts as a tag tap
+    expect(e?.meta.via).toBe('qr')
+    // A second scan right away is the same use.
+    expect(((await req<Tap>('POST', `/api/nfc/tap/${made.tag_id}`, { via: 'qr' })).body as Tap).data.duplicate).toBe(true)
+    await req('DELETE', `/api/nfc/tags/${made.tag_id}`)
+  })
+
+  it('serves the Android App Links file for tag links', async () => {
+    type Links = Array<{ target: { package_name: string; sha256_cert_fingerprints: string[] } }>
+    const { status, body } = await req<Links>('GET', '/.well-known/assetlinks.json')
+    expect(status).toBe(200)
+    expect((body as Links)[0]!.target.package_name).toBe('app.ahha.android')
+    expect((body as Links)[0]!.target.sha256_cert_fingerprints[0]).toMatch(/^([0-9A-F]{2}:){31}[0-9A-F]{2}$/)
+  })
+})
