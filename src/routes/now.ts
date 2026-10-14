@@ -148,7 +148,7 @@ const nowRoutes: FastifyPluginAsync = async (fastify) => {
       }).sort({ due_at: 1 }).limit(10).toArray()
 
       // Entity-tagged list items — surface when checked in, regardless of due date
-      let entityListItems: Array<{ _id: string; title: string; space_ref?: string; contexts: unknown }> = []
+      let entityListItems: Array<{ _id: string; title: string; space_ref?: string; contexts: unknown; repeat: string }> = []
       if (presenceRaw && OID_RE.test(presenceRaw)) {
         const raw = await fastify.mongo.collection('list_items').find({
           org_id: orgId,
@@ -169,6 +169,7 @@ const nowRoutes: FastifyPluginAsync = async (fastify) => {
           title: item['title'] as string,
           space_ref: item['space_id']?.toString(),
           contexts: item['contexts'],
+          repeat: (item['repeat'] as string | undefined) ?? 'once',
         }))
       }
 
@@ -374,7 +375,7 @@ const nowRoutes: FastifyPluginAsync = async (fastify) => {
           habits:    sortByTimeChunk(habits,    localHour, localDow).map(c => ({ _id: c['_id'], title: c['title'], recurrence: c['recurrence'], ref: c['ref'] })),
           resurfaced: sortByTimeChunk(resurfaced, localHour, localDow).map(c => ({ _id: c['_id'], title: c['title'], ref: c['ref'] })),
           nudges:     nudges.map(c => ({ _id: c['_id'], title: c['title'], ref: c['ref'], recurrence: c['recurrence'], created_at: c['created_at'] })),
-          list_items: listItems.map(i => ({ _id: i['_id'], title: i['title'], due_at: i['due_at'] })),
+          list_items: listItems.map(i => ({ _id: i['_id'], title: i['title'], due_at: i['due_at'], repeat: i['repeat'] ?? 'once' })),
           entity_list_items: entityListItems,
           location_context: locationCards,
           trail_pulse: trailPulse,

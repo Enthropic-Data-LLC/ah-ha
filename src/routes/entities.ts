@@ -248,7 +248,7 @@ const entityRoutes: FastifyPluginAsync = async (fastify) => {
     return {
       data: {
         location: place,
-        list_items: listItems.map(i => ({ _id: String(i['_id']), title: i['title'], list: listOf.get(String(i['space_id'])) ?? null })),
+        list_items: listItems.map(i => ({ _id: String(i['_id']), title: i['title'], list: listOf.get(String(i['space_id'])) ?? null, repeat: i['repeat'] ?? 'once' })),
         cards: cards.map(c => ({ _id: String(c['_id']), title: c['title'], ref: c['ref'], due_date: c['due_date'] ?? null })),
         total: listItems.length + cards.length,
       },
@@ -266,7 +266,7 @@ const entityRoutes: FastifyPluginAsync = async (fastify) => {
       const orgId = req.user!.orgId
       const sections: Array<{
         entity: { _id: string; name: string; icon: string }
-        list_items: Array<{ _id: string; title: string }>
+        list_items: Array<{ _id: string; title: string; repeat: string }>
         cards: Array<{ _id: string; title: string; ref: string }>
         total: number
       }> = []
@@ -284,7 +284,7 @@ const entityRoutes: FastifyPluginAsync = async (fastify) => {
 
         sections.push({
           entity: { _id: entity['_id'].toString(), name: entity['name'] as string, icon: entity['icon'] as string },
-          list_items: listItems.map(i => ({ _id: i['_id'].toString(), title: i['title'] as string })),
+          list_items: listItems.map(i => ({ _id: i['_id'].toString(), title: i['title'] as string, repeat: (i['repeat'] as string | undefined) ?? 'once' })),
           cards: cards.map(c => ({ _id: c['_id'].toString(), title: c['title'] as string, ref: c['ref'] as string })),
           total: listItems.length + cards.length,
         })
@@ -313,7 +313,7 @@ const entityRoutes: FastifyPluginAsync = async (fastify) => {
       return {
         data: {
           entity: { _id: entity['_id'], name: entity['name'] as string, icon: entity['icon'] as string },
-          list_items: listItems.map(i => ({ _id: i['_id'].toString(), title: i['title'], space_id: i['space_id']?.toString() })),
+          list_items: listItems.map(i => ({ _id: i['_id'].toString(), title: i['title'], space_id: i['space_id']?.toString(), repeat: i['repeat'] ?? 'once' })),
           cards: cards.map(c => ({ _id: c['_id'].toString(), title: c['title'], ref: c['ref'] })),
           total: listItems.length + cards.length,
         }
