@@ -67,6 +67,9 @@ const listRoutes: FastifyPluginAsync = async (fastify) => {
         contexts: z.array(z.object({ entity_id: z.string(), time_chunks: z.array(z.string()).default([]) })).default([]),
         // Unset: the list's own default (settings.default_repeat), else "once".
         repeat:   z.enum(REPEATS).optional(),
+        // Which module added it (e.g. "ah-restock") and why, shown under the item.
+        source:   z.string().max(64).regex(/^[a-z0-9][a-z0-9-]*$/).optional(),
+        reason:   z.string().max(300).optional(),
       }).parse(req.body)
 
       const space = await getSpace(fastify, req.params.slug, req.user!.orgId)
@@ -87,6 +90,8 @@ const listRoutes: FastifyPluginAsync = async (fastify) => {
         due_at:   body.due_at ? new Date(body.due_at) : null,
         contexts: body.contexts,
         repeat:   body.repeat ?? ((space['settings'] as { default_repeat?: string } | undefined)?.default_repeat === 'always' ? 'always' : 'once'),
+        ...(body.source ? { source: body.source } : {}),
+        ...(body.reason ? { reason: body.reason } : {}),
         position: last ? (last['position'] as number) + 1.0 : initial(),
         created_by:  req.user!.id,
         created_at:  new Date(),
@@ -116,10 +121,14 @@ const listRoutes: FastifyPluginAsync = async (fastify) => {
       if (body.defer_until !== undefined) update['defer_until'] = body.defer_until ? new Date(body.defer_until) : null
       if (body.contexts !== undefined) update['contexts'] = body.contexts
       if (body.repeat !== undefined) update['repeat'] = body.repeat
+      // A snooze into the future by the person (not a connected app: Ah! Rhythm times its
+      // own items with defer_until) counts toward Follow-through.
+      const snooze = !req.apiKeyScopes && update['defer_until'] instanceof Date && (update['defer_until'] as Date) > new Date()
+      if (snooze) update['last_deferred_at'] = new Date()
 
       const result = await fastify.mongo.collection('list_items').updateOne(
         { _id: new ObjectId(req.params.id), org_id: req.user!.orgId, deleted_at: { $exists: false } },
-        { $set: update }
+        { $set: update, ...(snooze ? { $inc: { defer_count: 1 } } : {}) }
       )
       if (result.matchedCount === 0) return reply.status(404).send({ error: 'Not found' })
       return { ok: true }
@@ -150,7 +159,7 @@ const listRoutes: FastifyPluginAsync = async (fastify) => {
 
       const result = await fastify.mongo.collection('list_items').updateOne(
         { _id: new ObjectId(req.params.id), org_id: req.user!.orgId, deleted_at: { $exists: false } },
-        { $set: { done, done_at: done ? new Date() : null } }
+        { $set: { done, done_at: done ? new Date() : null, ...(done ? { defer_count: 0, followthrough: null } : {}) } }
       )
       if (result.matchedCount === 0) return reply.status(404).send({ error: 'Not found' })
       return { ok: true }

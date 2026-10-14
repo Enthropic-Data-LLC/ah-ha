@@ -40,6 +40,9 @@ const TIME_OF_DAY = (h: number) => {
 
 const OID_RE = /^[0-9a-f]{24}$/i
 
+/** Snoozed this many times → Follow-through (modules/followthrough) brings it forward. */
+const SNOOZED_OFTEN = 3
+
 // The briefing is an AI call (cost + ~2s), and /api/now is polled every minute by the
 // web page, the phone app and its widget. So it is regenerated only when what it
 // describes changes — place or time of day — or when someone opens the app/page
@@ -193,6 +196,19 @@ const nowRoutes: FastifyPluginAsync = async (fastify) => {
             personC.push(...cs.map(c => cardC(c, 3, who)), ...is.map(i => itemC(i as { _id: unknown; title: unknown }, 3, who)))
           }
         }
+        // Follow-through: things put off SNOOZED_OFTEN+ times, with the first step it worked out.
+        const [stuckCards, stuckItems] = await Promise.all([
+          c.cards.snoozedOften(caller, SNOOZED_OFTEN, 3, now),
+          c.lists.snoozedOften(caller, SNOOZED_OFTEN, 3, now),
+        ])
+        const stuckWhy = (d: Record<string, unknown>) => {
+          const step = (d['followthrough'] as { first_step?: string | null } | null | undefined)?.first_step
+          return [`snoozed ${Number(d['defer_count'])} times`, step ? `first step: ${step}` : 'a 5-minute start, a new date, or let it go']
+        }
+        const stuck: Candidate[] = [
+          ...stuckCards.map(d => ({ ...cardC(d, 3, ''), reasons: stuckWhy(d) })),
+          ...stuckItems.map(d => ({ ...itemC(d as { _id: unknown; title: unknown }, 3, ''), reasons: stuckWhy(d) })),
+        ]
         const here = presencePlace?.name ?? 'here'
         const all: Candidate[] = [
           ...urgent.map(c => cardC(c, 5, 'overdue')),
@@ -208,6 +224,7 @@ const nowRoutes: FastifyPluginAsync = async (fastify) => {
               now_ ? `due ${due!.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: tz })}` : 'due today')
           }),
           ...personC,
+          ...stuck,
         ]
         // The same item from several sections: keep the strongest, merge the reasons.
         const byId = new Map<string, Candidate>()
@@ -247,12 +264,15 @@ const nowRoutes: FastifyPluginAsync = async (fastify) => {
             ev.all_day ? ev.title : `${ev.title} at ${fmtTime(ev.start)}`
           )
 
+          // Early in the week, last week's patterns (modules/patterns) give the briefing more to go on.
+          const week = await c.trail.ofType(caller, ['ah-patterns/week@1'], new Date(now.getTime() - 3 * 86_400_000)).catch(() => [])
           const context = [
             urgent.length > 0 ? `${urgent.length} overdue tasks: ${urgent.map(c => c['title']).join(', ')}` : '',
             dueToday.length > 0 ? `${dueToday.length} due today: ${dueToday.map(c => c['title']).join(', ')}` : '',
             habits.length > 0 ? `habits now: ${habits.map(c => `${c['title']} (streak: ${(c['recurrence'] as Record<string, unknown>)?.['streak_count'] ?? 0})`).join(', ')}` : '',
             calLines.length > 0 ? `upcoming appointments (next 16h): ${calLines.join(', ')}` : '',
             presenceEntity ? `currently at: ${presenceEntity.name}` : '',
+            week.length ? `last week: ${week.at(-1)!.text.replace(/^📈\s*/, '')}` : '',
           ].filter(Boolean).join('. ')
 
           const res = await fetch('https://api.anthropic.com/v1/messages', {

@@ -597,3 +597,49 @@ describe('Reminders + day summary', () => {
 // ── Cleanup ──────────────────────────────────────────────────────────────────
 // NOTE: intentionally no afterAll cleanup — the test instance shares the same
 // MongoDB as production. Test spaces linger with slugs like test-trail-{ts}.
+
+// ── Modules: Follow-through snooze counting, Restock items ──────────────────
+
+describe('Modules', () => {
+  type Card = { data: { _id: string; defer_count?: number; followthrough?: unknown } }
+  const later = () => new Date(Date.now() + 3_600_000).toISOString()
+
+  it('counts the person\'s own snoozes and brings a 3× snoozed card forward on Ah! Today', async () => {
+    const cols = (await req<{ data: Array<{ _id: string }> }>('GET', `/api/board/${boardSlug}/columns`)).body as { data: Array<{ _id: string }> }
+    const made = (await req<{ data: { _id: string } }>('POST', `/api/board/${boardSlug}/cards`, { column_id: cols.data[0]!._id, title: `Snoozed thing ${Date.now()}` })).body as { data: { _id: string } }
+    const id = made.data._id
+    for (let i = 0; i < 3; i++) expect((await req('POST', `/api/cards/${id}/defer`, { defer_until: later() })).status).toBe(200)
+    expect((await req('POST', `/api/cards/${id}/defer`, { defer_until: null })).status).toBe(200)   // un-snoozing doesn't count
+    let card = ((await req<Card>('GET', `/api/cards/${id}`)).body as Card).data
+    expect(card.defer_count).toBe(3)
+
+    // Visible again (defer cleared) → a focus candidate with the snooze reason.
+    type Now = { data: { focus: { id?: string; reasons: string[] } | null } }
+    const focus = ((await req<Now>('GET', '/api/now?tz=America/New_York')).body as Now).data.focus
+    if (focus?.id === id) expect(focus.reasons[0]).toBe('snoozed 3 times')
+
+    // Done → the count starts over.
+    expect((await req('POST', `/api/cards/${id}/complete`)).status).toBe(200)
+    card = ((await req<Card>('GET', `/api/cards/${id}`)).body as Card).data
+    expect(card.defer_count).toBe(0)
+  })
+
+  it('list items: a snooze counts, Restock-style items carry source and reason, bad sources are refused', async () => {
+    type Item = { data: { _id: string; source?: string; reason?: string } }
+    const made = ((await req<Item>('POST', `/api/list/${listSlug}/items`, { title: 'Milk', source: 'ah-restock', reason: 'You buy this about every 9 days; last time 8 days ago' })).body as Item).data
+    expect(made.source).toBe('ah-restock')
+    expect(made.reason).toMatch(/every 9 days/)
+    expect((await req('POST', `/api/list/${listSlug}/items`, { title: 'x', source: 'Not A Slug!' })).status).toBe(400)
+    expect((await req('PATCH', `/api/list/${listSlug}/items/${made._id}`, { defer_until: later() })).status).toBe(200)
+    type Items = { data: Array<{ _id: string; defer_count?: number }> }
+    const items = ((await req<Items>('GET', `/api/list/${listSlug}/items`)).body as Items).data
+    expect(items.find(i => i._id === made._id)?.defer_count).toBe(1)
+  })
+
+  it('dev: the modules run for the signed-in person on demand', async () => {
+    type Ran = { data: Record<string, unknown> }
+    const r = await req<Ran>('POST', '/api/dev/modules/run?only=ah-restock')
+    expect(r.status).toBe(200)
+    expect((r.body as Ran).data).toHaveProperty('ah-restock')
+  })
+})

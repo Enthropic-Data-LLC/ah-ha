@@ -77,6 +77,8 @@ const recurrenceRoutes: FastifyPluginAsync = async (fastify) => {
         updated_at:   now,
         completed_at: now,   // when it was last finished — the evening wrap-up counts these
         defer_until:  null,  // clear any active snooze on completion
+        defer_count:  0,     // Follow-through starts over once it's done
+        followthrough: null,
       }
 
       if (!rec) {
@@ -142,10 +144,14 @@ const recurrenceRoutes: FastifyPluginAsync = async (fastify) => {
     async (req, reply) => {
       const cardId = new ObjectId(req.params.id)
       const { defer_until } = (req.body as { defer_until?: string }) ?? {}
+      const until = defer_until ? new Date(defer_until) : null
+      const now = new Date()
 
+      // A snooze into the future counts toward Follow-through (modules/followthrough).
       const result = await fastify.mongo.collection('board_cards').updateOne(
         { _id: cardId, org_id: req.user!.orgId, deleted_at: { $exists: false } },
-        { $set: { defer_until: defer_until ? new Date(defer_until) : null, updated_at: new Date() } }
+        { $set: { defer_until: until, updated_at: now, ...(until && until > now ? { last_deferred_at: now } : {}) },
+          ...(until && until > now ? { $inc: { defer_count: 1 } } : {}) }
       )
       if (result.matchedCount === 0) return reply.status(404).send({ error: 'Card not found' })
       return { ok: true }

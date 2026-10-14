@@ -8,4 +8,6 @@ export default defineConfig({
   sourcemap: true,
   clean: true,
   external: ["ical.js"],
+  // Bundled so deploys stay "copy dist/": live hosts get no new npm install.
+  noExternal: ["@anthropic-ai/sdk"],
 })

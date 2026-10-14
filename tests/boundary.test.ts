@@ -1,13 +1,13 @@
 /**
- * Today is a layer on core: code under src/today/ reads and writes only through
- * src/core/, never MongoDB, TimescaleDB or Redis directly. Docs: "Ah-Ha: Today as a
+ * Ah! Today and the modules are layers on core: code under src/today/ and src/modules/
+ * reads and writes only through src/core/, never MongoDB, TimescaleDB or Redis directly. Docs: "Ah-Ha: Today as a
  * layer on core". If this fails, add (or use) a function in src/core/ instead.
  */
 import { describe, it, expect } from 'vitest'
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join, relative } from 'node:path'
 
-const ROOT = join(__dirname, '..', 'src', 'today')
+const ROOTS = ['today', 'modules'].map(d => join(__dirname, '..', 'src', d))
 
 const FORBIDDEN: Array<[RegExp, string]> = [
   [/\.mongo\b/, 'MongoDB (fastify.mongo)'],
@@ -24,12 +24,13 @@ function files(dir: string): string[] {
   })
 }
 
-describe('Today → core boundary', () => {
-  it('src/today/ exists and has code', () => {
-    expect(files(ROOT).length).toBeGreaterThan(0)
+describe('Layers → core boundary (Ah! Today, modules)', () => {
+  for (const root of ROOTS) it(`${relative(join(__dirname, '..'), root)}/ exists and has code`, () => {
+    expect(files(root).length).toBeGreaterThan(0)
   })
 
-  for (const f of files(ROOT)) {
+  for (const f of ROOTS.flatMap(files)) {
+    const ROOT = join(__dirname, '..', 'src')
     it(`${relative(ROOT, f)} reaches data only through src/core/`, () => {
       // Comments may talk about the stores; only code counts.
       const code = readFileSync(f, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1')

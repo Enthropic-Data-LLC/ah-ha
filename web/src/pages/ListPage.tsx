@@ -119,7 +119,14 @@ export default function ListPage({ slug }: { slug: string }) {
           <div key={item._id} className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
             <div className="flex items-center gap-3 px-4 py-2.5 group">
               <button onClick={() => toggleDone(item)} className="w-5 h-5 rounded border-2 border-slate-600 hover:border-indigo-400 flex-shrink-0 transition" />
-              <span className="flex-1 text-sm">{item.title}</span>
+              <span className="flex-1 min-w-0">
+                <span className="block text-sm">{item.title}</span>
+                {item.reason && (
+                  <span className="block text-xs text-slate-500" title={item.source === 'ah-restock' ? 'Added by Restock' : undefined}>
+                    {item.source === 'ah-restock' ? '↺ ' : ''}{item.reason}
+                  </span>
+                )}
+              </span>
               <button
                 onClick={() => toggleRepeat(item)}
                 className={`text-xs px-1.5 py-0.5 rounded flex-shrink-0 transition ${item.repeat === 'always' ? 'bg-emerald-500/10 text-emerald-400' : 'text-slate-600 border border-slate-800 hover:text-slate-400'}`}

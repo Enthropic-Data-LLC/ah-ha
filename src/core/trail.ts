@@ -25,6 +25,13 @@ export function trailCore(fastify: FastifyInstance) {
         [c.orgId.toString(), since],
       ).then(r => r.rows),
 
+    /** Entries of these meta types ("ah-cart/trip@1"…) since [since], oldest first. */
+    ofType: (c: Caller, types: string[], since: Date) =>
+      getPool().query<TrailRow>(
+        `SELECT text, tone, source, meta, ts FROM trail_entries WHERE org_id = $1 AND ts >= $2 AND meta->>'type' = ANY($3) ORDER BY ts`,
+        [c.orgId.toString(), since, types],
+      ).then(r => r.rows),
+
     /** Local days (YYYY-MM-DD in [tz]) with an entry since [since], leaving out [skipSources]. */
     activeDays: (c: Caller, since: Date, tz: string, skipSources: string[]) =>
       getPool().query<{ day: string }>(

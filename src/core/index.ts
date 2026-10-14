@@ -9,6 +9,7 @@ import { placesCore } from './places.js'
 import { contextCore } from './context.js'
 import { settingsCore } from './settings.js'
 import { kvCore } from './kv.js'
+import { usersCore } from './users.js'
 
 /**
  * Core, as layers above it see it (docs: "Ah-Ha: Today as a layer on core").
@@ -50,6 +51,7 @@ export function core(fastify: FastifyInstance) {
     context: contextCore(fastify),
     settings: settingsCore(fastify),
     kv: kvCore(fastify),
+    users: usersCore(fastify),
   }
 }
 

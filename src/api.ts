@@ -41,10 +41,12 @@ import connectRoutes from './routes/connect.js'
 import linkRoutes from './routes/link.js'
 import { startEngine, type Engine } from './link/engine.js'
 import { setupTrailSchema, closePool } from './lib/timescale.js'
+import { startModules } from './modules/index.js'
 
 const isProd = process.env['NODE_ENV'] === 'production'
 
 let linkEngine: Engine | null = null
+let modules: ReturnType<typeof startModules> | null = null
 const fastify = Fastify({
   logger: {
     level: isProd ? 'info' : 'debug',
@@ -193,6 +195,15 @@ fastify.get('/healthz', async () => ({ ok: true, ts: new Date().toISOString() })
 const webDist = join(dirname(fileURLToPath(import.meta.url)), '..', 'web', 'dist')
 // Ah! Link runs inside the API process; it starts once routes are ready (it acts through fastify.inject).
 fastify.addHook('onReady', async () => { linkEngine = startEngine(fastify) })
+// Intelligence modules (Restock, Follow-through, Weekly patterns): an hourly tick in this process.
+fastify.addHook('onReady', async () => { modules = startModules(fastify) })
+
+// Dev only: run your own modules now (?only=<module id>), ignoring their schedule.
+if (process.env['NODE_ENV'] !== 'production' && process.env['ALLOW_DEV_LINK'] === '1') {
+  fastify.post<{ Querystring: { only?: string } }>('/api/dev/modules/run', { preHandler: fastify.authenticate }, async (req) => ({
+    data: await modules?.runFor(req.user!.id, { force: true, ...(req.query.only ? { only: req.query.only } : {}) }),
+  }))
+}
 
 await fastify.register(staticFiles, { root: webDist })
 // Page routes get the SPA shell; anything that looks like a file or an API call and
@@ -207,6 +218,7 @@ fastify.setNotFoundHandler(async (req, reply) => {
 })
 
 fastify.addHook('onClose', async () => {
+  modules?.stop()
   await closePool()
 })
 

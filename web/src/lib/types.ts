@@ -108,4 +108,7 @@ export interface ListItem {
   contexts?: Array<{ entity_id: string; time_chunks: string[] }>
   /** "always" comes back open the next day after it's checked; "once" (or unset) stays done. */
   repeat?: 'once' | 'always'
+  /** Which module added it (e.g. "ah-restock") and why. */
+  source?: string
+  reason?: string
 }

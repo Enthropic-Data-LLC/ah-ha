@@ -43,6 +43,18 @@ export function cardsCore(fastify: FastifyInstance) {
     completionTimes: (c: Caller, since: Date) =>
       cards().find({ org_id: c.orgId, completed_at: { $gte: since } }).project<{ completed_at: Date }>({ completed_at: 1 }).toArray(),
 
+    /** Open cards the person has snoozed at least [min] times (lib: defer_count), most snoozed first. */
+    snoozedOften: (c: Caller, min: number, limit: number, now?: Date) =>
+      cards().find({ ...open(c), defer_count: { $gte: min }, ...(now ? visibleAt(now) : {}) }).sort({ defer_count: -1 }).limit(limit).toArray(),
+
+    /** Open cards snoozed at least once since [since]. */
+    snoozedSince: (c: Caller, since: Date) =>
+      cards().find({ ...open(c), last_deferred_at: { $gte: since } }).toArray(),
+
+    /** What Follow-through worked out for a card (first step etc.). */
+    setFollowThrough: (c: Caller, id: Doc['_id'], ft: Record<string, unknown>) =>
+      cards().updateOne({ _id: id, org_id: c.orgId }, { $set: { followthrough: ft } }),
+
     /** Habit cards on a streak of at least [min], longest first. */
     habitStreaks: (c: Caller, min: number, limit: number) =>
       cards().find({ org_id: c.orgId, deleted_at: { $exists: false }, 'recurrence.archetype': 'habit', 'recurrence.streak_count': { $gte: min } })

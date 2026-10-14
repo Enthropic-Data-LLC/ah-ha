@@ -205,9 +205,12 @@ const boardRoutes: FastifyPluginAsync = async (fastify) => {
       if (body.recurrence !== undefined) update['recurrence'] = body.recurrence
       if (body.contexts !== undefined) update['contexts'] = body.contexts
 
+      // The person's own snooze into the future (not a connected app's) counts toward Follow-through.
+      const snooze = !req.apiKeyScopes && update['defer_until'] instanceof Date && (update['defer_until'] as Date) > new Date()
+      if (snooze) update['last_deferred_at'] = new Date()
       const result = await fastify.mongo.collection('board_cards').updateOne(
         { _id: new ObjectId(req.params.id), org_id: req.user!.orgId, deleted_at: { $exists: false } },
-        { $set: update }
+        { $set: update, ...(snooze ? { $inc: { defer_count: 1 } } : {}) }
       )
       if (result.matchedCount === 0) return reply.status(404).send({ error: 'Not found' })
       return { ok: true }
