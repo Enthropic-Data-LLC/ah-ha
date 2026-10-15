@@ -785,3 +785,34 @@ describe('Places: several locations', () => {
 
   afterAll(async () => { if (id) await req('DELETE', `/api/entities/${id}`) })
 })
+
+// ── Column settings: rename, recolour, delete with its cards moved ──────────
+
+describe('Board column settings', () => {
+  type Col = { _id: string; title: string; color: string }
+  type Cols = { data: Col[] }
+  type Cards = { data: Array<{ _id: string; column_id: string }> }
+  let colId = ''
+
+  it('a column can be renamed and recoloured', async () => {
+    colId = ((await req<{ data: Col }>('POST', `/api/board/${boardSlug}/columns`, { title: `Waiting ${Date.now()}` })).body as { data: Col }).data._id
+    const r = await req<{ data: Col }>('PATCH', `/api/board/${boardSlug}/columns/${colId}`, { title: 'Waiting on others', color: '#fbbf24' })
+    expect(r.status).toBe(200)
+    const col = ((await req<Cols>('GET', `/api/board/${boardSlug}/columns`)).body as Cols).data.find(c => c._id === colId)!
+    expect(col.title).toBe('Waiting on others')
+    expect(col.color).toBe('#fbbf24')
+  })
+
+  it('a column with cards is deleted only with somewhere to move them', async () => {
+    const card = ((await req<{ data: { _id: string } }>('POST', `/api/board/${boardSlug}/cards`, { column_id: colId, title: 'Moves with its column' })).body as { data: { _id: string } }).data._id
+    expect((await req('DELETE', `/api/board/${boardSlug}/columns/${colId}`)).status).toBe(409)
+    expect((await req('DELETE', `/api/board/${boardSlug}/columns/${colId}?move_to=${colId}`)).status).toBe(400)
+    const dest = ((await req<Cols>('GET', `/api/board/${boardSlug}/columns`)).body as Cols).data.find(c => c._id !== colId)!
+    expect((await req('DELETE', `/api/board/${boardSlug}/columns/${colId}?move_to=${dest._id}`)).status).toBe(200)
+    const cols = ((await req<Cols>('GET', `/api/board/${boardSlug}/columns`)).body as Cols).data
+    expect(cols.some(c => c._id === colId)).toBe(false)
+    const moved = ((await req<Cards>('GET', `/api/board/${boardSlug}/cards`)).body as Cards).data.find(c => c._id === card)
+    expect(moved?.column_id).toBe(dest._id)
+    await req('DELETE', `/api/board/${boardSlug}/cards/${card}`)
+  })
+})

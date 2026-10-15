@@ -6,6 +6,7 @@ import { api } from '../lib/api'
 import BoardCardItem from '../components/BoardCard'
 import CardModal from '../components/CardModal'
 import ConfirmDeleteModal from '../components/ConfirmDeleteModal'
+import ColumnSettings, { type ColumnChanges } from '../components/ColumnSettings'
 import type { BoardCard, BoardColumn } from '../lib/types'
 
 interface Props {
@@ -65,6 +66,7 @@ export default function BoardPage({ slug }: Props) {
   const { user } = useMe()
   const [activeCard, setActiveCard] = useState<BoardCard | null>(null)
   const [showDelete, setShowDelete] = useState(false)
+  const [settingsFor, setSettingsFor] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [toastMsg, setToastMsg] = useState<string | null>(null)
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -136,7 +138,7 @@ export default function BoardPage({ slug }: Props) {
     await mutateColumns()
   }
 
-  async function updateColumn(colId: string, updates: Pick<BoardColumn, 'in_today' | 'today_priority'>) {
+  async function updateColumn(colId: string, updates: ColumnChanges) {
     await mutateColumns(
       d => d && { ...d, data: d.data.map(c => c._id === colId ? { ...c, ...updates } : c) },
       { revalidate: false },
@@ -145,8 +147,8 @@ export default function BoardPage({ slug }: Props) {
     await mutateColumns()
   }
 
-  async function deleteColumn(colId: string) {
-    await api.delete(`/api/board/${slug}/columns/${colId}`)
+  async function deleteColumn(colId: string, moveTo: string | null) {
+    await api.delete(`/api/board/${slug}/columns/${colId}${moveTo ? `?move_to=${moveTo}` : ''}`)
     await mutateColumns()
     await mutateCards()
   }
@@ -333,28 +335,17 @@ export default function BoardPage({ slug }: Props) {
                 {/* Column header */}
                 <div className="flex items-center gap-1.5 mb-3 px-1 group">
                   <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: col.color }} />
-                  <h2 className="text-sm font-semibold flex-1 truncate">{col.title}</h2>
-                  {/* Ah! Today: whether this column's cards show there, and how they rank */}
                   <button
-                    onClick={() => updateColumn(col._id, { in_today: !col.in_today, today_priority: col.today_priority ?? 1 })}
-                    aria-pressed={!!col.in_today}
-                    title={col.in_today ? 'Shown in Ah! Today — click to stop' : 'Not shown in Ah! Today — click to show'}
-                    className={`px-1.5 py-0.5 rounded text-[10px] font-medium border transition flex-shrink-0 ${
-                      col.in_today
-                        ? 'border-indigo-500 bg-indigo-500/15 text-indigo-300'
-                        : 'border-slate-700 text-slate-600 hover:text-slate-400 hover:border-slate-500'
-                    }`}
-                  >Today</button>
+                    onClick={() => setSettingsFor(col._id)}
+                    className="text-sm font-semibold flex-1 truncate text-left hover:text-indigo-300 transition"
+                    title="Column settings"
+                  >{col.title}</button>
                   {col.in_today && (
-                    <select
-                      value={col.today_priority ?? 1}
-                      onChange={e => updateColumn(col._id, { today_priority: Number(e.target.value) })}
-                      aria-label={`${col.title}: priority in Ah! Today`}
-                      title="Priority in Ah! Today — higher shows first"
-                      className="bg-slate-900 border border-slate-700 rounded text-[10px] text-slate-300 px-0.5 py-0.5 flex-shrink-0"
-                    >
-                      {[5, 4, 3, 2, 1].map(n => <option key={n} value={n}>P{n}</option>)}
-                    </select>
+                    <button
+                      onClick={() => setSettingsFor(col._id)}
+                      title={`Shown in Ah! Today, priority ${col.today_priority ?? 1}`}
+                      className="px-1.5 py-0.5 rounded text-[10px] font-medium border border-indigo-500 bg-indigo-500/15 text-indigo-300 flex-shrink-0"
+                    >Today · P{col.today_priority ?? 1}</button>
                   )}
                   <span className="text-xs text-slate-600">
                     {(visibleCardsByColumn[col._id] ?? []).length}
@@ -362,21 +353,12 @@ export default function BoardPage({ slug }: Props) {
                       <span className="text-slate-700">/{(cardsByColumn[col._id] ?? []).length}</span>
                     )}
                   </span>
-                  {/* Move buttons — visible on hover (desktop) or always (mobile) */}
-                  <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity sm:opacity-0">
-                    <button
-                      onClick={() => moveColumn(col._id, 'left')}
-                      disabled={colIdx === 0}
-                      className="p-0.5 text-slate-600 hover:text-slate-300 disabled:opacity-20 disabled:cursor-not-allowed transition rounded"
-                      title="Move left"
-                    >‹</button>
-                    <button
-                      onClick={() => moveColumn(col._id, 'right')}
-                      disabled={colIdx === columns.length - 1}
-                      className="p-0.5 text-slate-600 hover:text-slate-300 disabled:opacity-20 disabled:cursor-not-allowed transition rounded"
-                      title="Move right"
-                    >›</button>
-                  </div>
+                  <button
+                    onClick={() => setSettingsFor(col._id)}
+                    aria-label={`${col.title}: column settings`}
+                    title="Column settings — name, colour, Ah! Today, priority, move, delete"
+                    className="px-1.5 py-0.5 text-slate-500 hover:text-slate-200 hover:bg-slate-800 rounded transition flex-shrink-0"
+                  >⋯</button>
                 </div>
 
                 <Droppable droppableId={col._id}>
@@ -431,6 +413,22 @@ export default function BoardPage({ slug }: Props) {
           onDelete={deleteCard}
         />
       )}
+
+      {(() => {
+        const col = columns.find(c => c._id === settingsFor)
+        return col && (
+          <ColumnSettings
+            key={col._id}
+            column={col}
+            columns={columns}
+            cardCount={(cardsByColumn[col._id] ?? []).length}
+            onSave={changes => updateColumn(col._id, changes)}
+            onMove={direction => moveColumn(col._id, direction)}
+            onDelete={moveTo => deleteColumn(col._id, moveTo)}
+            onClose={() => setSettingsFor(null)}
+          />
+        )
+      })()}
 
       {showDelete && (
         <ConfirmDeleteModal

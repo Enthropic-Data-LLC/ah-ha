@@ -290,8 +290,9 @@ const boardRoutes: FastifyPluginAsync = async (fastify) => {
     }
   )
 
-  // DELETE /api/board/:slug/columns/:id — only allowed if column has no cards
-  fastify.delete<{ Params: { slug: string; id: string } }>(
+  // DELETE /api/board/:slug/columns/:id — refused while it has cards, unless
+  // ?move_to=<column id> puts them at the end of another column of the board first
+  fastify.delete<{ Params: { slug: string; id: string }; Querystring: { move_to?: string } }>(
     '/api/board/:slug/columns/:id',
     { preHandler: fastify.authenticate },
     async (req, reply) => {
@@ -303,6 +304,23 @@ const boardRoutes: FastifyPluginAsync = async (fastify) => {
         _id: colId, space_id: space._id, org_id: req.user!.orgId,
       })
       if (!col) return reply.status(404).send({ error: 'Column not found' })
+
+      const moveTo = req.query.move_to
+      if (moveTo) {
+        if (!ObjectId.isValid(moveTo) || moveTo === req.params.id) return reply.status(400).send({ error: 'Pick another column to move the cards to' })
+        const dest = await fastify.mongo.collection('board_columns').findOne({ _id: new ObjectId(moveTo), space_id: space._id, org_id: req.user!.orgId })
+        if (!dest) return reply.status(400).send({ error: 'That column is not on this board' })
+        const last = await fastify.mongo.collection('board_cards')
+          .findOne({ column_id: dest._id, deleted_at: { $exists: false } }, { sort: { position: -1 } })
+        let pos = last ? (last['position'] as number) : initial() - 1
+        const moving = await fastify.mongo.collection('board_cards')
+          .find({ column_id: colId, space_id: space._id, deleted_at: { $exists: false } }).sort({ position: 1 }).toArray()
+        if (moving.length) {
+          await fastify.mongo.collection('board_cards').bulkWrite(moving.map(c => ({
+            updateOne: { filter: { _id: c._id }, update: { $set: { column_id: dest._id, position: (pos += 1.0), updated_at: new Date() } } },
+          })))
+        }
+      }
 
       const cardCount = await fastify.mongo.collection('board_cards').countDocuments({
         column_id: colId, space_id: space._id, deleted_at: { $exists: false },
