@@ -38,6 +38,9 @@ import recurrenceRoutes from './routes/recurrence.js'
 import calendarRoutes from './routes/calendar.js'
 import nfcRoutes from './routes/nfc.js'
 import connectRoutes from './routes/connect.js'
+import trackerRoutes from './trackers/routes.js'
+import pushRoutes from './push/routes.js'
+import { startTrackers } from './trackers/engine.js'
 import linkRoutes from './routes/link.js'
 import { startEngine, type Engine } from './link/engine.js'
 import { setupTrailSchema, closePool } from './lib/timescale.js'
@@ -187,6 +190,8 @@ await fastify.register(async (sub) => {
   await sub.register(calendarRoutes)
   await sub.register(nfcRoutes)
   await sub.register(connectRoutes)
+  await sub.register(trackerRoutes)
+  await sub.register(pushRoutes)
   await sub.register(linkRoutes, { engine: () => linkEngine })
 })
 
@@ -206,6 +211,8 @@ fastify.get('/healthz', async () => ({ ok: true, ts: new Date().toISOString() })
 const webDist = join(dirname(fileURLToPath(import.meta.url)), '..', 'web', 'dist')
 // Ah! Link runs inside the API process; it starts once routes are ready (it acts through fastify.inject).
 fastify.addHook('onReady', async () => { linkEngine = startEngine(fastify) })
+// Trackers: rules over the trail → phone push and statuses (src/trackers).
+fastify.addHook('onReady', async () => { startTrackers(fastify) })
 // Intelligence modules (Restock, Follow-through, Weekly patterns): an hourly tick in this process.
 fastify.addHook('onReady', async () => { modules = startModules(fastify) })
 

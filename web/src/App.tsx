@@ -16,6 +16,7 @@ import SearchPage from './pages/SearchPage'
 import AuditPage from './pages/AuditPage'
 import MqttPage from './pages/MqttPage'
 import WebhooksPage from './pages/WebhooksPage'
+import TrackersPage from './pages/TrackersPage'
 import CalendarPage from './pages/CalendarPage'
 import NotificationsPage from './pages/NotificationsPage'
 import SharePage from './pages/SharePage'
@@ -107,6 +108,7 @@ function Shell({ children }: { children: React.ReactNode }) {
         <div className="flex items-center gap-3">
           {user && (
             <>
+              {navLink('/trackers', 'Trackers')}
               {navLink('/tags', 'Tags')}
               {navLink('/keys', 'API Keys')}
               {navLink('/calendar', 'Calendar')}
@@ -154,6 +156,7 @@ function Shell({ children }: { children: React.ReactNode }) {
               {drawerLink(entitiesHref, '📍  Entities')}
               {drawerLink('/search', '⌕  Search')}
               {drawerLink('/tags', '🏷️  Tags & QR codes')}
+              {drawerLink('/trackers', '📡  Trackers')}
               <p className="text-[10px] font-mono uppercase tracking-wider text-slate-600 px-3 pb-1 pt-3">Settings</p>
               {drawerLink('/calendar', '📅  Calendar')}
               {drawerLink('/settings', '🔔  Notifications')}
@@ -275,6 +278,9 @@ export default function App() {
   if (path === '/mqtt') {
     return <Shell><MqttPage /></Shell>
   }
+
+  // Trackers: rules over the trail → phone push + statuses
+  if (path === '/trackers') return <Shell><TrackersPage /></Shell>
 
   // Webhooks
   if (path === '/webhooks') {

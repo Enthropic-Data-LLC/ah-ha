@@ -816,3 +816,92 @@ describe('Board column settings', () => {
     await req('DELETE', `/api/board/${boardSlug}/cards/${card}`)
   })
 })
+
+// ── Trackers: rules over the trail → phone push + statuses ──────────────────
+
+describe('Trackers', () => {
+  type Tracker = { _id: string; name: string }
+  type Push = { id: string; title: string; body: string | null; tracker_id: string | null }
+  type Status = { label: string; value: string; detail: string; today: boolean }
+  const who = `Pat${Date.now()}`
+  const made: string[] = []
+  const append = (text: string, tags: string[], meta: Record<string, unknown>) =>
+    req('POST', `/api/trail/${trailSlug}/append`, { text, tags, meta })
+  const settle = () => new Promise(r => setTimeout(r, 600)) // the engine runs off the Redis event
+
+  it('refuses a tracker with nothing to match or nothing to do', async () => {
+    expect((await req('POST', '/api/trackers', { name: 'x', match: {}, notify: { text: 'hi' } })).status).toBe(400)
+    expect((await req('POST', '/api/trackers', { name: 'x', match: { source: 'api' } })).status).toBe(400)
+  })
+
+  it('a matching entry pushes to the phone inbox and sets a status', async () => {
+    const home = await req<{ data: Tracker }>('POST', '/api/trackers', {
+      name: `${who} gets home`, match: { tag: 'home', field: { key: 'person', value: who } },
+      notify: { text: '🏠 {meta.person} is home' }, status: { label: who, value: 'home' },
+    })
+    expect(home.status).toBe(201)
+    made.push((home.body as { data: Tracker }).data._id)
+    const away = await req<{ data: Tracker }>('POST', '/api/trackers', {
+      name: `${who} leaves`, match: { tag: 'away', field: { key: 'person', value: who } }, status: { label: who, value: 'away' },
+    })
+    made.push((away.body as { data: Tracker }).data._id)
+
+    const before = ((await req<{ data: Push[] }>('GET', '/api/push/inbox')).body as { data: Push[] }).data.at(-1)?.id
+    await append(`🏠 ${who} got home`, ['home'], { person: who })
+    await settle()
+    const inbox = ((await req<{ data: Push[] }>('GET', `/api/push/inbox${before ? `?after=${before}` : ''}`)).body as { data: Push[] }).data
+    expect(inbox.some(m => m.title === `🏠 ${who} is home` && m.body === `🏠 ${who} got home`)).toBe(true)
+    let st = ((await req<{ data: Status[] }>('GET', '/api/statuses')).body as { data: Status[] }).data.find(s => s.label === who)
+    expect(st?.value).toBe('home')
+
+    // Leaving: status only, no push.
+    const last = inbox.at(-1)!.id
+    await append(`🚶 ${who} left home`, ['away'], { person: who })
+    await settle()
+    st = ((await req<{ data: Status[] }>('GET', '/api/statuses')).body as { data: Status[] }).data.find(s => s.label === who)
+    expect(st?.value).toBe('away')
+    expect(((await req<{ data: Push[] }>('GET', `/api/push/inbox?after=${last}`)).body as { data: Push[] }).data).toHaveLength(0)
+  })
+
+  it('statuses switched on for Today show in the situation; the router is not special', async () => {
+    await append(`🏠 ${who} got home`, ['home'], { person: who })
+    await settle()
+    type Now = { data: { situation: { statuses: Array<{ label: string; value: string }> } | null } }
+    const sit = ((await req<Now>('GET', '/api/now?tz=America/New_York')).body as Now).data.situation
+    expect(sit?.statuses.find(s => s.label === who)?.value).toBe('home')
+    expect(sit).not.toHaveProperty('people')
+  })
+
+  it('test shows which recent entries a match would catch', async () => {
+    type T = { data: { count: number; recent: Array<{ text: string }> } }
+    const r = (await req<T>('POST', '/api/trackers/test', { match: { field: { key: 'person', value: who } } })).body as T
+    expect(r.data.count).toBeGreaterThanOrEqual(3)
+    expect(r.data.recent[0]!.text).toContain(who)
+  })
+
+  it('the stream delivers a push the moment it happens', async () => {
+    const ctl = new AbortController()
+    const res = await fetch(API + '/api/push/stream', { headers: { Cookie: cookie }, signal: ctl.signal })
+    expect(res.headers.get('content-type')).toMatch(/text\/event-stream/)
+    const reader = res.body!.getReader()
+    const got = (async () => {
+      let buf = ''
+      for (;;) {
+        const { value, done } = await reader.read()
+        if (done) return buf
+        buf += new TextDecoder().decode(value)
+        if (buf.includes('event: push')) return buf
+      }
+    })()
+    await new Promise(r => setTimeout(r, 300))
+    await append(`🏠 ${who} got home again`, ['home'], { person: who })
+    const text = await Promise.race([got, new Promise<string>(r => setTimeout(() => r('timeout'), 5000))])
+    ctl.abort()
+    expect(text).toContain(`🏠 ${who} is home`)
+  })
+
+  afterAll(async () => {
+    for (const id of made) await req('DELETE', `/api/trackers/${id}`)
+    await req('DELETE', `/api/statuses/${encodeURIComponent(who)}`)
+  })
+})

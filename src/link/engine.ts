@@ -28,8 +28,10 @@ const RUNS_PER_HOUR = 30
 const MAX_STEPS = 200
 
 export type AhEvent =
-  | { kind: 'trail'; org_id: string; entry: { id: string; text: string; tone: string; source: string; tags: string[]; meta: Record<string, unknown>; ts: string } }
+  | { kind: 'trail'; org_id: string; entry: { id: string; text: string; tone: string; source: string; tags: string[]; meta: Record<string, unknown>; ts: string; space_ref?: string } }
   | { kind: 'place'; org_id: string; from: string | null; to: string | null }
+  /** A status kept by a tracker changed value (src/trackers): "Lauri" away → home. */
+  | { kind: 'status'; org_id: string; label: string; value: string; prev: string | null }
 
 /** Publishes an event for Ah! Link. Fire-and-forget: a failure must never break the caller. */
 export function emit(redis: Redis, ev: AhEvent) {
@@ -114,7 +116,11 @@ export function startEngine(fastify: FastifyInstance) {
       }
       case 'energy_is': return (await s())?.energy.level === c.level
       case 'at_place': return (await s())?.place?.name.toLowerCase() === c.place.toLowerCase()
-      case 'person_home': return !!(await s())?.people.find(p => p.home && p.name.toLowerCase() === c.person.toLowerCase())
+      // A status kept by a tracker ("Lauri" → "home"); Link doesn't know where it came from.
+      case 'person_home': {
+        const st = await fastify.mongo.collection('statuses').findOne({ org_id: sf.orgId, key: c.person.trim().toLowerCase() })
+        return String(st?.['value'] ?? '').toLowerCase() === 'home'
+      }
       case 'rain_within': {
         const w = (await s())?.weather
         return !!w?.rain_at && Date.parse(w.rain_at) - Date.now() <= c.hours * 3_600_000
@@ -290,6 +296,12 @@ export function startEngine(fastify: FastifyInstance) {
   // ---- trigger matching ---------------------------------------------------------------
 
   function matches(t: Trigger, ev: AhEvent, places: Map<string, { name: string }>): boolean {
+    if (ev.kind === 'status') {
+      const who = ev.label.toLowerCase() === (('person' in t ? t.person : '') ?? '').toLowerCase()
+      if (t.block === 'person_home') return who && ev.value.toLowerCase() === 'home'
+      if (t.block === 'person_left') return who && ev.prev?.toLowerCase() === 'home' && ev.value.toLowerCase() !== 'home'
+      return false
+    }
     if (ev.kind === 'place') {
       const name = (id: string | null) => (id ? places.get(id)?.name.toLowerCase() : undefined)
       if (t.block === 'arrived') return name(ev.to) === t.place.toLowerCase() && ev.from !== ev.to
@@ -297,13 +309,10 @@ export function startEngine(fastify: FastifyInstance) {
       return false
     }
     const e = ev.entry
-    const person = String(e.meta['person'] ?? '').toLowerCase()
     switch (t.block) {
       case 'trail_entry':
         return (!t.source || e.source === t.source) && (!t.tag || e.tags.includes(t.tag)) &&
           (!t.type || e.meta['type'] === t.type) && (!t.text || e.text.toLowerCase().includes(t.text.toLowerCase()))
-      case 'person_home': return e.source === 'presence' && e.tags.includes('home') && person === t.person.toLowerCase()
-      case 'person_left': return e.source === 'presence' && e.tags.includes('away') && person === t.person.toLowerCase()
       default: return false
     }
   }
@@ -323,7 +332,9 @@ export function startEngine(fastify: FastifyInstance) {
     for (const sf of flows) {
       if (ev.kind === 'trail' && (ev.entry.meta['link'] as { flow_id?: string } | undefined)?.flow_id === sf.id) continue // never on its own output
       if (!matches(sf.flow!.trigger, ev, places)) continue
-      const event = ev.kind === 'trail' ? { ...ev.entry } : { place_from: ev.from && places.get(ev.from)?.name, place: ev.to && places.get(ev.to)?.name }
+      const event = ev.kind === 'trail' ? { ...ev.entry }
+        : ev.kind === 'status' ? { label: ev.label, value: ev.value, prev: ev.prev }
+        : { place_from: ev.from && places.get(ev.from)?.name, place: ev.to && places.get(ev.to)?.name }
       run(sf, sf.flow!.trigger.block, event, depth).catch(e => log.error({ err: e }, 'run failed'))
     }
   }

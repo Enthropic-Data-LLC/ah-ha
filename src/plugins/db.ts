@@ -68,6 +68,10 @@ async function ensureIndexes(db: Db) {
     db.collection('counters').createIndex({ _id: 1 }),
     db.collection('nfc_tags').createIndex({ tag_id: 1 }, { unique: true }),
     db.collection('nfc_tags').createIndex({ org_id: 1, updated_at: -1 }),
+    db.collection('trackers').createIndex({ org_id: 1, on: 1 }),
+    db.collection('statuses').createIndex({ org_id: 1, key: 1 }, { unique: true }),
+    db.collection('push_messages').createIndex({ user_id: 1, _id: 1 }),
+    db.collection('push_messages').createIndex({ created_at: 1 }, { expireAfterSeconds: 7 * 86_400 }),
   ])
 }
 

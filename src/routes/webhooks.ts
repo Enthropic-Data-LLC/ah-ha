@@ -164,7 +164,7 @@ const webhooksRoutes: FastifyPluginAsync = async (fastify) => {
         result = { ok: true, ref: `${spaceRef}#entry_${entry.id}`, ts: entry.ts }
         emit(fastify.redis, {
           kind: 'trail', org_id: String(wh['org_id']),
-          entry: { id: entry.id, text, tone, source: 'webhook', tags, meta: meta as Record<string, unknown>, ts: new Date(entry.ts).toISOString() },
+          entry: { id: entry.id, text, tone, source: 'webhook', tags, meta: meta as Record<string, unknown>, ts: new Date(entry.ts).toISOString(), space_ref: spaceRef },
         })
 
         // Audit

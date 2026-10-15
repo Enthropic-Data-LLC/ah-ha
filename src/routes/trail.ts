@@ -75,7 +75,7 @@ const trailRoutes: FastifyPluginAsync = async (fastify) => {
       const entry = result.rows[0]!
       emit(fastify.redis, {
         kind: 'trail', org_id: req.user!.orgId.toString(),
-        entry: { id: entry.id, text: body.text, tone: body.tone, source, tags: body.tags, meta: body.meta, ts: new Date(entry.ts).toISOString() },
+        entry: { id: entry.id, text: body.text, tone: body.tone, source, tags: body.tags, meta: body.meta, ts: new Date(entry.ts).toISOString(), space_ref: space['ref'] as string },
       })
       reply.status(201)
       return {

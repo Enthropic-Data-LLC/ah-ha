@@ -21,7 +21,8 @@ export interface Situation {
   day: { tod: string; weekend: boolean; off: boolean }
   next: { title: string; start: string; minutes: number; location: string | null } | null
   weather: { temp_f: number; code: number; rain_chance_6h: number; rain_at: string | null; sunset: string | null; daylight_min: number | null } | null
-  people: Array<{ name: string; home: boolean; since: string }>
+  /** Statuses kept by trackers and switched on for Ah! Today ("Lauri" → "home"). Where they come from is the tracker's business. */
+  statuses: Array<{ label: string; value: string; since: string }>
   energy: { level: Energy; why: string; phn: number | null; mood: string | null; override: Energy | null }
   meds: { last_dose_at: string | null; minutes_since: number | null }
   momentum: { last_done: string | null; minutes_since: number | null }
@@ -88,12 +89,8 @@ export async function situation(
     pool.query(sql, params).then(r => r.rows as T[]).catch(() => [] as T[])
 
   // Trail-backed signals, all in parallel.
-  const [presence, scores, overrides, wrapups, doses] = await Promise.all([
-    // Latest router presence entry per person in the last 2 weeks.
-    q<{ person: string; tags: string[]; ts: Date }>(
-      `SELECT DISTINCT ON (meta->>'person') meta->>'person' AS person, tags, ts
-         FROM trail_entries WHERE org_id = $1 AND source = 'presence' AND meta ? 'person' AND ts > now() - interval '14 days'
-        ORDER BY meta->>'person', ts DESC`, [org]),
+  const [statuses, scores, overrides, wrapups, doses] = await Promise.all([
+    fastify.mongo.collection('statuses').find({ org_id: opts.orgId, today: true }).sort({ label: 1 }).toArray().catch(() => []),
     q<{ value: number; ts: Date }>(
       `SELECT (meta->>'value')::int AS value, ts FROM trail_entries
         WHERE org_id = $1 AND meta->>'type' = 'ah-meds/score@1' AND meta->>'kind' = 'phn' AND ts >= $2
@@ -159,7 +156,7 @@ export async function situation(
       minutes: Math.round((Date.parse(nextEv.start) - now.getTime()) / 60_000),
     } : null,
     weather: w,
-    people: presence.map(p => ({ name: p.person, home: (p.tags ?? []).includes('home'), since: new Date(p.ts).toISOString() })),
+    statuses: statuses.map(s => ({ label: String(s['label']), value: String(s['value']), since: new Date((s['since'] ?? s['last_at']) as Date).toISOString() })),
     energy: { level, why, phn, mood, override: energyOverride ?? null },
     meds: { last_dose_at: doses[0] ? new Date(doses[0].ts).toISOString() : null, minutes_since: minutesSince(doses[0]?.ts, now) },
     momentum: { last_done: lastDone?.title ?? null, minutes_since: minutesSince(lastDone?.t, now) },

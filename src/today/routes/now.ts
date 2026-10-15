@@ -214,8 +214,8 @@ const nowRoutes: FastifyPluginAsync = async (fastify) => {
         const itemC = (i: { _id: unknown; title: unknown }, base: number, why: string): Candidate => ({
           kind: 'list_item', id: String(i._id), title: i.title as string, base, reasons: [why],
         })
-        // Items tagged to a person entity who the router says is home.
-        const homeNames = sit.people.filter(p => p.home).map(p => p.name.toLowerCase())
+        // Items tagged to a person whose status (kept by a tracker) is "home".
+        const homeNames = sit.statuses.filter(s => s.value.toLowerCase() === 'home').map(s => s.label.toLowerCase())
         const personC: Candidate[] = []
         if (homeNames.length) {
           const persons = await c.entities.people(caller)

@@ -31,6 +31,8 @@ interface NowData {
   limit?: { max: number | null; total: number; hidden: number }
   trail_pulse: { recent_tone: string; total_today: number } | null
   briefing: string | null
+  /** Statuses kept by trackers (Trackers page), switched on for Today. */
+  situation?: { statuses?: Array<{ label: string; value: string; since: string }> } | null
 }
 
 const TOD_LABEL: Record<string, string> = {
@@ -279,6 +281,19 @@ export default function NowPage() {
           )}
         </div>
       </div>
+
+      {/* Statuses kept by trackers ("Lauri · home since 5:42 PM") */}
+      {(now.situation?.statuses?.length ?? 0) > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {now.situation!.statuses!.map(s => (
+            <a key={s.label} href="/trackers" className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-slate-800 text-xs hover:border-slate-600 transition">
+              <span className="text-slate-300">{s.label}</span>
+              <span className="text-indigo-300">{s.value}</span>
+              <span className="text-slate-600">since {new Date(s.since).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</span>
+            </a>
+          ))}
+        </div>
+      )}
 
       {/* Going to — pre-departure checklist */}
       {(entitiesData?.data?.length ?? 0) > 0 && (
