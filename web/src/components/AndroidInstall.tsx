@@ -37,15 +37,16 @@ export const APPS: AndroidApp[] = [
     name: 'Ah! Rhythm',
     blurb: (
       <>
-        Your daily rhythm: supplements and meds, walks and workouts, eating windows. Grouped by Wake-up, Breakfast,
+        Your daily rhythm: supplements and meds, walks and workouts, eating windows, and holds (not eating till 10,
+        no snacks, no social) with gentle “still holding?” check-ins. Grouped by Wake-up, Breakfast,
         Midday, Dinner and Bedtime, so one tap (or one NFC tag) checks off a whole group. Works on its own; connect it
         to Ah-Ha to log to your trail and show it on Today.
       </>
     ),
     url: '/download/ah-rhythm.apk',
-    version: '0.2.0',
-    sizeMb: 29.4,
-    sha256: 'd3bf47eb9e00ba520330d0025e9314bc6c2df7a6583e86bfde2df3ff01b18b83',
+    version: '0.3.0',
+    sizeMb: 28.1,
+    sha256: '52bcd522c3f52783aa3b0f058a964f04e73764bca4bdeb6b136ab9f2e3fb8e81',
     minAndroid: '10',
     beta: true,
   },
