@@ -83,6 +83,9 @@ export interface LocationSignature {
   lat?: number
   lng?: number
   radius_m?: number
+  /** GPS: a place can have several locations, each with its own id and label. */
+  id?: string
+  label?: string | null
   // network
   external_ip?: string
   // bluetooth_le

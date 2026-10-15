@@ -6,7 +6,11 @@ import { reopenAlways } from '../lib/repeat.js'
 import { emit } from '../link/engine.js'
 
 const signatureSchema = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('gps'), lat: z.number(), lng: z.number(), radius_m: z.number().default(100) }),
+  z.object({
+    kind: z.literal('gps'), lat: z.number(), lng: z.number(), radius_m: z.number().default(100),
+    // A place can have several GPS locations (three Walmarts); id and label tell them apart.
+    id: z.string().max(40).optional(), label: z.string().max(60).optional(),
+  }),
   z.object({ kind: z.literal('network'), external_ip: z.string() }),
   z.object({ kind: z.literal('bluetooth_le'), local_name: z.string(), uuid: z.string().optional() }),
 ])
@@ -25,6 +29,51 @@ async function taggedOpen(fastify: FastifyInstance, orgId: ObjectId, userId: Obj
   return { listItems, cards }
 }
 
+type Sig = Record<string, unknown> & { kind: string }
+
+/** GPS signatures written before places had several locations have no id; give them one. */
+function withLocationIds(sigs: Sig[]): { sigs: Sig[]; changed: boolean } {
+  let changed = false
+  const out = sigs.map(sg => {
+    if (sg.kind !== 'gps' || sg['id']) return sg
+    changed = true
+    return { ...sg, id: new ObjectId().toHexString() }
+  })
+  return { sigs: out, changed }
+}
+
+/**
+ * Training merges GPS by place, not by kind: a point that overlaps one of the place's
+ * locations (or names its id) updates that location — a re-train or a new radius — and
+ * a point anywhere else adds another location. `replace` keeps only the new points.
+ * Other kinds (network, bluetooth) are still replaced by kind.
+ */
+function mergeSignatures(existing: Sig[], incoming: Sig[], replace: boolean): { sigs: Sig[]; touched: string[]; added: number } {
+  const kinds = new Set(incoming.filter(sg => sg.kind !== 'gps').map(sg => sg.kind))
+  let sigs = existing.filter(sg => !kinds.has(sg.kind) && !(replace && sg.kind === 'gps'))
+  const touched: string[] = []
+  let added = 0
+  for (const sg of incoming) {
+    if (sg.kind !== 'gps') { sigs.push(sg); continue }
+    const lat = sg['lat'] as number, lng = sg['lng'] as number, r = (sg['radius_m'] as number) ?? 100
+    const gps = sigs.filter(x => x.kind === 'gps')
+    const same: Sig | undefined = (sg['id'] ? gps.find(x => x['id'] === sg['id']) : undefined) ??
+      gps.map(x => ({ x, d: haversineM(lat, lng, x['lat'] as number, x['lng'] as number) }))
+        .filter(({ x, d }) => d <= Math.max(r, (x['radius_m'] as number) ?? 100, 100))
+        .sort((a, b) => a.d - b.d)[0]?.x
+    if (same) {
+      const next: Sig = { ...same, lat, lng, radius_m: r, ...(sg['label'] !== undefined ? { label: sg['label'] } : {}) }
+      sigs = sigs.map(x => x === same ? next : x)
+      touched.push(String(same['id']))
+    } else {
+      const id = (sg['id'] as string | undefined) ?? new ObjectId().toHexString()
+      sigs.push({ ...sg, id })
+      touched.push(id); added++
+    }
+  }
+  return { sigs, touched, added }
+}
+
 function haversineM(lat1: number, lng1: number, lat2: number, lng2: number): number {
   const R = 6371000
   const dLat = (lat2 - lat1) * Math.PI / 180
@@ -41,6 +90,13 @@ const entityRoutes: FastifyPluginAsync = async (fastify) => {
       .find({ org_id: req.user!.orgId, deleted_at: { $exists: false } })
       .sort({ updated_at: -1 })
       .toArray()
+    // Older places: give each GPS location an id once, so it can be renamed or removed on its own.
+    for (const e of entities) {
+      const { sigs, changed } = withLocationIds((e['signatures'] as Sig[] | undefined) ?? [])
+      if (!changed) continue
+      e['signatures'] = sigs
+      await fastify.mongo.collection('entities').updateOne({ _id: e._id }, { $set: { signatures: sigs } })
+    }
     return { data: entities }
   })
 
@@ -107,22 +163,54 @@ const entityRoutes: FastifyPluginAsync = async (fastify) => {
       const id = new ObjectId(req.params.id)
       const body = z.object({
         signatures: z.array(signatureSchema),
+        replace: z.boolean().default(false),
       }).parse(req.body)
 
       const entity = await fastify.mongo.collection('entities').findOne({ _id: id, org_id: req.user!.orgId })
       if (!entity) return reply.status(404).send({ error: 'Not found' })
 
-      // Merge: replace by kind so re-training updates GPS without wiping network
-      type SigKind = 'gps' | 'network' | 'bluetooth_le'
-      const existing = (entity['signatures'] as Array<{ kind: SigKind }>) ?? []
-      const incomingKinds = new Set<SigKind>(body.signatures.map(s => s.kind))
-      const merged = [...existing.filter(s => !incomingKinds.has(s.kind)), ...body.signatures]
+      const existing = withLocationIds((entity['signatures'] as Sig[] | undefined) ?? []).sigs
+      const { sigs, touched, added } = mergeSignatures(existing, body.signatures as Sig[], body.replace)
 
       await fastify.mongo.collection('entities').updateOne(
         { _id: id },
-        { $set: { signatures: merged, updated_at: new Date() } }
+        { $set: { signatures: sigs, updated_at: new Date() } }
       )
-      return { ok: true, signatures: merged }
+      return { ok: true, signatures: sigs, location_ids: touched, added }
+    }
+  )
+
+  // PATCH /api/entities/:id/locations/:locId — rename one GPS location or change its radius
+  fastify.patch<{ Params: { id: string; locId: string } }>(
+    '/api/entities/:id/locations/:locId', { preHandler: fastify.authenticate }, async (req, reply) => {
+      const body = z.object({
+        label: z.string().max(60).nullable().optional(),
+        radius_m: z.number().min(25).max(5000).optional(),
+      }).parse(req.body)
+      if (!ObjectId.isValid(req.params.id)) return reply.status(404).send({ error: 'Not found' })
+      const set: Record<string, unknown> = { updated_at: new Date() }
+      if (body.label !== undefined) set['signatures.$[loc].label'] = body.label || null
+      if (body.radius_m !== undefined) set['signatures.$[loc].radius_m'] = body.radius_m
+      const r = await fastify.mongo.collection('entities').updateOne(
+        { _id: new ObjectId(req.params.id), org_id: req.user!.orgId, signatures: { $elemMatch: { kind: 'gps', id: req.params.locId } } },
+        { $set: set },
+        { arrayFilters: [{ 'loc.kind': 'gps', 'loc.id': req.params.locId }] }
+      )
+      if (r.matchedCount === 0) return reply.status(404).send({ error: 'Location not found' })
+      return { ok: true }
+    }
+  )
+
+  // DELETE /api/entities/:id/locations/:locId — forget one GPS location; the others stay
+  fastify.delete<{ Params: { id: string; locId: string } }>(
+    '/api/entities/:id/locations/:locId', { preHandler: fastify.authenticate }, async (req, reply) => {
+      if (!ObjectId.isValid(req.params.id)) return reply.status(404).send({ error: 'Not found' })
+      const r = await fastify.mongo.collection('entities').updateOne(
+        { _id: new ObjectId(req.params.id), org_id: req.user!.orgId, signatures: { $elemMatch: { kind: 'gps', id: req.params.locId } } },
+        { $pull: { signatures: { kind: 'gps', id: req.params.locId } }, $set: { updated_at: new Date() } } as Record<string, unknown>
+      )
+      if (r.matchedCount === 0) return reply.status(404).send({ error: 'Location not found' })
+      return { ok: true }
     }
   )
 
@@ -143,12 +231,15 @@ const entityRoutes: FastifyPluginAsync = async (fastify) => {
         const sigs = (e['signatures'] as Array<Record<string, unknown>>) ?? []
         let score = 0
         const matchedKinds: string[] = []
+        let location: { id: unknown; label: unknown } | null = null
 
         for (const sig of sigs) {
           if (sig['kind'] === 'gps' && body.gps) {
             const dist = haversineM(body.gps.lat, body.gps.lng, sig['lat'] as number, sig['lng'] as number)
-            if (dist <= ((sig['radius_m'] as number) ?? 100)) {
+            // Several locations can't all be in range; count GPS once, at the first that is.
+            if (!location && dist <= ((sig['radius_m'] as number) ?? 100)) {
               score += 2; matchedKinds.push('gps')
+              location = { id: sig['id'] ?? null, label: sig['label'] ?? null }
             }
           }
           if (sig['kind'] === 'network' && body.network) {
@@ -163,7 +254,7 @@ const entityRoutes: FastifyPluginAsync = async (fastify) => {
             if (hit) { score += 1; matchedKinds.push('bluetooth_le') }
           }
         }
-        return { entity: e, score, matchedKinds }
+        return { entity: e, score, matchedKinds, location }
       }).filter(r => r.score > 0).sort((a, b) => b.score - a.score)
 
       const best = scored[0] ?? null
@@ -185,6 +276,7 @@ const entityRoutes: FastifyPluginAsync = async (fastify) => {
             entity:          r.entity,
             score:           r.score,
             matched_kinds:   r.matchedKinds,
+            location:        r.location,
             auto_checked_in: r === scored[0] && r.score >= 2,
           })),
           best: best

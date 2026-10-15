@@ -6,6 +6,8 @@ import { useEntityContext } from '../hooks/useEntityContext'
 interface LocationSignature {
   kind: 'gps' | 'network' | 'bluetooth_le'
   lat?: number; lng?: number; radius_m?: number
+  /** GPS: a place can have several locations (three Walmarts), each with its own id and label. */
+  id?: string; label?: string | null
   external_ip?: string
   local_name?: string
 }
@@ -23,7 +25,7 @@ const ENTITY_ICONS = ['📍', '🏠', '💼', '🏪', '🚗', '☕', '🏋️', 
 
 
 function sigBadge(sig: LocationSignature) {
-  if (sig.kind === 'gps') return `GPS (±${sig.radius_m ?? 100}m)`
+  if (sig.kind === 'gps') return `${sig.label || 'GPS'} (±${Math.round(sig.radius_m ?? 100)}m)`
   if (sig.kind === 'network') return `IP ${sig.external_ip?.slice(0, 8)}…`
   if (sig.kind === 'bluetooth_le') return `BT: ${sig.local_name}`
   return sig.kind
@@ -43,6 +45,9 @@ export default function EntityPage() {
   const [editing, setEditing] = useState<string | null>(null)
   const [editName, setEditName] = useState('')
   const [editIcon, setEditIcon] = useState('📍')
+  const [labelling, setLabelling] = useState<string | null>(null)
+  const [labelText, setLabelText] = useState('')
+  const [removingLoc, setRemovingLoc] = useState<string | null>(null)
 
   function toast(msg: string) {
     setToastMsg(msg)
@@ -86,16 +91,32 @@ export default function EntityPage() {
       const sigs = Object.values(signals)
       if (sigs.length === 0) { setTrainMsg('No signals available — try from a browser with location permission.'); return }
 
-      await api.post(`/api/entities/${entity._id}/train`, { signatures: sigs })
+      const res = await api.post<{ added: number }>(`/api/entities/${entity._id}/train`, { signatures: sigs })
       // Also check in after training
       await api.post(`/api/entities/${entity._id}/checkin`, {})
       ctx.setLocal({ _id: entity._id, name: entity.name, icon: entity.icon })
       await mutate()
-      toast(`Trained "${entity.name}" — checked in ✓`)
+      const hadGps = entity.signatures.some(s => s.kind === 'gps')
+      toast(res.added && hadGps
+        ? `Added another location for "${entity.name}" — checked in ✓`
+        : `Trained "${entity.name}" — checked in ✓`)
       setTrainMsg(null)
     } catch (err: unknown) {
       setTrainMsg(`Error: ${err instanceof Error ? err.message : 'unknown'}`)
     } finally { setTraining(null) }
+  }
+
+  async function saveLabel(entity: Entity, locId: string) {
+    await api.patch(`/api/entities/${entity._id}/locations/${locId}`, { label: labelText.trim() || null })
+    setLabelling(null)
+    await mutate()
+  }
+
+  async function removeLocation(entity: Entity, locId: string) {
+    await api.delete(`/api/entities/${entity._id}/locations/${locId}`)
+    setRemovingLoc(null)
+    await mutate()
+    toast(`Removed a location from "${entity.name}"`)
   }
 
   async function checkin(entity: Entity) {
@@ -278,7 +299,38 @@ export default function EntityPage() {
                   <div className="flex flex-wrap gap-1 mt-1">
                     {entity.signatures.length === 0
                       ? <span className="text-xs text-slate-700">No location trained yet</span>
-                      : entity.signatures.map((s, i) => (
+                      : entity.signatures.map((s, i) => s.kind === 'gps' && s.id ? (
+                          // One chip per GPS location: click the name to label it, ✕ twice to remove it.
+                          <span key={s.id} className="inline-flex items-center gap-1 text-xs text-slate-500 bg-slate-800 pl-1.5 pr-1 py-0.5 rounded">
+                            {labelling === s.id ? (
+                              <input
+                                autoFocus
+                                value={labelText}
+                                maxLength={60}
+                                placeholder="e.g. Hwy 70"
+                                onChange={e => setLabelText(e.target.value)}
+                                onKeyDown={e => {
+                                  if (e.key === 'Enter') saveLabel(entity, s.id!)
+                                  if (e.key === 'Escape') setLabelling(null)
+                                }}
+                                onBlur={() => saveLabel(entity, s.id!)}
+                                className="bg-slate-900 border border-slate-700 rounded px-1 w-24 text-slate-200"
+                              />
+                            ) : (
+                              <button
+                                onClick={() => { setLabelling(s.id!); setLabelText(s.label ?? '') }}
+                                className="hover:text-slate-300"
+                                title="Name this location"
+                              >📍 {sigBadge(s)}</button>
+                            )}
+                            <button
+                              onClick={() => removingLoc === s.id ? removeLocation(entity, s.id!) : setRemovingLoc(s.id!)}
+                              onBlur={() => setRemovingLoc(null)}
+                              className={removingLoc === s.id ? 'text-red-400 px-0.5' : 'text-slate-700 hover:text-red-400 px-0.5'}
+                              title="Remove this location"
+                            >{removingLoc === s.id ? 'remove?' : '✕'}</button>
+                          </span>
+                        ) : (
                           <span key={i} className="text-xs text-slate-600 bg-slate-800 px-1.5 py-0.5 rounded">
                             {sigBadge(s)}
                           </span>
@@ -309,9 +361,11 @@ export default function EntityPage() {
                     onClick={() => trainLocation(entity)}
                     disabled={training === entity._id}
                     className="px-2 py-1.5 text-xs text-slate-500 hover:text-slate-300 hover:bg-slate-800 rounded-lg transition disabled:opacity-40"
-                    title="Train location — I'm here now, capture signals"
+                    title={entity.signatures.some(s => s.kind === 'gps')
+                      ? "I'm here now — at one of this place's locations it updates that one, anywhere else it adds another"
+                      : "Train location — I'm here now, capture signals"}
                   >
-                    {training === entity._id ? '…' : 'Train'}
+                    {training === entity._id ? '…' : entity.signatures.some(s => s.kind === 'gps') ? '+ Location' : 'Train'}
                   </button>
                   <button
                     onClick={() => startEdit(entity)}

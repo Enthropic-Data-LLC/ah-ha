@@ -732,3 +732,56 @@ describe('Ah! Today columns + limit', () => {
     for (const col of cols.slice(0, 2)) await req('PATCH', `/api/board/${boardSlug}/columns/${col._id}`, { in_today: col.in_today ?? false, ...(col.today_priority ? { today_priority: col.today_priority } : {}) })
   })
 })
+
+// ── Places with several locations (three Walmarts) ──────────────────────────
+
+describe('Places: several locations', () => {
+  type Sig = { kind: string; id?: string; label?: string | null; lat?: number; lng?: number; radius_m?: number }
+  type Train = { signatures: Sig[]; location_ids: string[]; added: number }
+  type Ents = { data: Array<{ _id: string; signatures: Sig[] }> }
+  let id = ''
+  const gps = (s: Sig[]) => s.filter(x => x.kind === 'gps')
+  const train = async (body: unknown) => (await req<Train>('POST', `/api/entities/${id}/train`, body)).body as Train
+  // Two spots ~5 km apart, and a point ~50 m from the first.
+  const A = { lat: 35.7800, lng: -78.6400 }, B = { lat: 35.8250, lng: -78.6400 }, nearA = { lat: 35.78045, lng: -78.6400 }
+
+  it('training somewhere new adds a location; near an existing one it updates that one', async () => {
+    id = ((await req<{ data: { _id: string } }>('POST', '/api/entities', { name: `Walmart ${Date.now()}`, icon: '🏪' })).body as { data: { _id: string } }).data._id
+    const a = await train({ signatures: [{ kind: 'gps', ...A, radius_m: 100 }] })
+    expect(a.added).toBe(1)
+    const b = await train({ signatures: [{ kind: 'gps', ...B, radius_m: 100, label: 'North' }] })
+    expect(b.added).toBe(1)
+    expect(gps(b.signatures)).toHaveLength(2)
+    const again = await train({ signatures: [{ kind: 'gps', ...nearA, radius_m: 150 }] })
+    expect(again.added).toBe(0)
+    expect(again.location_ids[0]).toBe(a.location_ids[0])
+    expect(gps(again.signatures)).toHaveLength(2)
+    expect(gps(again.signatures).find(x => x.id === a.location_ids[0])!.radius_m).toBe(150)
+  })
+
+  it('detect checks every location and says which one matched', async () => {
+    type Det = { data: { matches: Array<{ entity: { _id: string }; location: { id: string; label: string } | null }> } }
+    const d = (await req<Det>('POST', '/api/entities/detect', { gps: B })).body as Det
+    const m = d.data.matches.find(x => x.entity._id === id)
+    expect(m?.location?.label).toBe('North')
+  })
+
+  it('one location can be labelled or removed without touching the others', async () => {
+    const ents = ((await req<Ents>('GET', '/api/entities')).body as Ents).data
+    const [first, second] = gps(ents.find(e => e._id === id)!.signatures)
+    expect((await req('PATCH', `/api/entities/${id}/locations/${first!.id}`, { label: 'Hwy 70' })).status).toBe(200)
+    expect((await req('DELETE', `/api/entities/${id}/locations/${second!.id}`)).status).toBe(200)
+    expect((await req('DELETE', `/api/entities/${id}/locations/nope`)).status).toBe(404)
+    const left = gps(((await req<Ents>('GET', '/api/entities')).body as Ents).data.find(e => e._id === id)!.signatures)
+    expect(left).toHaveLength(1)
+    expect(left[0]!.label).toBe('Hwy 70')
+  })
+
+  it('replace keeps only the new point', async () => {
+    await train({ signatures: [{ kind: 'gps', ...B }] })
+    const r = await train({ signatures: [{ kind: 'gps', ...A }], replace: true })
+    expect(gps(r.signatures)).toHaveLength(1)
+  })
+
+  afterAll(async () => { if (id) await req('DELETE', `/api/entities/${id}`) })
+})
