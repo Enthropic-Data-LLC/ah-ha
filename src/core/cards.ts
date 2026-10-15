@@ -1,11 +1,19 @@
 import type { FastifyInstance } from 'fastify'
+import type { ObjectId } from 'mongodb'
 import type { Caller, Doc } from './index.js'
 
 /** Hidden by "Not now" / snooze until defer_until has passed. */
 const visibleAt = (now: Date) => ({ $or: [{ defer_until: null }, { defer_until: { $lte: now } }] })
 
+const CARD_PRIORITY: Record<string, number> = { high: 3, medium: 2, low: 1 }
+
+/** A board column that feeds Ah! Today (board_columns.in_today), as Today sees it. */
+export interface TodayColumn { _id: string; title: string; priority: number }
+
 export function cardsCore(fastify: FastifyInstance) {
   const cards = () => fastify.mongo.collection<Doc>('board_cards')
+  const columns = () => fastify.mongo.collection<Doc>('board_columns')
+  const spaces = () => fastify.mongo.collection<Doc>('spaces')
   const open = (c: Caller) => ({ org_id: c.orgId, done: { $ne: true }, deleted_at: { $exists: false } })
   return {
     /** Open cards due before [before], most overdue first. */
@@ -15,6 +23,31 @@ export function cardsCore(fastify: FastifyInstance) {
     /** Open cards due in [start, end], highest priority first. */
     dueBetween: (c: Caller, start: Date, end: Date, now: Date, limit: number) =>
       cards().find({ ...open(c), due_date: { $gte: start, $lte: end }, ...visibleAt(now) }).sort({ priority: -1 }).limit(limit).toArray(),
+
+    /**
+     * Open, visible cards in columns switched on for Ah! Today, each with its column.
+     * Highest column priority first (In Progress before To Do), then card priority,
+     * then board order. Columns of deleted boards are left out.
+     */
+    inTodayColumns: async (c: Caller, now: Date, limit: number): Promise<Array<Doc & { column: TodayColumn }>> => {
+      const cols = await columns().find({ org_id: c.orgId, in_today: true, deleted_at: { $exists: false } }).toArray()
+      if (!cols.length) return []
+      const live = new Set((await spaces()
+        .find({ _id: { $in: cols.map(x => x['space_id'] as ObjectId) }, deleted_at: { $exists: false } }, { projection: { _id: 1 } })
+        .toArray()).map(s => String(s._id)))
+      const byId = new Map(cols.filter(x => live.has(String(x['space_id']))).map(x => [String(x._id), {
+        _id: String(x._id), title: x['title'] as string, priority: Number(x['today_priority'] ?? 1), position: Number(x['position'] ?? 0),
+      }]))
+      if (!byId.size) return []
+      const found = await cards().find({ ...open(c), column_id: { $in: cols.filter(x => byId.has(String(x._id))).map(x => x._id) }, ...visibleAt(now) }).toArray()
+      const col = (d: Doc) => byId.get(String(d['column_id']))!
+      return found
+        .sort((a, b) => col(b).priority - col(a).priority || col(a).position - col(b).position ||
+          (CARD_PRIORITY[String(b['priority'])] ?? 0) - (CARD_PRIORITY[String(a['priority'])] ?? 0) ||
+          Number(a['position'] ?? 0) - Number(b['position'] ?? 0))
+        .slice(0, limit)
+        .map(d => { const { position: _, ...column } = col(d); return { ...d, column } })
+    },
 
     /** Open habit cards anchored to this part of the day (morning | midday | evening | night). */
     habitsAt: (c: Caller, anchor: string, limit: number) =>

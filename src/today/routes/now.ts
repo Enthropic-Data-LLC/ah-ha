@@ -43,6 +43,30 @@ const OID_RE = /^[0-9a-f]{24}$/i
 /** Snoozed this many times → Follow-through (modules/followthrough) brings it forward. */
 const SNOOZED_OFTEN = 3
 
+/** Cards taken from columns switched on for Ah! Today, before the person's own limit. */
+const BOARD_MAX = 20
+
+/**
+ * The person's "show up to N items" (user_settings.today_limit). Sections are filled
+ * in this order until N is reached, so what is overdue or due now is never the part
+ * cut off. The focus card and calendar are not counted.
+ */
+const LIMIT_ORDER = ['urgent', 'habits', 'due_today', 'location_context', 'board', 'resurfaced',
+  'entity_list_items', 'list_items', 'nudges'] as const
+
+function applyLimit<T extends Record<(typeof LIMIT_ORDER)[number], unknown[]>>(sections: T, max: number | null) {
+  const total = LIMIT_ORDER.reduce((n, k) => n + sections[k].length, 0)
+  if (max == null || total <= max) return { sections, limit: { max, total, hidden: 0 } }
+  let left = max
+  const out = { ...sections }
+  for (const k of LIMIT_ORDER) {
+    const keep = Math.min(left, sections[k].length)
+    out[k] = sections[k].slice(0, keep) as T[typeof k]
+    left -= keep
+  }
+  return { sections: out, limit: { max, total, hidden: total - max } }
+}
+
 // The briefing is an AI call (cost + ~2s), and /api/now is polled every minute by the
 // web page, the phone app and its widget. So it is regenerated only when what it
 // describes changes — place or time of day — or when someone opens the app/page
@@ -94,6 +118,11 @@ const nowRoutes: FastifyPluginAsync = async (fastify) => {
       // Recently resurfaced (defer expired in last hour)
       const oneHourAgo = new Date(now.getTime() - 3600_000)
       const resurfaced = await c.cards.resurfaced(caller, oneHourAgo, now, 3)
+
+      // Cards in board columns switched on for Ah! Today, highest column priority first.
+      // A card already in another section stays there instead.
+      const shownIds = new Set([...urgent, ...dueToday, ...habits, ...resurfaced].map(d => String(d['_id'])))
+      const boardCards = (await c.cards.inTodayColumns(caller, now, BOARD_MAX)).filter(d => !shownIds.has(String(d['_id'])))
 
       // Interval nudges (at 80% of interval) — filter in Node, not $where (no JS eval in prod)
       const allIntervalCards = await c.cards.recurring(caller, ['interval', 'seasonal'], now)
@@ -214,6 +243,7 @@ const nowRoutes: FastifyPluginAsync = async (fastify) => {
           ...urgent.map(c => cardC(c, 5, 'overdue')),
           ...dueToday.map(c => cardC(c, 3, 'due today')),
           ...habits.map(c => cardC(c, 2, 'a habit for this time of day')),
+          ...boardCards.map(c => cardC(c, c.column.priority, `in ${c.column.title}`)),
           ...locationCards.map(c => itemC(c, 3, `tagged to ${here}`)).map(c => ({ ...c, kind: 'card' as const })),
           ...entityListItems.map(i => itemC(i, 2, `pick up at ${here}`)),
           // Timed list items (Ah! Rhythm's, or any with a due time) rank higher once their time has come.
@@ -310,6 +340,19 @@ const nowRoutes: FastifyPluginAsync = async (fastify) => {
       // A bad tz or a down trail store leaves the streak out rather than failing Today.
       const streakInfo = await streak(c, caller, tz).catch(() => null)
 
+      // Sort each section: time-chunk-matched cards float first. Then the person's limit.
+      const { sections, limit } = applyLimit({
+        urgent:    sortByTimeChunk(urgent,    localHour, localDow).map(c => ({ _id: c['_id'], title: c['title'], due_date: c['due_date'], column_id: c['column_id'], ref: c['ref'] })),
+        habits:    sortByTimeChunk(habits,    localHour, localDow).map(c => ({ _id: c['_id'], title: c['title'], recurrence: c['recurrence'], ref: c['ref'] })),
+        due_today: sortByTimeChunk(dueToday,  localHour, localDow).map(c => ({ _id: c['_id'], title: c['title'], due_date: c['due_date'], priority: c['priority'], column_id: c['column_id'], ref: c['ref'] })),
+        location_context: locationCards,
+        board:     boardCards.map(c => ({ _id: c['_id'], title: c['title'], due_date: c['due_date'] ?? null, column_id: c['column_id'], ref: c['ref'], column: c.column.title, column_priority: c.column.priority })),
+        resurfaced: sortByTimeChunk(resurfaced, localHour, localDow).map(c => ({ _id: c['_id'], title: c['title'], ref: c['ref'] })),
+        entity_list_items: entityListItems,
+        list_items: listItems.map(i => ({ _id: i['_id'], title: i['title'], due_at: i['due_at'], repeat: i['repeat'] ?? 'once' })),
+        nudges:     nudges.map(c => ({ _id: c['_id'], title: c['title'], ref: c['ref'], recurrence: c['recurrence'], created_at: c['created_at'] })),
+      }, await c.settings.todayLimit(caller).catch(() => null))
+
       return {
         data: {
           context: {
@@ -318,15 +361,8 @@ const nowRoutes: FastifyPluginAsync = async (fastify) => {
             presence_entity: presenceEntity,
             generated_at:   now.toISOString(),
           },
-          // Sort each section: time-chunk-matched cards float first
-          urgent:    sortByTimeChunk(urgent,    localHour, localDow).map(c => ({ _id: c['_id'], title: c['title'], due_date: c['due_date'], column_id: c['column_id'], ref: c['ref'] })),
-          due_today: sortByTimeChunk(dueToday,  localHour, localDow).map(c => ({ _id: c['_id'], title: c['title'], due_date: c['due_date'], priority: c['priority'], column_id: c['column_id'], ref: c['ref'] })),
-          habits:    sortByTimeChunk(habits,    localHour, localDow).map(c => ({ _id: c['_id'], title: c['title'], recurrence: c['recurrence'], ref: c['ref'] })),
-          resurfaced: sortByTimeChunk(resurfaced, localHour, localDow).map(c => ({ _id: c['_id'], title: c['title'], ref: c['ref'] })),
-          nudges:     nudges.map(c => ({ _id: c['_id'], title: c['title'], ref: c['ref'], recurrence: c['recurrence'], created_at: c['created_at'] })),
-          list_items: listItems.map(i => ({ _id: i['_id'], title: i['title'], due_at: i['due_at'], repeat: i['repeat'] ?? 'once' })),
-          entity_list_items: entityListItems,
-          location_context: locationCards,
+          ...sections,
+          limit,
           trail_pulse: trailPulse,
           calendar_events: calendarEvents,
           briefing,

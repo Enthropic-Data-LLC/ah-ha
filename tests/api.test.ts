@@ -672,3 +672,63 @@ describe('Tags: NFC and QR', () => {
     expect((body as Links)[0]!.target.sha256_cert_fingerprints[0]).toMatch(/^([0-9A-F]{2}:){31}[0-9A-F]{2}$/)
   })
 })
+
+// ── Ah! Today: board columns that show there, their priority, and the item limit ─
+
+describe('Ah! Today columns + limit', () => {
+  type Cols = { data: Array<{ _id: string; title: string; in_today?: boolean; today_priority?: number }> }
+  type Board = { _id: string; column: string; column_priority: number }
+  type Now = { data: Record<string, unknown[]> & { board: Board[]; limit: { max: number | null; total: number; hidden: number } } }
+  const now = async () => ((await req<Now>('GET', '/api/now?tz=America/New_York')).body as Now).data
+  let cols: Cols['data'] = []
+  const made: string[] = []
+
+  it('a column can be switched on for Ah! Today with a priority; bad priorities are refused', async () => {
+    cols = ((await req<Cols>('GET', `/api/board/${boardSlug}/columns`)).body as Cols).data
+    expect(cols.length).toBeGreaterThanOrEqual(2)
+    const r = await req<{ data: { in_today: boolean; today_priority: number } }>('PATCH', `/api/board/${boardSlug}/columns/${cols[0]!._id}`, { in_today: true, today_priority: 2 })
+    expect(r.status).toBe(200)
+    expect((r.body as { data: { in_today: boolean } }).data.in_today).toBe(true)
+    expect((await req('PATCH', `/api/board/${boardSlug}/columns/${cols[1]!._id}`, { in_today: true, today_priority: 5 })).status).toBe(200)
+    expect((await req('PATCH', `/api/board/${boardSlug}/columns/${cols[1]!._id}`, { today_priority: 9 })).status).toBe(400)
+    expect((await req('PATCH', `/api/board/${boardSlug}/columns/000000000000000000000000`, { in_today: true })).status).toBe(404)
+  })
+
+  it('cards in those columns show on Ah! Today, the higher-priority column first', async () => {
+    for (const [i, col] of [cols[0]!, cols[1]!].entries()) {
+      const c = (await req<{ data: { _id: string } }>('POST', `/api/board/${boardSlug}/cards`, { column_id: col._id, title: `Today column card ${i} ${Date.now()}` })).body as { data: { _id: string } }
+      made.push(c.data._id)
+    }
+    const board = (await now()).board
+    const low = board.findIndex(c => c._id === made[0])
+    const high = board.findIndex(c => c._id === made[1])
+    expect(low).toBeGreaterThanOrEqual(0)
+    expect(high).toBeGreaterThanOrEqual(0)
+    expect(high).toBeLessThan(low)
+    expect(board[high]!.column_priority).toBe(5)
+  })
+
+  it('switching a column off takes its cards out', async () => {
+    await req('PATCH', `/api/board/${boardSlug}/columns/${cols[0]!._id}`, { in_today: false })
+    expect((await now()).board.some(c => c._id === made[0])).toBe(false)
+  })
+
+  it('the item limit caps what Ah! Today shows and says how many are hidden', async () => {
+    expect((await req('PUT', '/api/settings', { today_limit: 0 })).status).toBe(400)
+    expect((await req('PUT', '/api/settings', { today_limit: 1 })).status).toBe(200)
+    expect(((await req<{ data: { today_limit: number } }>('GET', '/api/settings')).body as { data: { today_limit: number } }).data.today_limit).toBe(1)
+    const d = await now()
+    const shown = ['urgent', 'habits', 'due_today', 'location_context', 'board', 'resurfaced', 'entity_list_items', 'list_items', 'nudges']
+      .reduce((n, k) => n + (d[k]?.length ?? 0), 0)
+    expect(shown).toBeLessThanOrEqual(1)
+    expect(d.limit.max).toBe(1)
+    expect(d.limit.hidden).toBe(d.limit.total - shown)
+    expect((await req('PUT', '/api/settings', { today_limit: null })).status).toBe(200)
+    expect((await now()).limit.max).toBeNull()
+  })
+
+  afterAll(async () => {
+    for (const id of made) await req('DELETE', `/api/board/${boardSlug}/cards/${id}`)
+    for (const col of cols.slice(0, 2)) await req('PATCH', `/api/board/${boardSlug}/columns/${col._id}`, { in_today: col.in_today ?? false, ...(col.today_priority ? { today_priority: col.today_priority } : {}) })
+  })
+})

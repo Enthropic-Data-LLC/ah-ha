@@ -136,6 +136,15 @@ export default function BoardPage({ slug }: Props) {
     await mutateColumns()
   }
 
+  async function updateColumn(colId: string, updates: Pick<BoardColumn, 'in_today' | 'today_priority'>) {
+    await mutateColumns(
+      d => d && { ...d, data: d.data.map(c => c._id === colId ? { ...c, ...updates } : c) },
+      { revalidate: false },
+    )
+    await api.patch(`/api/board/${slug}/columns/${colId}`, updates)
+    await mutateColumns()
+  }
+
   async function deleteColumn(colId: string) {
     await api.delete(`/api/board/${slug}/columns/${colId}`)
     await mutateColumns()
@@ -325,6 +334,28 @@ export default function BoardPage({ slug }: Props) {
                 <div className="flex items-center gap-1.5 mb-3 px-1 group">
                   <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: col.color }} />
                   <h2 className="text-sm font-semibold flex-1 truncate">{col.title}</h2>
+                  {/* Ah! Today: whether this column's cards show there, and how they rank */}
+                  <button
+                    onClick={() => updateColumn(col._id, { in_today: !col.in_today, today_priority: col.today_priority ?? 1 })}
+                    aria-pressed={!!col.in_today}
+                    title={col.in_today ? 'Shown in Ah! Today — click to stop' : 'Not shown in Ah! Today — click to show'}
+                    className={`px-1.5 py-0.5 rounded text-[10px] font-medium border transition flex-shrink-0 ${
+                      col.in_today
+                        ? 'border-indigo-500 bg-indigo-500/15 text-indigo-300'
+                        : 'border-slate-700 text-slate-600 hover:text-slate-400 hover:border-slate-500'
+                    }`}
+                  >Today</button>
+                  {col.in_today && (
+                    <select
+                      value={col.today_priority ?? 1}
+                      onChange={e => updateColumn(col._id, { today_priority: Number(e.target.value) })}
+                      aria-label={`${col.title}: priority in Ah! Today`}
+                      title="Priority in Ah! Today — higher shows first"
+                      className="bg-slate-900 border border-slate-700 rounded text-[10px] text-slate-300 px-0.5 py-0.5 flex-shrink-0"
+                    >
+                      {[5, 4, 3, 2, 1].map(n => <option key={n} value={n}>P{n}</option>)}
+                    </select>
+                  )}
                   <span className="text-xs text-slate-600">
                     {(visibleCardsByColumn[col._id] ?? []).length}
                     {(visibleCardsByColumn[col._id] ?? []).length !== (cardsByColumn[col._id] ?? []).length && (

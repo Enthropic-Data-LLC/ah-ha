@@ -6,6 +6,7 @@ import CardModal from '../components/CardModal'
 import type { BoardCard, BoardColumn, Entity } from '../lib/types'
 
 interface NowCard { _id: string; title: string; due_date?: string; priority?: string; ref?: string; created_at?: string; recurrence?: { archetype: string; streak_count?: number; time_anchor?: string; interval_days?: number; last_completed_at?: string | null } }
+interface NowBoardCard extends NowCard { column: string; column_priority: number }
 interface NowItem { _id: string; title: string; due_at?: string }
 interface NowListItem { _id: string; title: string; space_ref?: string }
 interface CalendarEvent { uid: string; title: string; start: string; end: string; all_day: boolean; location?: string; calendar: string; color: string }
@@ -26,6 +27,8 @@ interface NowData {
   list_items: NowItem[]
   entity_list_items: NowListItem[]
   location_context: NowCard[]
+  board?: NowBoardCard[]
+  limit?: { max: number | null; total: number; hidden: number }
   trail_pulse: { recent_tone: string; total_today: number } | null
   briefing: string | null
 }
@@ -39,6 +42,8 @@ const PRESENCE_LABEL: Record<string, string> = {
 const TONE_COLOR: Record<string, string> = {
   happy: 'text-emerald-400', sorrow: 'text-rose-400', neutral: 'text-slate-500'
 }
+
+const LIMIT_CHOICES = [3, 5, 7, 10, 15, 20, 30]
 
 function DaysOverdue({ due }: { due: string }) {
   const days = Math.floor((Date.now() - new Date(due).getTime()) / 86400000)
@@ -217,6 +222,11 @@ export default function NowPage() {
     await mutate()
   }
 
+  async function setLimit(today_limit: number | null) {
+    await api.put('/api/settings', { today_limit })
+    await mutate()
+  }
+
   async function complete(cardId: string) {
     await api.post(`/api/cards/${cardId}/complete`, {})
     await mutate()
@@ -230,7 +240,8 @@ export default function NowPage() {
     )
   }
 
-  const total = now.urgent.length + now.due_today.length + now.habits.length + now.resurfaced.length + now.list_items.length + now.nudges.length + now.entity_list_items.length
+  const board = now.board ?? []
+  const total = now.urgent.length + now.due_today.length + now.habits.length + now.resurfaced.length + now.list_items.length + now.nudges.length + now.entity_list_items.length + board.length
   const isEmpty = total === 0
 
   return (
@@ -422,6 +433,16 @@ export default function NowPage() {
         </Section>
       )}
 
+      {/* Board columns switched on for Ah! Today, one section per column, highest priority first */}
+      {[...new Set(board.map(c => c.column))].map(column => {
+        const cs = board.filter(c => c.column === column)
+        return (
+          <Section key={column} title={column} count={cs.length} accent="text-indigo-300">
+            {cs.map(c => <CardRow key={c._id} card={c} onDefer={snooze} onComplete={complete} onOpen={openCard} />)}
+          </Section>
+        )
+      })}
+
       {/* Resurfaced */}
       <Section title="Just resurfaced" count={now.resurfaced.length} accent="text-amber-500">
         {now.resurfaced.map(c => <CardRow key={c._id} card={c} onDefer={snooze} onComplete={complete} onOpen={openCard} />)}
@@ -463,10 +484,31 @@ export default function NowPage() {
         </div>
       )}
 
-      <p className="text-xs text-slate-700 text-center pt-2">
-        Updated {new Date(now.context.generated_at).toLocaleTimeString()}
-        {deferring && ' · snoozed'}
-      </p>
+      {(now.limit?.hidden ?? 0) > 0 && (
+        <p className="text-xs text-slate-600 text-center">
+          {now.limit!.hidden} more not shown
+        </p>
+      )}
+
+      <div className="flex items-center justify-center gap-3 pt-2 text-xs text-slate-700">
+        <span>
+          Updated {new Date(now.context.generated_at).toLocaleTimeString()}
+          {deferring && ' · snoozed'}
+        </span>
+        <span>·</span>
+        <label className="flex items-center gap-1">
+          Show up to
+          <select
+            value={now.limit?.max ?? ''}
+            onChange={e => setLimit(e.target.value ? Number(e.target.value) : null)}
+            className="bg-slate-900 border border-slate-800 rounded text-slate-400 px-1 py-0.5"
+          >
+            <option value="">all</option>
+            {LIMIT_CHOICES.map(n => <option key={n} value={n}>{n}</option>)}
+          </select>
+          items
+        </label>
+      </div>
     </div>
 
     {/* Card detail modal — opened by clicking any card title */}

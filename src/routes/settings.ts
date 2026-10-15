@@ -13,6 +13,7 @@ const settingsRoutes: FastifyPluginAsync = async (fastify) => {
         data: {
           anthropic_api_key: settings?.['anthropic_api_key'] ? '••••' + (settings['anthropic_api_key'] as string).slice(-4) : null,
           has_anthropic_key: !!(settings?.['anthropic_api_key']),
+          today_limit: (settings?.['today_limit'] as number | null | undefined) ?? null,
         }
       }
     }
@@ -25,12 +26,15 @@ const settingsRoutes: FastifyPluginAsync = async (fastify) => {
     async (req) => {
       const body = z.object({
         anthropic_api_key: z.string().min(1).optional().nullable(),
+        // Ah! Today shows at most this many items; null = no limit.
+        today_limit: z.number().int().min(1).max(100).nullable().optional(),
       }).parse(req.body)
 
       const update: Record<string, unknown> = { user_id: req.user!.id, updated_at: new Date() }
       if (body.anthropic_api_key !== undefined) {
         update['anthropic_api_key'] = body.anthropic_api_key ?? null
       }
+      if (body.today_limit !== undefined) update['today_limit'] = body.today_limit
 
       await fastify.mongo.collection('user_settings').updateOne(
         { user_id: req.user!.id },

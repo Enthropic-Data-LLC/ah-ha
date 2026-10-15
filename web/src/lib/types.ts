@@ -22,6 +22,10 @@ export interface BoardColumn {
   color: string
   position: number
   space_id: string
+  /** Its cards show in Ah! Today. */
+  in_today?: boolean
+  /** 1–5; higher comes first in Ah! Today (In Progress above To Do). */
+  today_priority?: number
 }
 
 export type RecurrenceArchetype = 'habit' | 'schedule' | 'interval' | 'seasonal'

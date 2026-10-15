@@ -58,6 +58,33 @@ const boardRoutes: FastifyPluginAsync = async (fastify) => {
     }
   )
 
+  // PATCH /api/board/:slug/columns/:id — rename, recolour, or set whether its cards
+  // show in Ah! Today and how they rank there (today_priority: higher comes first).
+  fastify.patch<{ Params: { slug: string; id: string } }>(
+    '/api/board/:slug/columns/:id',
+    { preHandler: fastify.authenticate },
+    async (req, reply) => {
+      const body = z.object({
+        title: z.string().min(1).optional(),
+        color: z.string().optional(),
+        in_today: z.boolean().optional(),
+        today_priority: z.number().int().min(1).max(5).optional(),
+      }).parse(req.body)
+      const space = await getSpace(fastify, req.params.slug, req.user!.orgId)
+      if (!space) return reply.status(404).send({ error: 'Board not found' })
+      if (!ObjectId.isValid(req.params.id)) return reply.status(404).send({ error: 'Column not found' })
+
+      const col = await fastify.mongo.collection('board_columns').findOneAndUpdate(
+        { _id: new ObjectId(req.params.id), space_id: space._id, org_id: req.user!.orgId },
+        { $set: { ...body, updated_at: new Date() } },
+        { returnDocument: 'after' }
+      )
+      if (!col) return reply.status(404).send({ error: 'Column not found' })
+      publish(fastify, `${req.user!.username}/board/${req.params.slug}`, { op: 'column_updated', id: req.params.id })
+      return { data: col }
+    }
+  )
+
   // GET /api/board/:slug/cards — location-aware like list items: `places`, `here`,
   // `meta.location`, and `?at=here|<place name>|<id>`. Order is left alone (the board's
   // drag-and-drop ranks cards by their neighbours as returned).
