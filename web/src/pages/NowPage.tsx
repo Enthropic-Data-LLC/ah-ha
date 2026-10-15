@@ -433,7 +433,7 @@ export default function NowPage() {
         </Section>
       )}
 
-      {/* Board columns switched on for Ah! Today, one section per column, highest priority first */}
+      {/* Board columns switched on for Ah! Today, one section per column, priority 1 first */}
       {[...new Set(board.map(c => c.column))].map(column => {
         const cs = board.filter(c => c.column === column)
         return (

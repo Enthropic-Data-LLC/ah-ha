@@ -343,9 +343,9 @@ export default function BoardPage({ slug }: Props) {
                   {col.in_today && (
                     <button
                       onClick={() => setSettingsFor(col._id)}
-                      title={`Shown in Ah! Today, priority ${col.today_priority ?? 1}`}
+                      title={`Shown in Ah! Today, priority ${col.today_priority ?? 3} (1 is the highest)`}
                       className="px-1.5 py-0.5 rounded text-[10px] font-medium border border-indigo-500 bg-indigo-500/15 text-indigo-300 flex-shrink-0"
-                    >Today · P{col.today_priority ?? 1}</button>
+                    >Today · P{col.today_priority ?? 3}</button>
                   )}
                   <span className="text-xs text-slate-600">
                     {(visibleCardsByColumn[col._id] ?? []).length}

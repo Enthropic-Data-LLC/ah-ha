@@ -27,7 +27,7 @@ export default function ColumnSettings({ column, columns, cardCount, onSave, onM
   const [title, setTitle] = useState(column.title)
   const [color, setColor] = useState(column.color)
   const [inToday, setInToday] = useState(!!column.in_today)
-  const [priority, setPriority] = useState(column.today_priority ?? 1)
+  const [priority, setPriority] = useState(column.today_priority ?? 3)
   const others = columns.filter(c => c._id !== column._id)
   const [moveTo, setMoveTo] = useState(others[0]?._id ?? '')
   const [confirming, setConfirming] = useState(false)
@@ -47,7 +47,7 @@ export default function ColumnSettings({ column, columns, cardCount, onSave, onM
     if (title.trim() && title.trim() !== column.title) changes.title = title.trim()
     if (color !== column.color) changes.color = color
     if (inToday !== !!column.in_today) changes.in_today = inToday
-    if (inToday && priority !== (column.today_priority ?? 1)) changes.today_priority = priority
+    if (inToday && priority !== (column.today_priority ?? 3)) changes.today_priority = priority
     if (inToday && !column.in_today) changes.today_priority = priority
     if (Object.keys(changes).length === 0) { onClose(); return }
     run(() => onSave(changes))
@@ -101,7 +101,7 @@ export default function ColumnSettings({ column, columns, cardCount, onSave, onM
             <input type="checkbox" checked={inToday} onChange={e => setInToday(e.target.checked)} className="w-5 h-5 accent-indigo-500" />
           </label>
           <div className={inToday ? '' : 'opacity-40 pointer-events-none'}>
-            <span className="text-xs text-slate-500 block mb-1.5">Priority — higher shows first (e.g. In Progress 5, To Do 2)</span>
+            <span className="text-xs text-slate-500 block mb-1.5">Priority — 1 is the highest and shows first (e.g. In Progress 1, To Do 2)</span>
             <div className="flex gap-1.5" role="radiogroup" aria-label="Priority in Ah! Today">
               {[1, 2, 3, 4, 5].map(n => (
                 <button

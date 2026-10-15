@@ -24,7 +24,7 @@ export interface BoardColumn {
   space_id: string
   /** Its cards show in Ah! Today. */
   in_today?: boolean
-  /** 1–5; higher comes first in Ah! Today (In Progress above To Do). */
+  /** 1–5, ordinal: 1 is the highest and comes first in Ah! Today (In Progress 1, To Do 2). */
   today_priority?: number
 }
 

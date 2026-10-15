@@ -59,7 +59,7 @@ const boardRoutes: FastifyPluginAsync = async (fastify) => {
   )
 
   // PATCH /api/board/:slug/columns/:id — rename, recolour, or set whether its cards
-  // show in Ah! Today and how they rank there (today_priority: higher comes first).
+  // show in Ah! Today and how they rank there (today_priority: 1 is the highest, 5 the lowest).
   fastify.patch<{ Params: { slug: string; id: string } }>(
     '/api/board/:slug/columns/:id',
     { preHandler: fastify.authenticate },

@@ -119,7 +119,7 @@ const nowRoutes: FastifyPluginAsync = async (fastify) => {
       const oneHourAgo = new Date(now.getTime() - 3600_000)
       const resurfaced = await c.cards.resurfaced(caller, oneHourAgo, now, 3)
 
-      // Cards in board columns switched on for Ah! Today, highest column priority first.
+      // Cards in board columns switched on for Ah! Today, priority 1 columns first.
       // A card already in another section stays there instead.
       const shownIds = new Set([...urgent, ...dueToday, ...habits, ...resurfaced].map(d => String(d['_id'])))
       const boardCards = (await c.cards.inTodayColumns(caller, now, BOARD_MAX)).filter(d => !shownIds.has(String(d['_id'])))
@@ -243,7 +243,8 @@ const nowRoutes: FastifyPluginAsync = async (fastify) => {
           ...urgent.map(c => cardC(c, 5, 'overdue')),
           ...dueToday.map(c => cardC(c, 3, 'due today')),
           ...habits.map(c => cardC(c, 2, 'a habit for this time of day')),
-          ...boardCards.map(c => cardC(c, c.column.priority, `in ${c.column.title}`)),
+          // Column priority is ordinal (1 = highest), so 1 scores 5 and 5 scores 1.
+          ...boardCards.map(c => cardC(c, 6 - c.column.priority, `in ${c.column.title}`)),
           ...locationCards.map(c => itemC(c, 3, `tagged to ${here}`)).map(c => ({ ...c, kind: 'card' as const })),
           ...entityListItems.map(i => itemC(i, 2, `pick up at ${here}`)),
           // Timed list items (Ah! Rhythm's, or any with a due time) rank higher once their time has come.

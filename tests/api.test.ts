@@ -686,15 +686,15 @@ describe('Ah! Today columns + limit', () => {
   it('a column can be switched on for Ah! Today with a priority; bad priorities are refused', async () => {
     cols = ((await req<Cols>('GET', `/api/board/${boardSlug}/columns`)).body as Cols).data
     expect(cols.length).toBeGreaterThanOrEqual(2)
-    const r = await req<{ data: { in_today: boolean; today_priority: number } }>('PATCH', `/api/board/${boardSlug}/columns/${cols[0]!._id}`, { in_today: true, today_priority: 2 })
+    const r = await req<{ data: { in_today: boolean; today_priority: number } }>('PATCH', `/api/board/${boardSlug}/columns/${cols[0]!._id}`, { in_today: true, today_priority: 4 })
     expect(r.status).toBe(200)
     expect((r.body as { data: { in_today: boolean } }).data.in_today).toBe(true)
-    expect((await req('PATCH', `/api/board/${boardSlug}/columns/${cols[1]!._id}`, { in_today: true, today_priority: 5 })).status).toBe(200)
+    expect((await req('PATCH', `/api/board/${boardSlug}/columns/${cols[1]!._id}`, { in_today: true, today_priority: 1 })).status).toBe(200)
     expect((await req('PATCH', `/api/board/${boardSlug}/columns/${cols[1]!._id}`, { today_priority: 9 })).status).toBe(400)
     expect((await req('PATCH', `/api/board/${boardSlug}/columns/000000000000000000000000`, { in_today: true })).status).toBe(404)
   })
 
-  it('cards in those columns show on Ah! Today, the higher-priority column first', async () => {
+  it('cards in those columns show on Ah! Today, priority 1 (the highest) first', async () => {
     for (const [i, col] of [cols[0]!, cols[1]!].entries()) {
       const c = (await req<{ data: { _id: string } }>('POST', `/api/board/${boardSlug}/cards`, { column_id: col._id, title: `Today column card ${i} ${Date.now()}` })).body as { data: { _id: string } }
       made.push(c.data._id)
@@ -705,7 +705,7 @@ describe('Ah! Today columns + limit', () => {
     expect(low).toBeGreaterThanOrEqual(0)
     expect(high).toBeGreaterThanOrEqual(0)
     expect(high).toBeLessThan(low)
-    expect(board[high]!.column_priority).toBe(5)
+    expect(board[high]!.column_priority).toBe(1)
   })
 
   it('switching a column off takes its cards out', async () => {

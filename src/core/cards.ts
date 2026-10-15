@@ -7,6 +7,9 @@ const visibleAt = (now: Date) => ({ $or: [{ defer_until: null }, { defer_until: 
 
 const CARD_PRIORITY: Record<string, number> = { high: 3, medium: 2, low: 1 }
 
+/** Column priority in Ah! Today is ordinal: 1 is the highest, 5 the lowest. */
+export const DEFAULT_TODAY_PRIORITY = 3
+
 /** A board column that feeds Ah! Today (board_columns.in_today), as Today sees it. */
 export interface TodayColumn { _id: string; title: string; priority: number }
 
@@ -26,7 +29,7 @@ export function cardsCore(fastify: FastifyInstance) {
 
     /**
      * Open, visible cards in columns switched on for Ah! Today, each with its column.
-     * Highest column priority first (In Progress before To Do), then card priority,
+     * Column priority is ordinal: 1 first (In Progress before To Do), then card priority,
      * then board order. Columns of deleted boards are left out.
      */
     inTodayColumns: async (c: Caller, now: Date, limit: number): Promise<Array<Doc & { column: TodayColumn }>> => {
@@ -36,13 +39,13 @@ export function cardsCore(fastify: FastifyInstance) {
         .find({ _id: { $in: cols.map(x => x['space_id'] as ObjectId) }, deleted_at: { $exists: false } }, { projection: { _id: 1 } })
         .toArray()).map(s => String(s._id)))
       const byId = new Map(cols.filter(x => live.has(String(x['space_id']))).map(x => [String(x._id), {
-        _id: String(x._id), title: x['title'] as string, priority: Number(x['today_priority'] ?? 1), position: Number(x['position'] ?? 0),
+        _id: String(x._id), title: x['title'] as string, priority: Number(x['today_priority'] ?? DEFAULT_TODAY_PRIORITY), position: Number(x['position'] ?? 0),
       }]))
       if (!byId.size) return []
       const found = await cards().find({ ...open(c), column_id: { $in: cols.filter(x => byId.has(String(x._id))).map(x => x._id) }, ...visibleAt(now) }).toArray()
       const col = (d: Doc) => byId.get(String(d['column_id']))!
       return found
-        .sort((a, b) => col(b).priority - col(a).priority || col(a).position - col(b).position ||
+        .sort((a, b) => col(a).priority - col(b).priority || col(a).position - col(b).position ||
           (CARD_PRIORITY[String(b['priority'])] ?? 0) - (CARD_PRIORITY[String(a['priority'])] ?? 0) ||
           Number(a['position'] ?? 0) - Number(b['position'] ?? 0))
         .slice(0, limit)
