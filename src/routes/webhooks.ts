@@ -36,6 +36,9 @@ const webhooksRoutes: FastifyPluginAsync = async (fastify) => {
     async (req, reply) => {
       const body = webhookBody.parse(req.body)
       const id = nanoid(24)
+      // A secret is mandatory: a secret-less receive URL lets anyone inject
+      // trail entries / board cards. Generate one if the caller didn't supply it.
+      const secret = body.secret ?? nanoid(32)
 
       const wh = {
         _id: new ObjectId(),
@@ -43,6 +46,7 @@ const webhooksRoutes: FastifyPluginAsync = async (fastify) => {
         org_id: req.user!.orgId,
         user_id: req.user!.id,
         ...body,
+        secret,
         created_at: new Date(),
         last_received_at: null,
         receive_count: 0,
@@ -67,7 +71,8 @@ const webhooksRoutes: FastifyPluginAsync = async (fastify) => {
         .find({ org_id: req.user!.orgId, deleted_at: { $exists: false } })
         .sort({ created_at: -1 })
         .toArray()
-      return { data: whs.map(w => ({ ...w, receive_url: `/api/webhooks/receive/${w['id'] as string}` })) }
+      // Never return the secret in a list; it is shown once at create time.
+      return { data: whs.map(({ secret: _secret, ...w }) => ({ ...w, receive_url: `/api/webhooks/receive/${w['id'] as string}` })) }
     }
   )
 
@@ -97,8 +102,10 @@ const webhooksRoutes: FastifyPluginAsync = async (fastify) => {
 
       if (!wh) return reply.status(404).send({ error: 'Webhook not found' })
 
-      // Verify HMAC signature if a secret is set
-      if (wh['secret']) {
+      // A secret is always required now (fail closed). Legacy secret-less
+      // webhooks must be recreated before they can receive again.
+      if (!wh['secret']) return reply.status(401).send({ error: 'Webhook has no secret; recreate it' })
+      {
         const sig = req.headers['x-ah-ha-signature'] as string | undefined
         if (!sig) return reply.status(401).send({ error: 'Signature required' })
 
@@ -189,7 +196,7 @@ const webhooksRoutes: FastifyPluginAsync = async (fastify) => {
         if (!space) return reply.status(404).send({ error: 'Board space not found' })
 
         const col = b['column_id']
-          ? await fastify.mongo.collection('board_columns').findOne({ _id: new ObjectId(b['column_id'] as string) })
+          ? await fastify.mongo.collection('board_columns').findOne({ _id: new ObjectId(b['column_id'] as string), space_id: space._id, org_id: wh['org_id'] })
           : await fastify.mongo.collection('board_columns').findOne({ space_id: space._id }, { sort: { position: 1 } })
 
         if (!col) return reply.status(404).send({ error: 'No columns in board' })

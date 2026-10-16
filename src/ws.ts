@@ -45,6 +45,9 @@ wss.on('connection', async (ws, req: IncomingMessage) => {
   if (token) {
     const user = await verifyJWT(token).catch(() => null)
     if (!user) return ws.close(1008, 'Unauthorized')
+    // Only join rooms for spaces the caller owns (ref = username/type/slug).
+    // ws has no DB handle; the username prefix is the ownership signal.
+    if (spaceRef.split('/')[0] !== user.username) return ws.close(1008, 'Forbidden')
   } else {
     return ws.close(1008, 'Unauthorized')
   }

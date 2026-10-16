@@ -37,7 +37,7 @@ const spacesRoutes: FastifyPluginAsync = async (fastify) => {
       const { username, type, slug } = req.params
       const ref = `${username}/${type}/${slug}`
 
-      const space = await fastify.mongo.collection('spaces').findOne({ ref })
+      const space = await fastify.mongo.collection('spaces').findOne({ ref, org_id: req.user!.orgId })
       if (!space || space['deleted_at']) return reply.status(404).send({ error: 'Not found' })
 
       return { data: space }

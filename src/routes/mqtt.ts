@@ -38,12 +38,13 @@ const mqttRoutes: FastifyPluginAsync = async (fastify) => {
     async (req, reply) => {
       const body = subBody.parse(req.body)
 
-      // Verify the target space exists and belongs to this org
-      const [username, type] = body.space_ref.split('/')
-      if (type !== 'trail') {
-        return reply.status(400).send({ error: 'space_ref must point to a trail space' })
+      // Verify the target space exists, is a trail, and belongs to this org.
+      const space = await fastify.mongo.collection('spaces').findOne({
+        ref: body.space_ref, type: 'trail', org_id: req.user!.orgId, deleted_at: { $exists: false },
+      })
+      if (!space) {
+        return reply.status(404).send({ error: 'trail space not found' })
       }
-      void username
 
       const sub = {
         _id: new ObjectId(),
@@ -69,6 +70,12 @@ const mqttRoutes: FastifyPluginAsync = async (fastify) => {
     { preHandler: fastify.authenticate },
     async (req, reply) => {
       const body = subBody.partial().parse(req.body)
+      if (body.space_ref !== undefined) {
+        const space = await fastify.mongo.collection('spaces').findOne({
+          ref: body.space_ref, type: 'trail', org_id: req.user!.orgId, deleted_at: { $exists: false },
+        })
+        if (!space) return reply.status(404).send({ error: 'trail space not found' })
+      }
       const result = await fastify.mongo.collection('mqtt_subscriptions').updateOne(
         { _id: new ObjectId(req.params.id), org_id: req.user!.orgId, deleted_at: { $exists: false } },
         { $set: { ...body, updated_at: new Date() } }

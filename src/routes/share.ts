@@ -63,7 +63,7 @@ const shareRoutes: FastifyPluginAsync = async (fastify) => {
       const spaceType = share['space_type'] as string
 
       const space = await fastify.mongo.collection('spaces').findOne({
-        ref: spaceRef, deleted_at: { $exists: false },
+        ref: spaceRef, org_id: share['org_id'], deleted_at: { $exists: false },
       })
       if (!space) return reply.status(404).send({ error: 'Space not found' })
 
@@ -73,8 +73,8 @@ const shareRoutes: FastifyPluginAsync = async (fastify) => {
         const pool = getPool()
         const res = await pool.query(
           `SELECT id, ts, text, tone, source, tags FROM trail_entries
-           WHERE space_ref = $1 ORDER BY ts DESC LIMIT 50`,
-          [spaceRef]
+           WHERE space_ref = $1 AND org_id = $2 ORDER BY ts DESC LIMIT 50`,
+          [spaceRef, String(share['org_id'])]
         )
         content = res.rows
       } else if (spaceType === 'note') {

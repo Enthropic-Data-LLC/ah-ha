@@ -255,11 +255,25 @@ const boardRoutes: FastifyPluginAsync = async (fastify) => {
         after_id: z.string().nullable().default(null),
       }).parse(req.body)
 
+      const orgId = req.user!.orgId
+      const card = await fastify.mongo.collection('board_cards').findOne(
+        { _id: new ObjectId(req.params.id), org_id: orgId, deleted_at: { $exists: false } }
+      )
+      if (!card) return reply.status(404).send({ error: 'Not found' })
+      const spaceId = card['space_id']
+
+      // Destination column must belong to the same board (space) and org.
+      const destCol = await fastify.mongo.collection('board_columns').findOne({
+        _id: new ObjectId(body.column_id), space_id: spaceId, org_id: orgId,
+      })
+      if (!destCol) return reply.status(404).send({ error: 'Column not found' })
+
+      // Anchors must be cards in the same space + org (no cross-tenant position leak).
       const beforeCard = body.before_id
-        ? await fastify.mongo.collection('board_cards').findOne({ _id: new ObjectId(body.before_id) })
+        ? await fastify.mongo.collection('board_cards').findOne({ _id: new ObjectId(body.before_id), space_id: spaceId, org_id: orgId })
         : null
       const afterCard = body.after_id
-        ? await fastify.mongo.collection('board_cards').findOne({ _id: new ObjectId(body.after_id) })
+        ? await fastify.mongo.collection('board_cards').findOne({ _id: new ObjectId(body.after_id), space_id: spaceId, org_id: orgId })
         : null
 
       const position = between(
@@ -268,7 +282,7 @@ const boardRoutes: FastifyPluginAsync = async (fastify) => {
       )
 
       const result = await fastify.mongo.collection('board_cards').updateOne(
-        { _id: new ObjectId(req.params.id), org_id: req.user!.orgId },
+        { _id: new ObjectId(req.params.id), org_id: orgId },
         { $set: { column_id: new ObjectId(body.column_id), position, updated_at: new Date() } }
       )
       if (result.matchedCount === 0) return reply.status(404).send({ error: 'Not found' })
