@@ -905,3 +905,51 @@ describe('Trackers', () => {
     await req('DELETE', `/api/statuses/${encodeURIComponent(who)}`)
   })
 })
+
+// ── Feedback form ──────────────────────────────────────────────────────────
+
+describe('Feedback', () => {
+  // Dev's FEEDBACK_TRAIL is this test account's own trail: ahha-test-runner/trail/feedback
+  type Entries = { data: Array<{ text: string; source: string; tags: string[]; meta: Record<string, unknown> }> }
+  const solve = async (challenge: string, bits: number) => {
+    const { createHash } = await import('node:crypto')
+    for (let n = 0; ; n++) {
+      const h = createHash('sha256').update(challenge + n).digest()
+      let z = 0
+      for (const b of h) { if (b === 0) { z += 8; continue } z += Math.clz32(b) - 24; break }
+      if (z >= bits) return String(n)
+    }
+  }
+  const latest = async () => ((await req<Entries>('GET', '/api/trail/feedback/entries?limit=5')).body as Entries).data
+
+  it('a signed-in person sends feedback without the bot check; it lands on the feedback trail', async () => {
+    const msg = `The column settings are great ${Date.now()}`
+    const r = await req('POST', '/api/feedback', { message: msg, doing: 'renaming a column', page: '/board' })
+    expect(r.status).toBe(201)
+    const e = (await latest()).find(x => x.meta['message'] === msg)
+    expect(e?.source).toBe('feedback')
+    expect(e?.tags).toContain('member')
+    expect(e?.meta['type']).toBe('ah-ha/feedback@1')
+    expect(String(e?.meta['from'])).toMatch(/^@/)
+    expect(e?.meta['doing']).toBe('renaming a column')
+  })
+
+  it('a visitor must solve the proof-of-work; then their message and email arrive', async () => {
+    const saved = cookie
+    cookie = ''
+    try {
+      expect((await req('POST', '/api/feedback', { message: 'no proof' })).status).toBe(400)
+      expect((await req('POST', '/api/feedback', { message: '' })).status).toBe(400)
+      const { body } = await req<{ challenge: string; difficulty: number }>('GET', '/auth/pow-challenge')
+      const { challenge, difficulty } = body as { challenge: string; difficulty: number }
+      const msg = `Visitor here ${Date.now()}`
+      const r = await req('POST', '/api/feedback', { message: msg, email: 'visitor@example.com', challenge, nonce: await solve(challenge, difficulty) })
+      expect(r.status).toBe(201)
+      cookie = saved
+      const e = (await latest()).find(x => x.meta['message'] === msg)
+      expect(e?.tags).toContain('visitor')
+      expect(e?.meta['email']).toBe('visitor@example.com')
+      expect(e?.text).toContain('visitor@example.com')
+    } finally { cookie = saved }
+  })
+})

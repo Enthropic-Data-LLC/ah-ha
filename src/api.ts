@@ -39,6 +39,7 @@ import calendarRoutes from './routes/calendar.js'
 import nfcRoutes from './routes/nfc.js'
 import connectRoutes from './routes/connect.js'
 import trackerRoutes from './trackers/routes.js'
+import feedbackRoutes from './routes/feedback.js'
 import pushRoutes from './push/routes.js'
 import { startTrackers } from './trackers/engine.js'
 import linkRoutes from './routes/link.js'
@@ -89,13 +90,14 @@ const TIGHT_AUTH = new Set([
   '/auth/claim-username',
   '/auth/dev-link',
   '/api/auth/verify',
+  '/api/feedback', // public input: one form, not a firehose
 ])
 
 fastify.addHook('onRoute', (route) => {
   const methods = Array.isArray(route.method) ? route.method : [route.method]
 
   if (TIGHT_AUTH.has(route.url)) {
-    // Endpoints that send mail or mint work, keyed by IP. Deliberately does
+    // Endpoints that send mail, mint work or take public input, keyed by IP. Deliberately does
     // NOT include /auth/me or /auth/logout: the frontend calls /auth/me on
     // every page load, and 10/min per IP would break normal use behind a
     // shared NAT the moment this limiter actually started working.
@@ -191,6 +193,7 @@ await fastify.register(async (sub) => {
   await sub.register(nfcRoutes)
   await sub.register(connectRoutes)
   await sub.register(trackerRoutes)
+  await sub.register(feedbackRoutes)
   await sub.register(pushRoutes)
   await sub.register(linkRoutes, { engine: () => linkEngine })
 })

@@ -2,6 +2,7 @@ const GH = 'https://github.com/Enthropic-Data-LLC/ah-ha'
 
 const LINKS = [
   { href: '/help', label: 'Help' },
+  { href: '/feedback', label: 'Feedback' },
   { href: '/android', label: 'Android app' },
   { href: '/privacy', label: 'Privacy' },
   { href: '/terms', label: 'Terms' },

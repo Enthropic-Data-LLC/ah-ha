@@ -5,7 +5,7 @@ import AndroidInstall from '../components/AndroidInstall'
 import { useMe } from '../hooks/useMe'
 
 const CONTACT = 'dbrown@enthropicdata.com'
-const UPDATED = '14 October 2026'
+const UPDATED = '16 October 2026'
 
 /** Shell for the public, signed-out pages: same header and footer as the landing page. */
 export function PublicLayout({ children }: { children: ReactNode }) {
@@ -64,6 +64,7 @@ export function PrivacyPage() {
         <li><strong>What you put in:</strong> boards, lists, notes, tables, trail entries, places, tags, links and settings. This is your content and we store it to show it back to you.</li>
         <li><strong>What you connect:</strong> anything sent in by an API key, webhook, MQTT feed, NFC tag or device you set up (for example a home router reporting who is home) is stored in your account like any other entry.</li>
         <li><strong>Location, only if you turn it on:</strong> the Android app can check you in when you arrive at a place you saved. The geofence runs on your phone; we receive the check-in (which place, and when) and the coordinates of places you save.</li>
+        <li><strong>Feedback you send:</strong> the message, what you were doing, the page you came from, your browser's user agent and, if you give it, your email address (or your username if you're signed in). It goes to the Ah-Ha team's own account and is used only to improve Ah-Ha and to reply to you.</li>
         <li><strong>Calendars you add:</strong> we fetch the iCal links you give us to show upcoming events.</li>
         <li><strong>Sign-in session:</strong> one cookie, <code>aha_session</code>, which keeps you signed in for 30 days. It is required for the site to work. We set no advertising or tracking cookies.</li>
         <li><strong>Server logs:</strong> each request records the IP address, browser user agent, page requested and time. We use them to block attacks and for internal traffic counts.</li>

@@ -17,6 +17,7 @@ import AuditPage from './pages/AuditPage'
 import MqttPage from './pages/MqttPage'
 import WebhooksPage from './pages/WebhooksPage'
 import TrackersPage from './pages/TrackersPage'
+import FeedbackPage from './pages/FeedbackPage'
 import CalendarPage from './pages/CalendarPage'
 import NotificationsPage from './pages/NotificationsPage'
 import SharePage from './pages/SharePage'
@@ -166,6 +167,7 @@ function Shell({ children }: { children: React.ReactNode }) {
               {drawerLink('/webhooks', '🔗  Webhooks')}
               <p className="text-[10px] font-mono uppercase tracking-wider text-slate-600 px-3 pb-1 pt-3">More</p>
               {drawerLink('/help', '❓  Help')}
+              {drawerLink('/feedback', '💬  Send feedback')}
               {drawerLink('/', '🏠  Home page')}
             </nav>
           </div>
@@ -204,6 +206,7 @@ export default function App() {
   if (path === '/terms') return <TermsPage />
   if (path === '/accessibility') return <AccessibilityPage />
   if (path === '/android') return <AndroidPage />
+  if (path === '/feedback') return <FeedbackPage />
   if (path === '/help' || path.startsWith('/help/')) return <HelpPage path={path} />
 
   if (path === '/auth/verify' || path.startsWith('/auth/verify?')) {

@@ -9,7 +9,7 @@ summary: Fixes for the most common problems.
 The new version was signed differently from the one on your phone, so Android won't put one over the other.
 
 - **Ah-Ha:** it's safe to uninstall it and install the new one. Your information is in your Ah-Ha account. Afterwards, paste your key again (see [[connect-apps|Connect an app]]).
-- **Ah! Rhythm or Ah! Cart:** **don't uninstall.** Their information lives only on your phone, and uninstalling erases it. Contact us first and we'll help you move it.
+- **Ah! Rhythm or Ah! Cart:** **don't uninstall.** Their information lives only on your phone, and uninstalling erases it. [Contact us](/feedback) first and we'll help you move it.
 
 ## The Android page shows only some apps
 
