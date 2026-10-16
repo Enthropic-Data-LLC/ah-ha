@@ -27,9 +27,17 @@ const dbPlugin: FastifyPluginAsync = async (fastify) => {
 }
 
 async function ensureIndexes(db: Db) {
+  // One-time migration: replace the old full unique index (see below). No-op once gone.
+  await db.collection('users').dropIndex('username_1').catch(() => {})
+
   await Promise.all([
     db.collection('users').createIndex({ email: 1 }, { unique: true }),
-    db.collection('users').createIndex({ username: 1 }, { unique: true }),
+    // Unique only once set — a new user has no username until onboarding, and a plain
+    // unique index lets just one such user exist, so every later sign-up 500s.
+    db.collection('users').createIndex(
+      { username: 1 },
+      { unique: true, name: 'username_unique_when_set', partialFilterExpression: { username: { $type: 'string' } } },
+    ),
     db.collection('spaces').createIndex({ ref: 1 }, { unique: true }),
     db.collection('spaces').createIndex({ owner_id: 1, org_id: 1 }),
     db.collection('spaces').createIndex({ org_id: 1, type: 1 }),
@@ -58,6 +66,8 @@ async function ensureIndexes(db: Db) {
     db.collection('webhooks').createIndex({ id: 1 }, { unique: true }),
     db.collection('webhooks').createIndex({ org_id: 1 }),
     db.collection('counters').createIndex({ _id: 1 }),
+    db.collection('nfc_tags').createIndex({ tag_id: 1 }, { unique: true }),
+    db.collection('nfc_tags').createIndex({ org_id: 1, updated_at: -1 }),
   ])
 }
 

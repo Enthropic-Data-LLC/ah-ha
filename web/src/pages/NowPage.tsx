@@ -1,6 +1,6 @@
 import useSWR from 'swr'
 import { fetcher, api } from '../lib/api'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useMe } from '../hooks/useMe'
 import CardModal from '../components/CardModal'
 import type { BoardCard, BoardColumn, Entity } from '../lib/types'
@@ -158,9 +158,11 @@ function Section({ title, count, children, accent = 'text-slate-500' }: { title:
 
 export default function NowPage() {
   const tz = Intl.DateTimeFormat().resolvedOptions().timeZone
+  const opened = useRef(true)
   const { data, mutate, isLoading } = useSWR<{ data: NowData }>(
     `/api/now?tz=${encodeURIComponent(tz)}`,
-    fetcher,
+    // Only the first fetch after the page opens asks for a fresh AI briefing; polls reuse the cached one.
+    (url: string) => { const fresh = opened.current; opened.current = false; return fetcher(fresh ? `${url}&fresh=1` : url) },
     { refreshInterval: 60_000 }
   )
   const { user } = useMe()

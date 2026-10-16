@@ -5,7 +5,7 @@ module.exports = {
       script: 'dist/api.js',
       cwd: '/home/pi/projects/ah-ha',
       interpreter: 'node',
-      env: { NODE_ENV: 'development' },
+      env: { NODE_ENV: 'production' },
       log_file: '/home/pi/logs/ah-ha-api.log',
       error_file: '/home/pi/logs/ah-ha-api-error.log',
       time: true,

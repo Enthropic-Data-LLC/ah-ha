@@ -189,7 +189,9 @@ const entityRoutes: FastifyPluginAsync = async (fastify) => {
       const user = await fastify.mongo.collection('users').findOne({ _id: req.user!.id })
       if (!user?.['username']) return reply.status(400).send({ error: 'No username' })
 
-      const ttl = 4 * 3600
+      // Manual check-ins last 4h; the phone asks for longer on a GPS arrival and clears it on exit.
+      const { ttl_hours } = z.object({ ttl_hours: z.number().min(0.25).max(24).optional() }).parse(req.body ?? {})
+      const ttl = Math.round((ttl_hours ?? 4) * 3600)
       await fastify.redis.setex(`aha:presence:state:${user['username']}`, ttl, id.toString())
       return { ok: true, entity_id: id.toString(), expires_in: ttl }
     }

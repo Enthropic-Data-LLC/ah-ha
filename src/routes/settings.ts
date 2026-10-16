@@ -72,19 +72,8 @@ const settingsRoutes: FastifyPluginAsync = async (fastify) => {
     }
   )
 
-  // GET /api/settings/ai-key — internal: return actual key for AI calls
-  // Used by capture endpoint — never exposed to client
-  fastify.get(
-    '/api/settings/ai-key',
-    { preHandler: fastify.authenticate },
-    async (req) => {
-      const settings = await fastify.mongo.collection('user_settings')
-        .findOne({ user_id: req.user!.id })
-      const userKey = settings?.['anthropic_api_key'] as string | null
-      const serverKey = process.env['ANTHROPIC_API_KEY'] ?? null
-      return { key: userKey ?? serverKey }
-    }
-  )
+  // The server-side AI key is resolved in-process by the capture/now routes;
+  // it is deliberately NOT exposed over HTTP.
 }
 
 export default settingsRoutes

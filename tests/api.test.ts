@@ -19,7 +19,8 @@ async function req<T = unknown>(method: string, path: string, body?: unknown, he
   const res = await fetch(API + path, {
     method,
     headers: {
-      'Content-Type': 'application/json',
+      // Only with a body: Fastify 400s a body-less request that claims to be JSON.
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
       ...(cookie ? { Cookie: cookie } : {}),
       ...headers,
     },
@@ -232,6 +233,124 @@ describe('Table', () => {
   it('POST /api/table/:slug/rows adds a row', async () => {
     const { status } = await req('POST', `/api/table/${tableSlug}/rows`, { cells: {} })
     expect([200, 201]).toContain(status)
+  })
+})
+
+// ── NFC tags ────────────────────────────────────────────────────────────────
+
+describe('NFC tags', () => {
+  let tagId = ''
+  let placeId = ''
+
+  it('POST /api/nfc/tags rejects an action pointing at a missing trail', async () => {
+    const { status } = await req('POST', '/api/nfc/tags', {
+      name: 'Bad tag', action: { type: 'trail', space_slug: 'no-such-trail', text: 'x' },
+    })
+    expect(status).toBe(400)
+  })
+
+  it('POST /api/nfc/tags registers a trail tag and returns its URL', async () => {
+    const { status, body } = await req<{ data: { tag_id: string; url: string } }>('POST', '/api/nfc/tags', {
+      name: 'Meds', icon: '💊', action: { type: 'trail', space_slug: trailSlug, text: 'Took meds', tone: 'happy' },
+    })
+    expect(status).toBe(201)
+    const data = (body as { data: { tag_id: string; url: string } }).data
+    tagId = data.tag_id
+    expect(tagId).toMatch(/^[2-9a-km-z]{20}$/)
+    expect(data.url).toMatch(new RegExp(`/t/${tagId}$`))
+  })
+
+  it('POST /api/nfc/tap/:tagId appends to the trail with source nfc', async () => {
+    const { status, body } = await req<{ data: { duplicate: boolean; message: string } }>('POST', `/api/nfc/tap/${tagId}`, {})
+    expect(status).toBe(200)
+    const data = (body as { data: { duplicate: boolean; message: string } }).data
+    expect(data.duplicate).toBe(false)
+    expect(data.message).toContain('Took meds')
+
+    const { body: entries } = await req<{ data: Array<{ text: string; source: string }> }>('GET', `/api/trail/${trailSlug}/entries?limit=1`)
+    const latest = (entries as { data: Array<{ text: string; source: string }> }).data[0]!
+    expect(latest.text).toBe('Took meds')
+    expect(latest.source).toBe('nfc')
+  })
+
+  it('a second tap within the debounce window is reported as a duplicate', async () => {
+    const { status, body } = await req<{ data: { duplicate: boolean } }>('POST', `/api/nfc/tap/${tagId}`, {})
+    expect(status).toBe(200)
+    expect((body as { data: { duplicate: boolean } }).data.duplicate).toBe(true)
+  })
+
+  it('PATCH re-points the tag to a check-in without changing its id', async () => {
+    const { body: ent } = await req<{ data: { _id: string } }>('POST', '/api/entities', { name: `NFC test place ${Date.now()}` })
+    placeId = (ent as { data: { _id: string } }).data._id
+    const { status, body } = await req<{ data: { tag_id: string; action: { type: string } } }>('PATCH', `/api/nfc/tags/${tagId}`, {
+      action: { type: 'checkin', entity_id: placeId },
+    })
+    expect(status).toBe(200)
+    const data = (body as { data: { tag_id: string; action: { type: string } } }).data
+    expect(data.tag_id).toBe(tagId)
+    expect(data.action.type).toBe('checkin')
+  })
+
+  it('DELETE /api/nfc/tags/:tagId removes it; taps then 404', async () => {
+    expect((await req('DELETE', `/api/nfc/tags/${tagId}`)).status).toBe(200)
+    expect((await req('POST', `/api/nfc/tap/${tagId}`, {})).status).toBe(404)
+    await req('DELETE', `/api/entities/${placeId}`)
+  })
+})
+
+describe('NFC open tags', () => {
+  it('an open tag returns the view to open, on duplicate taps too', async () => {
+    const { body } = await req<{ data: { tag_id: string } }>('POST', '/api/nfc/tags', {
+      name: 'Front door', icon: '🚪', action: { type: 'open', view: 'leave' },
+    })
+    const id = (body as { data: { tag_id: string } }).data.tag_id
+    for (const duplicate of [false, true]) {
+      const { status, body: tap } = await req<{ data: { open: string; duplicate: boolean } }>('POST', `/api/nfc/tap/${id}`, {})
+      expect(status).toBe(200)
+      expect((tap as { data: { open: string; duplicate: boolean } }).data).toMatchObject({ open: 'leave', duplicate })
+    }
+    await req('DELETE', `/api/nfc/tags/${id}`)
+  })
+})
+
+describe('Check-in TTL', () => {
+  it('defaults to 4h and accepts ttl_hours for GPS arrivals', async () => {
+    // Check-in is keyed by username; the dev test user may never have been through onboarding.
+    expect([200, 409]).toContain((await req('POST', '/auth/claim-username', { username: 'ahha-test-runner' })).status)
+    const { body } = await req<{ data: { _id: string } }>('POST', '/api/entities', { name: `TTL test place ${Date.now()}` })
+    const id = (body as { data: { _id: string } }).data._id
+    const plain = await req<{ expires_in: number }>('POST', `/api/entities/${id}/checkin`)
+    expect((plain.body as { expires_in: number }).expires_in).toBe(4 * 3600)
+    const long = await req<{ expires_in: number }>('POST', `/api/entities/${id}/checkin`, { ttl_hours: 12 })
+    expect((long.body as { expires_in: number }).expires_in).toBe(12 * 3600)
+    expect((await req('POST', `/api/entities/${id}/checkin`, { ttl_hours: 48 })).status).toBe(400)
+    await req('DELETE', '/api/entities/checkin')
+    await req('DELETE', `/api/entities/${id}`)
+  })
+})
+
+describe('Reminders + day summary', () => {
+  it('upcoming lists a card due soon; completing it shows in the day summary', async () => {
+    const { body: cols } = await req<{ data: Array<{ _id: string }> }>('GET', `/api/board/${boardSlug}/columns`)
+    const columnId = (cols as { data: Array<{ _id: string }> }).data[0]!._id
+    const title = `Reminder test ${Date.now()}`
+    const due = new Date(Date.now() + 2 * 3_600_000).toISOString()
+    const { body: created } = await req<{ data: { _id: string } }>('POST', `/api/board/${boardSlug}/cards`, { title, column_id: columnId, due_date: due })
+    const cardId = (created as { data: { _id: string } }).data._id
+
+    const { status, body: up } = await req<{ data: Array<{ _id: string; title: string }> }>('GET', '/api/cards/upcoming?hours=3')
+    expect(status).toBe(200)
+    expect((up as { data: Array<{ title: string }> }).data.map(c => c.title)).toContain(title)
+
+    const since = new Date(Date.now() - 3_600_000).toISOString()
+    expect((await req('POST', `/api/cards/${cardId}/complete`, {})).status).toBe(200)
+    const { status: s2, body: sum } = await req<{ data: { completed: Array<{ title: string }>; trail: { total: number } } }>(
+      'GET', `/api/day-summary?since=${encodeURIComponent(since)}`)
+    expect(s2).toBe(200)
+    expect((sum as { data: { completed: Array<{ title: string }> } }).data.completed.map(c => c.title)).toContain(title)
+
+    const { body: after } = await req<{ data: Array<{ title: string }> }>('GET', '/api/cards/upcoming?hours=3')
+    expect((after as { data: Array<{ title: string }> }).data.map(c => c.title)).not.toContain(title)
   })
 })
 

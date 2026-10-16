@@ -19,6 +19,7 @@ import CalendarPage from './pages/CalendarPage'
 import NotificationsPage from './pages/NotificationsPage'
 import SharePage from './pages/SharePage'
 import NowPage from './pages/NowPage'
+import TapPage from './pages/TapPage'
 import EntityPage from './pages/EntityPage'
 
 // SVG icons for bottom nav
@@ -229,6 +230,12 @@ export default function App() {
   // Search
   if (path === '/search') {
     return <Shell><SearchPage /></Shell>
+  }
+
+  // NFC tag link — what phones without the app open
+  const tapMatch = path.match(/^\/t\/([2-9a-km-z]{20})$/)
+  if (tapMatch) {
+    return <Shell><TapPage tagId={tapMatch[1]!} /></Shell>
   }
 
   // Now view

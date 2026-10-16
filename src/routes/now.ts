@@ -41,8 +41,18 @@ const TIME_OF_DAY = (h: number) => {
 
 const OID_RE = /^[0-9a-f]{24}$/i
 
+// The briefing is an AI call (cost + ~2s), and /api/now is polled every minute by the
+// web page, the phone app and its widget. So it is regenerated only when what it
+// describes changes — place or time of day — or when someone opens the app/page
+// (`?fresh=1`, honoured at most every BRIEFING_OPEN_MS). Everything else reuses the
+// cached text. BRIEFING_DAILY_CAP is the backstop if a client misbehaves.
+const BRIEFING_OPEN_MS = 10 * 60_000
+const BRIEFING_MAX_AGE_MS = 6 * 3_600_000
+const BRIEFING_DAILY_CAP = 30
+interface CachedBriefing { text: string; presence: string; tod: string; ts: string }
+
 const nowRoutes: FastifyPluginAsync = async (fastify) => {
-  fastify.get<{ Querystring: { presence?: string; tz?: string } }>(
+  fastify.get<{ Querystring: { presence?: string; tz?: string; fresh?: string } }>(
     '/api/now',
     { preHandler: fastify.authenticate },
     async (req) => {
@@ -229,12 +239,32 @@ const nowRoutes: FastifyPluginAsync = async (fastify) => {
         }
       } catch { /* calendar unavailable */ }
 
-      // AI briefing
-      let briefing: string | null = null
-      const settings = await fastify.mongo.collection('user_settings').findOne({ user_id: req.user!.id })
-      const apiKey = (settings?.['anthropic_api_key'] as string | null) ?? process.env['ANTHROPIC_API_KEY']
+      // AI briefing — see BRIEFING_* above for when it is regenerated
+      const cacheKey = `aha:briefing:${req.user!.orgId}`
+      const cached = await fastify.redis.get(cacheKey)
+        .then(raw => (raw ? JSON.parse(raw) as CachedBriefing : null)).catch(() => null)
+      const age = cached ? now.getTime() - Date.parse(cached.ts) : Infinity
+      const place = presenceRaw ?? 'unknown'
+      const reason =
+        !cached ? 'first'
+        : cached.presence !== place ? 'location'
+        : cached.tod !== tod ? 'time_of_day'
+        : req.query.fresh === '1' && age >= BRIEFING_OPEN_MS ? 'open'
+        : age >= BRIEFING_MAX_AGE_MS ? 'stale'
+        : null
 
-      if (apiKey && (urgent.length + dueToday.length + habits.length + calendarEvents.length) > 0) {
+      let briefing: string | null = cached?.text ?? null
+      const hasWork = (urgent.length + dueToday.length + habits.length + calendarEvents.length) > 0
+      const settings = reason && hasWork
+        ? await fastify.mongo.collection('user_settings').findOne({ user_id: req.user!.id })
+        : null
+      const apiKey = (settings?.['anthropic_api_key'] as string | null) ?? process.env['ANTHROPIC_API_KEY']
+      const countKey = `aha:briefing:calls:${req.user!.orgId}:${now.toISOString().slice(0, 10)}`
+      const callsToday = reason && hasWork ? Number(await fastify.redis.get(countKey) ?? 0) : 0
+
+      if (reason && hasWork && callsToday >= BRIEFING_DAILY_CAP) {
+        req.log.warn({ reason, callsToday }, 'briefing: daily cap reached, reusing cached text')
+      } else if (reason && hasWork && apiKey) {
         try {
           const fmtTime = (iso: string) => new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: tz })
           const calLines = calendarEvents.slice(0, 5).map(ev =>
@@ -263,10 +293,23 @@ const nowRoutes: FastifyPluginAsync = async (fastify) => {
           })
           if (res.ok) {
             const d = await res.json() as { content: Array<{ type: string; text: string }> }
-            briefing = d.content[0]?.text?.trim() ?? null
+            const text = d.content[0]?.text?.trim()
+            if (text) {
+              briefing = text
+              const entry: CachedBriefing = { text, presence: place, tod, ts: now.toISOString() }
+              await fastify.redis.set(cacheKey, JSON.stringify(entry), 'EX', 24 * 3600)
+              const calls = await fastify.redis.incr(countKey)
+              if (calls === 1) await fastify.redis.expire(countKey, 8 * 24 * 3600)
+              req.log.info({ reason, callsToday: calls }, 'briefing generated')
+            }
+          } else {
+            req.log.warn({ status: res.status, reason }, 'briefing: AI call failed, reusing cached text')
           }
-        } catch { /* briefing unavailable */ }
+        } catch (err) {
+          req.log.warn({ err, reason }, 'briefing unavailable, reusing cached text')
+        }
       }
+      if (!hasWork) briefing = null
 
       return {
         data: {

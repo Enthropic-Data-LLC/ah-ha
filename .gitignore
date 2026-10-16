@@ -12,3 +12,6 @@ dist/
 
 # incremental TS build state — a build artifact, churns on every build
 *.tsbuildinfo
+
+# stray editor backups
+*.bak

@@ -1,0 +1,7 @@
+AHA_URL=https://ah-ha.app
+AHA_KEY=aha_live_REPLACE_ME
+TRAIL=log
+POLL=20
+AWAY_AFTER=300
+# one line per phone: PHONE_<wifi mac>=<name>
+PHONE_aa:bb:cc:dd:ee:ff=Name
