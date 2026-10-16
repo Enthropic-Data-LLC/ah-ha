@@ -11,7 +11,9 @@
  *         { title, column_id?, priority? } — for board
  *         raw string                       — treated as trail entry text
  */
-import type { FastifyPluginAsync } from 'fastify'
+import type { FastifyPluginAsync, FastifyRequest } from 'fastify'
+
+type RawReq = FastifyRequest & { rawBody?: Buffer }
 import { emit } from '../link/engine.js'
 import { z } from 'zod'
 import { ObjectId } from 'mongodb'
@@ -29,6 +31,18 @@ const webhookBody = z.object({
 })
 
 const webhooksRoutes: FastifyPluginAsync = async (fastify) => {
+  // Capture the raw request bytes (encapsulated to this plugin only) so the
+  // receive endpoint verifies the HMAC over exactly what the sender signed,
+  // not a re-serialization (CWE-345). A parsed body is still exposed.
+  const rawParser = (_req: FastifyRequest, body: Buffer, done: (err: Error | null, body?: unknown) => void) => {
+    ;(_req as RawReq).rawBody = body
+    const s = body.toString('utf8')
+    if (!s) return done(null, {})
+    try { done(null, JSON.parse(s)) } catch { done(null, s) }
+  }
+  fastify.addContentTypeParser(['application/json', 'text/plain'], { parseAs: 'buffer' }, rawParser)
+  fastify.addContentTypeParser('*', { parseAs: 'buffer' }, rawParser)
+
   // POST /api/webhooks — create webhook endpoint
   fastify.post(
     '/api/webhooks',
@@ -109,8 +123,11 @@ const webhooksRoutes: FastifyPluginAsync = async (fastify) => {
         const sig = req.headers['x-ah-ha-signature'] as string | undefined
         if (!sig) return reply.status(401).send({ error: 'Signature required' })
 
+        // Verify over the raw received bytes, falling back only if the parser
+        // did not capture them (e.g. empty body).
+        const rawBytes = (req as RawReq).rawBody ?? Buffer.from(JSON.stringify(req.body))
         const expected = 'sha256=' + createHmac('sha256', wh['secret'] as string)
-          .update(JSON.stringify(req.body))
+          .update(rawBytes)
           .digest('hex')
 
         try {

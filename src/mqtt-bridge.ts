@@ -179,7 +179,20 @@ async function main() {
     // ── Canonical: aha/trail/{username}/{slug}
     const trailMatch = topic.match(/^aha\/trail\/([^/]+)\/([^/]+)$/)
     if (trailMatch) {
+      const username = trailMatch[1]!
       const slug = trailMatch[2]!
+      // Ownership gate: only append if (username, slug) names a real, non-deleted
+      // trail space. The topic username is attacker-controllable, so this does NOT
+      // replace per-user MQTT publish ACLs on the broker (KB #2134) — it ties the
+      // write to a real space and stops writes to a merely-colliding slug.
+      const canonicalRef = `${username}/trail/${slug}`
+      const trailSpace = await db.collection('spaces').findOne({
+        ref: canonicalRef, type: 'trail', deleted_at: { $exists: false },
+      })
+      if (!trailSpace) {
+        console.warn(`[mqtt-bridge] no trail space for ${canonicalRef}, skipping`)
+        return
+      }
       let parsed: { text?: string; tone?: string; tags?: string[]; meta?: Record<string, unknown> }
       try { parsed = JSON.parse(raw) } catch { parsed = { text: raw } }
 
