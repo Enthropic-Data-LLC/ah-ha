@@ -1,6 +1,7 @@
 import ICAL from 'ical.js'
 import type { Redis } from 'ioredis'
 import type { ObjectId } from 'mongodb'
+import { safeRequest } from './safe-fetch.js'
 
 export interface CalendarSource {
   _id: ObjectId
@@ -27,15 +28,10 @@ const CACHE_TTL_SEC  = 900   // 15 min — how long before re-fetching from Goog
 const ROLLING_DAYS   = 30    // parse this many days ahead and cache the result
 
 async function fetchIcalText(url: string): Promise<string> {
-  const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), 10_000)
-  try {
-    const res = await fetch(url, { signal: controller.signal })
-    if (!res.ok) throw new Error(`HTTP ${res.status}`)
-    return res.text()
-  } finally {
-    clearTimeout(timeout)
-  }
+  // SSRF-safe: https-only, blocks internal/metadata IPs, caps size + redirects.
+  const res = await safeRequest(url, { timeoutMs: 10_000, maxBytes: 5 * 1024 * 1024 })
+  if (res.status !== 200) throw new Error(`HTTP ${res.status}`)
+  return res.body
 }
 
 function icalTimeToDate(t: ICAL.Time): Date {

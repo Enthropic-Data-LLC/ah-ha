@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { ObjectId } from 'mongodb'
 import { fetchCalendarEvents } from '../lib/ical-fetch.js'
 import type { CalendarSource } from '../lib/ical-fetch.js'
+import { isSafeHttpsUrl } from '../lib/safe-fetch.js'
 
 function parseDate(input: string | undefined, fallbackMs: number): Date {
   if (!input) return new Date(Date.now() + fallbackMs)
@@ -19,7 +20,7 @@ function parseDate(input: string | undefined, fallbackMs: number): Date {
 
 const sourceBody = z.object({
   name: z.string().min(1).max(100),
-  ical_url: z.string().url(),
+  ical_url: z.string().url().refine(isSafeHttpsUrl, 'calendar URL must be https'),
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/).default('#6366f1'),
 })
 

@@ -3,6 +3,7 @@ import { ObjectId } from 'mongodb'
 import type { Redis } from 'ioredis'
 import { signJWT } from '../lib/jwt.js'
 import { postToNodeRed } from '../lib/nodered.js'
+import { safeRequest, normalizeHttpsUrl } from '../lib/safe-fetch.js'
 import { situation as buildSituation, type Situation } from '../lib/situation.js'
 import { currentPlace, orgPlaces } from '../lib/places.js'
 import type { Cond, Flow, Step, Trigger } from './blocks.js'
@@ -193,15 +194,17 @@ export function startEngine(fastify: FastifyInstance) {
       }
       case 'webhook': {
         const url = r(stp.url)
-        if (!url.startsWith('https://')) throw new Error('webhook URL must be https')
+        const method = stp.method ?? 'POST'
+        // SSRF-safe: https-only, blocks internal/metadata IPs, caps redirects.
+        const target = normalizeHttpsUrl(url)
         if (!dry) {
-          const res = await fetch(url, {
-            method: stp.method ?? 'POST', signal: AbortSignal.timeout(10_000),
-            ...(stp.method !== 'GET' && stp.body ? { headers: { 'Content-Type': 'application/json' }, body: r(stp.body) } : {}),
+          const res = await safeRequest(url, {
+            method, timeoutMs: 10_000,
+            ...(method !== 'GET' && stp.body ? { headers: { 'Content-Type': 'application/json' }, body: r(stp.body) } : {}),
           })
-          if (!res.ok) throw new Error(`webhook → ${res.status}`)
+          if (res.status < 200 || res.status >= 300) throw new Error(`webhook → ${res.status}`)
         }
-        return `${stp.method ?? 'POST'} ${new URL(url).host}`
+        return `${method} ${target.host}`
       }
       default: return ''
     }
