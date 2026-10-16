@@ -2,9 +2,12 @@ import { SignJWT, jwtVerify } from 'jose'
 import { ObjectId } from 'mongodb'
 import type { Plan } from '../types.js'
 
-const secret = new TextEncoder().encode(
-  process.env['JWT_SECRET'] ?? 'dev-secret-change-in-production'
-)
+const rawSecret = process.env['JWT_SECRET']
+if (!rawSecret || rawSecret.length < 32) {
+  // Fail closed: never fall back to a literal/default secret (forgeable tokens).
+  throw new Error('JWT_SECRET must be set and at least 32 characters')
+}
+const secret = new TextEncoder().encode(rawSecret)
 
 interface JWTPayload {
   id: ObjectId

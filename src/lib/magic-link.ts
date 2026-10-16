@@ -21,8 +21,9 @@ export async function createMagicToken(redis: Redis, email: string, skipRateLimi
 
 export async function consumeMagicToken(redis: Redis, token: string): Promise<string | null> {
   const key = `ml:token:${token}`
-  const email = await redis.get(key)
+  // Atomic get-and-delete so a single-use token cannot be redeemed twice
+  // under concurrent requests (ioredis >= 5 / Redis >= 6.2).
+  const email = await redis.getdel(key)
   if (!email) return null
-  await redis.del(key)
   return email
 }
