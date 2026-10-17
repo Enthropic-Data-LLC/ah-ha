@@ -56,7 +56,11 @@ const fastify = Fastify({
     level: isProd ? 'info' : 'debug',
     ...(isProd ? {} : { transport: { target: 'pino-pretty' } }),
   },
-  trustProxy: true,
+  // Trust only the edge's WireGuard address as the proxy, so X-Forwarded-For
+  // (hence req.ip, which keys the rate limits and audit IPs) is honored only for
+  // edge-proxied requests. A direct LAN/mesh connection can no longer spoof
+  // req.ip (CWE-348). The edge reverse-proxies to mini from 10.9.0.1 over WG.
+  trustProxy: '10.9.0.1',
 })
 
 await fastify.register(cookie)
