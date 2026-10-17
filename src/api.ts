@@ -148,6 +148,12 @@ fastify.setErrorHandler((err: FastifyError, req, reply) => {
     })
   }
 
+  if ((err as { name?: string }).name === 'BSONError') {
+    // Malformed ObjectId / BSON input is a client error, not a server fault (CWE-20).
+    req.log.warn({ url: req.url }, 'malformed id in request')
+    return reply.status(400).send({ statusCode: 400, error: 'Bad Request', message: 'Invalid id' })
+  }
+
   const status = err.statusCode ?? 500
 
   // Rate-limit rejections arrive here as the errorResponseBuilder payload
@@ -159,7 +165,16 @@ fastify.setErrorHandler((err: FastifyError, req, reply) => {
     })
   }
 
-  if (status >= 500) req.log.error(err)
+  if (status >= 500) {
+    // Never hand internal error text to clients; log it with the reqId to correlate.
+    req.log.error({ err, reqId: req.id }, 'unhandled error')
+    return reply.status(status).send({
+      statusCode: status,
+      error: STATUS_CODES[status] ?? 'Error',
+      message: 'Internal Server Error',
+      reqId: req.id,
+    })
+  }
   return reply.status(status).send({
     statusCode: status,
     error: STATUS_CODES[status] ?? 'Error',
