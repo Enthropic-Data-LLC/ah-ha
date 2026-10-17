@@ -5,6 +5,7 @@ import { ObjectId } from 'mongodb'
 import { createMagicToken, consumeMagicToken } from '../lib/magic-link.js'
 import { sendMagicLink } from '../lib/email.js'
 import { signJWT } from '../lib/jwt.js'
+import { seedStarterContent } from '../lib/seed-starter.js'
 import { issueChallenge, verifyPow } from '../lib/pow.js'
 
 const magicLinkBody = z.object({
@@ -116,6 +117,11 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
     const existing = await fastify.mongo.collection('users').findOne({ username: body.username })
     if (existing) return reply.status(409).send({ error: 'Username taken' })
 
+    const prior = await fastify.mongo.collection('users').findOne(
+      { _id: req.user!.id }, { projection: { onboarding_completed: 1 } }
+    )
+    const firstOnboarding = !prior?.['onboarding_completed']
+
     try {
       await fastify.mongo.collection('users').updateOne(
         { _id: req.user!.id },
@@ -126,6 +132,16 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
       // a concurrent claim surfaces as duplicate-key 11000, not a TOCTOU win.
       if ((e as { code?: number }).code === 11000) return reply.status(409).send({ error: 'Username taken' })
       throw e
+    }
+
+    // Seed a starter workspace so a new user never lands on an empty app.
+    // First onboarding only; best-effort — must never block or fail sign-up.
+    if (firstOnboarding) {
+      try {
+        await seedStarterContent(fastify, { userId: req.user!.id, orgId: req.user!.orgId, username: body.username })
+      } catch (e) {
+        req.log.error({ err: e }, 'starter content seed failed')
+      }
     }
 
     // Re-issue JWT with username
