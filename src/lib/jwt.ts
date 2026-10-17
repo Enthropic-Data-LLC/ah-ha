@@ -26,7 +26,7 @@ interface JWTPayload {
   username: string
 }
 
-export async function signJWT(payload: JWTPayload): Promise<string> {
+export async function signJWT(payload: JWTPayload, expiresIn: string = '30d'): Promise<string> {
   return new SignJWT({
     sub: payload.id.toString(),
     orgId: payload.orgId.toString(),
@@ -35,7 +35,7 @@ export async function signJWT(payload: JWTPayload): Promise<string> {
   })
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt()
-    .setExpirationTime('30d')
+    .setExpirationTime(expiresIn)
     .sign(secret())
 }
 

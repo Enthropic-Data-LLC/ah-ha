@@ -1,5 +1,6 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
+import { openSecret } from '../lib/secret-box.js'
 
 // Whitelist + bound the model's JSON so attacker-influenced text in the
 // capture prompt cannot return arbitrary fields/types to the client (CWE-1427).
@@ -27,7 +28,7 @@ export const captureRoute: FastifyPluginAsync = async (fastify) => {
       // Get AI key: user BYOK or server key
       const settings = await fastify.mongo.collection('user_settings')
         .findOne({ user_id: req.user!.id })
-      const apiKey = (settings?.['anthropic_api_key'] as string | null) ?? process.env['ANTHROPIC_API_KEY']
+      const apiKey = openSecret(settings?.['anthropic_api_key'] as string | null) ?? process.env['ANTHROPIC_API_KEY']
 
       if (!apiKey) {
         // No AI key — return raw title, no parsing

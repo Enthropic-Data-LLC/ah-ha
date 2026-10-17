@@ -72,7 +72,9 @@ export function startEngine(fastify: FastifyInstance) {
     const user = await fastify.mongo.collection('users').findOne({ _id: owner })
     if (!user) throw new Error('flow owner not found')
     // Same shape auth.ts issues at sign-in: a user's org id is their own id.
-    const token = await signJWT({ id: user['_id'] as ObjectId, orgId: user['_id'] as ObjectId, plan: (user['plan'] as never) ?? 'free', username: (user['username'] as string) ?? '' })
+    // Short-lived: this full-privilege token only needs to live for the
+    // duration of one flow action's internal API calls (CWE-269).
+    const token = await signJWT({ id: user['_id'] as ObjectId, orgId: user['_id'] as ObjectId, plan: (user['plan'] as never) ?? 'free', username: (user['username'] as string) ?? '' }, '5m')
     return { cookie: `aha_session=${token}`, user }
   }
 

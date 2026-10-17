@@ -1,5 +1,6 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
+import { sealSecret, openSecret } from '../lib/secret-box.js'
 
 const settingsRoutes: FastifyPluginAsync = async (fastify) => {
   // GET /api/settings
@@ -11,7 +12,7 @@ const settingsRoutes: FastifyPluginAsync = async (fastify) => {
         .findOne({ user_id: req.user!.id })
       return {
         data: {
-          anthropic_api_key: settings?.['anthropic_api_key'] ? '••••' + (settings['anthropic_api_key'] as string).slice(-4) : null,
+          anthropic_api_key: (() => { const k = openSecret(settings?.['anthropic_api_key'] as string | null); return k ? '••••' + k.slice(-4) : null })(),
           has_anthropic_key: !!(settings?.['anthropic_api_key']),
           today_limit: (settings?.['today_limit'] as number | null | undefined) ?? null,
         }
@@ -32,7 +33,7 @@ const settingsRoutes: FastifyPluginAsync = async (fastify) => {
 
       const update: Record<string, unknown> = { user_id: req.user!.id, updated_at: new Date() }
       if (body.anthropic_api_key !== undefined) {
-        update['anthropic_api_key'] = body.anthropic_api_key ?? null
+        update['anthropic_api_key'] = body.anthropic_api_key ? sealSecret(body.anthropic_api_key) : null
       }
       if (body.today_limit !== undefined) update['today_limit'] = body.today_limit
 
@@ -54,7 +55,7 @@ const settingsRoutes: FastifyPluginAsync = async (fastify) => {
     async (req) => {
       const settings = await fastify.mongo.collection('user_settings')
         .findOne({ user_id: req.user!.id })
-      const apiKey = settings?.['anthropic_api_key'] as string | null
+      const apiKey = openSecret(settings?.['anthropic_api_key'] as string | null)
       if (!apiKey) return { ok: false, error: 'No key configured' }
 
       try {

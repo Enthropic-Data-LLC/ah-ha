@@ -54,7 +54,7 @@ const shareRoutes: FastifyPluginAsync = async (fastify) => {
       const share = await fastify.mongo.collection('share_tokens').findOne({
         token: req.params.token,
       })
-      if (!share) return reply.status(404).send({ error: 'Not found' })
+      if (!share || share['revoked_at']) return reply.status(404).send({ error: 'Not found' })
       if (share['expires_at'] && new Date(share['expires_at'] as string) < new Date()) {
         return reply.status(410).send({ error: 'Share link expired' })
       }
@@ -82,18 +82,24 @@ const shareRoutes: FastifyPluginAsync = async (fastify) => {
         content = note ? { body: note['body'], updated_at: note['updated_at'] } : { body: '', updated_at: null }
       } else if (spaceType === 'board') {
         const cols = await fastify.mongo.collection('board_columns')
-          .find({ space_id: space._id }).sort({ position: 1 }).toArray()
+          .find({ space_id: space._id })
+          .project({ title: 1, color: 1, position: 1, in_today: 1, today_priority: 1 })
+          .sort({ position: 1 }).toArray()
         const cards = await fastify.mongo.collection('board_cards')
-          .find({ space_id: space._id, deleted_at: { $exists: false } }).sort({ position: 1 }).toArray()
+          .find({ space_id: space._id, deleted_at: { $exists: false } })
+          .project({ title: 1, notes: 1, priority: 1, tags: 1, color: 1, column_id: 1, position: 1, due_date: 1, start_date: 1, recurrence: 1 })
+          .sort({ position: 1 }).toArray()
         content = { columns: cols, cards }
       } else if (spaceType === 'list') {
         const items = await fastify.mongo.collection('list_items')
           .find({ space_id: space._id, deleted_at: { $exists: false } })
+          .project({ title: 1, done: 1, position: 1, due_at: 1 })
           .sort({ done: 1, position: 1 }).toArray()
         content = items
       } else if (spaceType === 'table') {
         const rows = await fastify.mongo.collection('table_rows')
           .find({ space_id: space._id, deleted_at: { $exists: false } })
+          .project({ cells: 1, position: 1, created_at: 1 })
           .sort({ created_at: 1 }).toArray()
         const schema = await fastify.mongo.collection('table_schemas').findOne({ space_id: space._id })
         content = { schema: schema?.['columns'] ?? [], rows }
@@ -106,6 +112,20 @@ const shareRoutes: FastifyPluginAsync = async (fastify) => {
           expires_at: share['expires_at'],
         },
       }
+    }
+  )
+
+  // DELETE /api/spaces-share/:token — revoke a share link (creator's org only)
+  fastify.delete<{ Params: { token: string } }>(
+    '/api/share/:token',
+    { preHandler: fastify.authenticate },
+    async (req, reply) => {
+      const result = await fastify.mongo.collection('share_tokens').updateOne(
+        { token: req.params.token, org_id: req.user!.orgId },
+        { $set: { revoked_at: new Date() } }
+      )
+      if (result.matchedCount === 0) return reply.status(404).send({ error: 'Not found' })
+      return { ok: true }
     }
   )
 }
