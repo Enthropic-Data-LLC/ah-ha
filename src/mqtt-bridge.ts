@@ -85,7 +85,7 @@ async function appendToTrail(
   slug: string,
   body: { text: string; tone: string; tags?: string[]; meta?: Record<string, unknown>; source?: string },
 ) {
-  const res = await fetch(`${API_BASE}/api/trail/${slug}/append`, {
+  const res = await fetch(`${API_BASE}/api/trail/${encodeURIComponent(slug)}/append`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -228,10 +228,19 @@ async function main() {
         return
       }
 
+      // Only publish presence for a real user — the topic username is attacker-
+      // controllable, so full mitigation still needs broker ACLs (KB #2134).
+      const presenceUser = await db.collection('users').findOne({ username }, { projection: { _id: 1 } })
+      if (!presenceUser) {
+        console.warn(`[mqtt-bridge] presence for unknown user ${username}, skipping`)
+        return
+      }
+      const location = typeof parsed.location === 'string' ? parsed.location.slice(0, 200) : undefined
+
       try {
         await redisPub.publish(
           `aha:presence:${username}`,
-          JSON.stringify({ state, location: parsed.location, ts: new Date().toISOString() })
+          JSON.stringify({ state, location, ts: new Date().toISOString() })
         )
         console.log(`[mqtt-bridge] ✓ presence ${username} → ${state}`)
       } catch (err) {

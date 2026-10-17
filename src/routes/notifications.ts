@@ -97,10 +97,22 @@ const notificationsRoutes: FastifyPluginAsync = async (fastify) => {
     }
   )
 
-  // GET /api/presence/:username — read current presence state (public)
+  // GET /api/presence/:username — read current presence state
   fastify.get<{ Params: { username: string } }>(
     '/api/presence/:username',
+    { preHandler: fastify.authenticate },
     async (req, reply) => {
+      // Home/away is sensitive (burglary inference, CWE-306): only the person
+      // themselves or a member of the same org/household may read it. Return 404
+      // (not 403) on mismatch so usernames can't be enumerated.
+      if (req.params.username !== req.user!.username) {
+        const target = await fastify.mongo.collection('users').findOne(
+          { username: req.params.username }, { projection: { org_id: 1 } }
+        )
+        if (!target || String(target['org_id']) !== req.user!.orgId.toString()) {
+          return reply.status(404).send({ error: 'No presence data' })
+        }
+      }
       const state = await fastify.redis.get(`aha:presence:last:${req.params.username}`)
       const raw   = await fastify.redis.get(`aha:presence:state:${req.params.username}`)
       if (!state && !raw) return reply.status(404).send({ error: 'No presence data' })

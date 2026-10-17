@@ -13,7 +13,7 @@ fastify.get('/healthz', async () => ({ ok: true, service: 'presence' }))
 
 // Stub — full implementation in Phase 1 Week 5-6
 fastify.post('/api/presence/event', async (req) => {
-  fastify.log.info({ body: req.body }, 'presence event received')
+  fastify.log.info('presence event received') // do not log raw body — GPS/BLE/SSID PII (CWE-532)
   return { ok: true }
 })
 
