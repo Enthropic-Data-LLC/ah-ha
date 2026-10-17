@@ -8,7 +8,7 @@ const auditRoutes: FastifyPluginAsync = async (fastify) => {
     { preHandler: fastify.authenticate },
     async (req) => {
       const params = z.object({
-        resource_ref: z.string().optional(),
+        resource_ref: z.string().max(200).optional(),
         action: z.string().optional(),
         since: z.string().optional(),
         limit: z.coerce.number().int().min(1).max(100).default(50),
@@ -16,7 +16,12 @@ const auditRoutes: FastifyPluginAsync = async (fastify) => {
       }).parse(req.query)
 
       const filter: Record<string, unknown> = { org_id: req.user!.orgId }
-      if (params.resource_ref) filter['resource_ref'] = { $regex: params.resource_ref, $options: 'i' }
+      if (params.resource_ref) {
+        // Escape + anchor: treat the input as a literal prefix, never a
+        // user-supplied regex (CWE-943 ReDoS / index-defeating scan).
+        const esc = params.resource_ref.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+        filter['resource_ref'] = { $regex: `^${esc}`, $options: 'i' }
+      }
       if (params.action) filter['action'] = params.action
       if (params.since) filter['ts'] = { $gte: new Date(params.since) }
       if (params.cursor !== undefined) filter['seq'] = { $lt: params.cursor }

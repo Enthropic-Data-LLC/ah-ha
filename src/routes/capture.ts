@@ -1,11 +1,26 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
 
+// Whitelist + bound the model's JSON so attacker-influenced text in the
+// capture prompt cannot return arbitrary fields/types to the client (CWE-1427).
+const captureResult = z.object({
+  title: z.string().max(500),
+  due_date: z.string().datetime({ offset: true }).nullable().optional(),
+  start_date: z.string().datetime({ offset: true }).nullable().optional(),
+  recurrence: z.object({
+    archetype: z.enum(['habit', 'schedule', 'interval']).nullable().optional(),
+    time_anchor: z.enum(['morning', 'midday', 'evening', 'night']).nullable().optional(),
+    day_of_week: z.number().int().min(0).max(6).nullable().optional(),
+    interval_days: z.number().int().positive().max(3650).nullable().optional(),
+  }).nullable().optional(),
+}).strip()
+
 // POST /api/board/:slug/cards/capture — NL text → parsed card fields
 export const captureRoute: FastifyPluginAsync = async (fastify) => {
   fastify.post<{ Params: { slug: string } }>(
     '/api/board/:slug/cards/capture',
-    { preHandler: fastify.authenticate },
+    // Paid LLM call (may use the server key) — throttle per org (CWE-770).
+    { preHandler: fastify.authenticate, config: { rateLimit: { max: 20, timeWindow: '1 minute' } } },
     async (req, reply) => {
       const { text } = z.object({ text: z.string().min(1).max(500) }).parse(req.body)
 
@@ -69,7 +84,7 @@ Examples:
 
         const data = await res.json() as { content: Array<{ type: string; text: string }> }
         const raw = data.content[0]?.text ?? ''
-        const parsed = JSON.parse(raw.replace(/```json\n?|```/g, '').trim())
+        const parsed = captureResult.parse(JSON.parse(raw.replace(/```json\n?|```/g, '').trim()))
         return { data: { ...parsed, parsed: true } }
       } catch (err) {
         fastify.log.warn({ err }, 'AI capture parse error')

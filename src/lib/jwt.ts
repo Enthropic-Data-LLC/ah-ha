@@ -40,10 +40,19 @@ export async function signJWT(payload: JWTPayload): Promise<string> {
 }
 
 export async function verifyJWT(token: string): Promise<JWTPayload> {
-  const { payload } = await jwtVerify(token, secret())
+  // Pin the algorithm so a token with alg:none or a different alg cannot be
+  // substituted (CWE-345), and validate the id claims before constructing
+  // ObjectIds so a malformed token fails as an auth error, not a 500 (CWE-20).
+  const { payload } = await jwtVerify(token, secret(), { algorithms: ['HS256'] })
+  const sub = payload['sub']
+  const orgId = payload['orgId']
+  if (typeof sub !== 'string' || !ObjectId.isValid(sub) ||
+      typeof orgId !== 'string' || !ObjectId.isValid(orgId)) {
+    throw new Error('invalid token claims')
+  }
   return {
-    id: new ObjectId(payload['sub'] as string),
-    orgId: new ObjectId(payload['orgId'] as string),
+    id: new ObjectId(sub),
+    orgId: new ObjectId(orgId),
     plan: payload['plan'] as Plan,
     username: payload['username'] as string,
   }

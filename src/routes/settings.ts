@@ -48,11 +48,13 @@ const settingsRoutes: FastifyPluginAsync = async (fastify) => {
   // POST /api/settings/test-key — verify the saved Anthropic key works
   fastify.post(
     '/api/settings/test-key',
-    { preHandler: fastify.authenticate },
+    // Paid upstream call — throttle, and test ONLY the user's own key, never
+    // the server fallback (CWE-770 cost abuse + server-key validity oracle).
+    { preHandler: fastify.authenticate, config: { rateLimit: { max: 10, timeWindow: '1 minute' } } },
     async (req) => {
       const settings = await fastify.mongo.collection('user_settings')
         .findOne({ user_id: req.user!.id })
-      const apiKey = (settings?.['anthropic_api_key'] as string | null) ?? process.env['ANTHROPIC_API_KEY']
+      const apiKey = settings?.['anthropic_api_key'] as string | null
       if (!apiKey) return { ok: false, error: 'No key configured' }
 
       try {

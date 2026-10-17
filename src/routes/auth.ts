@@ -116,10 +116,17 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
     const existing = await fastify.mongo.collection('users').findOne({ username: body.username })
     if (existing) return reply.status(409).send({ error: 'Username taken' })
 
-    await fastify.mongo.collection('users').updateOne(
-      { _id: req.user!.id },
-      { $set: { username: body.username, onboarding_completed: true } }
-    )
+    try {
+      await fastify.mongo.collection('users').updateOne(
+        { _id: req.user!.id },
+        { $set: { username: body.username, onboarding_completed: true } }
+      )
+    } catch (e) {
+      // The username_unique_when_set partial index is the source of truth;
+      // a concurrent claim surfaces as duplicate-key 11000, not a TOCTOU win.
+      if ((e as { code?: number }).code === 11000) return reply.status(409).send({ error: 'Username taken' })
+      throw e
+    }
 
     // Re-issue JWT with username
     const user = await fastify.mongo.collection('users').findOne({ _id: req.user!.id })
