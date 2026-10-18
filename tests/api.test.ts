@@ -953,3 +953,41 @@ describe('Feedback', () => {
     } finally { cookie = saved }
   })
 })
+
+// ── Card ↔ list: completeness gates completion ───────────────────────────────
+
+describe('Card list gate', () => {
+  it('blocks completing a card until its list is done, and reports progress', async () => {
+    const cols = (await req<{ data: Array<{ _id: string }> }>('GET', `/api/board/${boardSlug}/columns`)).body.data
+    const card = (await req<{ data: { _id: string } }>('POST', `/api/board/${boardSlug}/cards`, { column_id: cols[0]!._id, title: `Gated ${Date.now()}` })).body.data
+    const slug = `gate-list-${Date.now()}`
+    const list = (await req<{ data: { _id: string } }>('POST', '/api/spaces', { type: 'list', name: 'Gate list', slug })).body.data
+    const item = (await req<{ data: { _id: string } }>('POST', `/api/list/${slug}/items`, { title: 'Tape' })).body.data
+
+    expect((await req('PATCH', `/api/board/${boardSlug}/cards/${card._id}`, { list_id: list._id })).status).toBe(200)
+    expect((await req('PATCH', `/api/board/${boardSlug}/cards/${card._id}`, { list_id: '000000000000000000000000' })).status).toBe(404)
+
+    type Cards = { data: Array<{ _id: string; list_progress?: { done: number; total: number; complete: boolean } }> }
+    const find = async () => (await req<Cards>('GET', `/api/board/${boardSlug}/cards`)).body.data.find(c => c._id === card._id)!
+    expect((await find()).list_progress).toMatchObject({ done: 0, total: 1, complete: false })
+
+    expect((await req('POST', `/api/cards/${card._id}/complete`, {})).status).toBe(409)
+
+    await req('PATCH', `/api/list/${slug}/items/${item._id}/check`, { done: true })
+    expect((await find()).list_progress).toMatchObject({ done: 1, total: 1, complete: true })
+    expect((await req('POST', `/api/cards/${card._id}/complete`, {})).status).toBe(200)
+
+    await req('DELETE', `/api/board/${boardSlug}/cards/${card._id}`)
+  })
+
+  it('gate off lets an unfinished list through', async () => {
+    const cols = (await req<{ data: Array<{ _id: string }> }>('GET', `/api/board/${boardSlug}/columns`)).body.data
+    const card = (await req<{ data: { _id: string } }>('POST', `/api/board/${boardSlug}/cards`, { column_id: cols[0]!._id, title: `Ungated ${Date.now()}` })).body.data
+    const slug = `ungate-list-${Date.now()}`
+    const list = (await req<{ data: { _id: string } }>('POST', '/api/spaces', { type: 'list', name: 'Ungate list', slug })).body.data
+    await req('POST', `/api/list/${slug}/items`, { title: 'Optional thing' })
+    await req('PATCH', `/api/board/${boardSlug}/cards/${card._id}`, { list_id: list._id, list_gate: false })
+    expect((await req('POST', `/api/cards/${card._id}/complete`, {})).status).toBe(200)
+    await req('DELETE', `/api/board/${boardSlug}/cards/${card._id}`)
+  })
+})

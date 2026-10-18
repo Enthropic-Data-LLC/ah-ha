@@ -1,5 +1,6 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { ObjectId } from 'mongodb'
+import { listProgressFor } from '../lib/list-progress.js'
 
 const TIME_ANCHOR_HOURS: Record<string, number> = {
   morning: 7,
@@ -69,6 +70,17 @@ const recurrenceRoutes: FastifyPluginAsync = async (fastify) => {
         deleted_at: { $exists: false },
       })
       if (!card) return reply.status(404).send({ error: 'Card not found' })
+
+      // A card whose checklist is not finished cannot be completed (list_gate defaults on).
+      if (card['list_id'] instanceof ObjectId && card['list_gate'] !== false) {
+        const p = (await listProgressFor(fastify, req.user!.orgId, [card['list_id']])).get(String(card['list_id']))
+        if (p && !p.complete) {
+          return reply.status(409).send({
+            error: `Finish the list first — ${p.total - p.done} of ${p.total} still open on "${p.name}"`,
+            list_progress: p,
+          })
+        }
+      }
 
       const rec = card['recurrence'] as RecDoc | null | undefined
       const now = new Date()

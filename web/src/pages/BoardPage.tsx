@@ -5,6 +5,7 @@ import { useMe } from '../hooks/useMe'
 import { api } from '../lib/api'
 import BoardCardItem from '../components/BoardCard'
 import CardModal from '../components/CardModal'
+import TagSheet from '../components/TagSheet'
 import ConfirmDeleteModal from '../components/ConfirmDeleteModal'
 import ColumnSettings, { type ColumnChanges } from '../components/ColumnSettings'
 import type { BoardCard, BoardColumn } from '../lib/types'
@@ -65,6 +66,7 @@ export default function BoardPage({ slug }: Props) {
   const actions = useBoardActions(slug)
   const { user } = useMe()
   const [activeCard, setActiveCard] = useState<BoardCard | null>(null)
+  const [taggingId, setTaggingId] = useState<string | null>(null)
   const [showDelete, setShowDelete] = useState(false)
   const [settingsFor, setSettingsFor] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
@@ -113,17 +115,25 @@ export default function BoardPage({ slug }: Props) {
     await mutateCards()
   }
 
+  function toast(msg: string) {
+    setToastMsg(msg)
+    if (toastTimer.current) clearTimeout(toastTimer.current)
+    toastTimer.current = setTimeout(() => setToastMsg(null), 2500)
+  }
+
   async function completeCard(cardId: string) {
-    await api.post(`/api/cards/${cardId}/complete`, {})
+    try {
+      await api.post(`/api/cards/${cardId}/complete`, {})
+    } catch (e) {
+      // 409: the card's list still has open items
+      toast(e instanceof Error ? e.message : 'Could not complete')
+    }
     await mutateCards()
   }
 
   async function deferCard(card: BoardCard, until: Date | null, label: string) {
     await saveCard(card._id, { defer_until: until?.toISOString() ?? null })
-    const msg = label === 'Someday' ? 'Moved to someday' : `Snoozed — ${label.toLowerCase()}`
-    setToastMsg(msg)
-    if (toastTimer.current) clearTimeout(toastTimer.current)
-    toastTimer.current = setTimeout(() => setToastMsg(null), 2500)
+    toast(label === 'Someday' ? 'Moved to someday' : `Snoozed — ${label.toLowerCase()}`)
   }
 
   async function addColumn() {
@@ -379,6 +389,7 @@ export default function BoardPage({ slug }: Props) {
                           onDefer={(until, label) => deferCard(card, until, label)}
                           onPickDate={setActiveCard}
                           onComplete={completeCard}
+                          onTag={c => setTaggingId(c._id)}
                         />
                       ))}
                       {provided.placeholder}
@@ -413,6 +424,13 @@ export default function BoardPage({ slug }: Props) {
           onDelete={deleteCard}
         />
       )}
+
+      {(() => {
+        const tagging = cards.find(c => c._id === taggingId)
+        return tagging && (
+          <TagSheet key={tagging._id} card={tagging} onSave={saveCard} onClose={() => { setTaggingId(null); void mutateCards() }} />
+        )
+      })()}
 
       {(() => {
         const col = columns.find(c => c._id === settingsFor)

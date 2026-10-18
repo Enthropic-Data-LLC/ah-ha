@@ -4,6 +4,7 @@ import { ObjectId } from 'mongodb'
 import { between, initial } from '../lib/lexorank.js'
 import { annotate, currentPlace, orgPlaces, resolveAt, taggedTo } from '../lib/places.js'
 import { canSee } from '../lib/scopes.js'
+import { withListProgress } from '../lib/list-progress.js'
 
 function publish(fastify: { redis: import('ioredis').Redis }, spaceRef: string, op: Record<string, unknown>) {
   fastify.redis.publish(`ws:${spaceRef}`, JSON.stringify(op)).catch(() => {})
@@ -140,7 +141,7 @@ const boardRoutes: FastifyPluginAsync = async (fastify) => {
         .find(filter)
         .sort({ column_id: 1, position: 1 })
         .toArray()
-      return { data: annotate(cards, places, here), meta }
+      return { data: await withListProgress(fastify, orgId, annotate(cards, places, here)), meta }
     }
   )
 
@@ -218,6 +219,9 @@ const boardRoutes: FastifyPluginAsync = async (fastify) => {
           entity_id:   z.string(),
           time_chunks: z.array(z.string()).default([]),
         })).optional(),
+        // A checklist (a list space) the card needs; `list_gate` makes finishing the card wait on it.
+        list_id: z.string().nullable().optional(),
+        list_gate: z.boolean().optional(),
       }).parse(req.body)
 
       const update: Record<string, unknown> = { updated_at: new Date() }
@@ -231,6 +235,19 @@ const boardRoutes: FastifyPluginAsync = async (fastify) => {
       if (body.defer_until !== undefined) update['defer_until'] = body.defer_until ? new Date(body.defer_until) : null
       if (body.recurrence !== undefined) update['recurrence'] = body.recurrence
       if (body.contexts !== undefined) update['contexts'] = body.contexts
+      if (body.list_id !== undefined) {
+        if (body.list_id === null) {
+          update['list_id'] = null
+        } else {
+          if (!ObjectId.isValid(body.list_id)) return reply.status(400).send({ error: 'Not a list' })
+          const list = await fastify.mongo.collection('spaces').findOne({
+            _id: new ObjectId(body.list_id), type: 'list', org_id: req.user!.orgId, deleted_at: { $exists: false },
+          })
+          if (!list) return reply.status(404).send({ error: 'List not found' })
+          update['list_id'] = list._id
+        }
+      }
+      if (body.list_gate !== undefined) update['list_gate'] = body.list_gate
 
       // The person's own snooze into the future (not a connected app's) counts toward Follow-through.
       const snooze = !req.apiKeyScopes && update['defer_until'] instanceof Date && (update['defer_until'] as Date) > new Date()

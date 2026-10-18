@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Draggable } from '@hello-pangea/dnd'
 import type { BoardCard } from '../lib/types'
 import DeferMenu from './DeferMenu'
+import { useEntities } from './ContextPicker'
 
 const PRIORITY_BADGE: Record<string, string> = {
   high:   'bg-red-500/20 text-red-400 border-red-500/30',
@@ -68,9 +69,11 @@ interface Props {
   onDefer?: (until: Date | null, label: string) => Promise<void>
   onPickDate?: (card: BoardCard) => void
   onComplete?: (cardId: string) => Promise<void>
+  onTag?: (card: BoardCard) => void
 }
 
-export default function BoardCardItem({ card, index, onClick, onDefer, onPickDate, onComplete }: Props) {
+export default function BoardCardItem({ card, index, onClick, onDefer, onPickDate, onComplete, onTag }: Props) {
+  const { data: entityData } = useEntities()
   const [showDefer, setShowDefer] = useState(false)
   const [completing, setCompleting] = useState(false)
   const isRecurring = !!card.recurrence
@@ -78,6 +81,12 @@ export default function BoardCardItem({ card, index, onClick, onDefer, onPickDat
   const t = TIMING_STYLES[timing]
   const dueLabel = formatDueLabel(card, timing)
   const isDeferred = timing === 'deferred'
+  const ctxChips = (card.contexts ?? []).map(c => {
+    const e = entityData?.data.find(x => x._id === c.entity_id)
+    return e ? { id: e._id, label: `${e.icon} ${e.name}`, times: c.time_chunks.length } : null
+  }).filter((x): x is { id: string; label: string; times: number } => !!x)
+  const lp = card.list_progress
+  const gated = !!lp && card.list_gate !== false && !lp.complete
   const streak = (card.recurrence?.archetype === 'habit' && (card.recurrence.streak_count ?? 0) > 2)
     ? card.recurrence.streak_count
     : null
@@ -110,10 +119,17 @@ export default function BoardCardItem({ card, index, onClick, onDefer, onPickDat
               {streak && (
                 <span className="text-xs text-orange-400">🔥{streak}</span>
               )}
-              {(card.contexts?.length ?? 0) > 0 && (
-                <span className="text-xs text-indigo-600" title={(card.contexts ?? []).map(c => c.entity_id).join(', ')}>◈</span>
+              {onTag && (
+                <button
+                  onClick={e => { e.stopPropagation(); onTag(card) }}
+                  className="opacity-0 group-hover:opacity-100 focus:opacity-100 p-0.5 text-slate-600 hover:text-indigo-300 rounded transition leading-none"
+                  title="Tag with a place, person, time or list"
+                  aria-label="Tag card"
+                >
+                  ◈
+                </button>
               )}
-              {onComplete && isRecurring && (
+              {onComplete && (isRecurring || !!lp) && (
                 <button
                   onClick={async e => {
                     e.stopPropagation()
@@ -123,7 +139,7 @@ export default function BoardCardItem({ card, index, onClick, onDefer, onPickDat
                   }}
                   disabled={completing}
                   className="opacity-0 group-hover:opacity-100 focus:opacity-100 p-0.5 text-slate-600 hover:text-emerald-400 rounded transition leading-none disabled:opacity-30"
-                  title="Done — advance recurrence"
+                  title={gated ? `Finish the list first — ${lp!.total - lp!.done} still open` : isRecurring ? 'Done — advance recurrence' : 'Done'}
                   aria-label="Mark done"
                 >
                   {completing ? '…' : '✓'}
@@ -147,6 +163,27 @@ export default function BoardCardItem({ card, index, onClick, onDefer, onPickDat
             <div className="flex items-center gap-1.5">
               <span className={`text-xs font-medium ${t.label}`}>{dueLabel}</span>
               {timing === 'overdue' && <span className="text-amber-600 text-xs">●</span>}
+            </div>
+          )}
+
+          {/* Where / who / when, and the list it needs */}
+          {(ctxChips.length > 0 || lp) && (
+            <div className="flex flex-wrap items-center gap-1">
+              {ctxChips.map(c => (
+                <span key={c.id} className="text-xs px-1.5 py-0.5 rounded bg-indigo-950/40 text-indigo-300 border border-indigo-900/60">
+                  {c.label}{c.times > 0 && <span className="text-indigo-500"> · {c.times} time{c.times > 1 ? 's' : ''}</span>}
+                </span>
+              ))}
+              {lp && (
+                <span
+                  className={`flex items-center gap-1 text-xs px-1.5 py-0.5 rounded border ${
+                    lp.complete ? 'border-emerald-800 text-emerald-400 bg-emerald-950/30' : 'border-slate-700 text-slate-400'
+                  }`}
+                  title={lp.name}
+                >
+                  {lp.complete ? '✓' : '☰'} {lp.done}/{lp.total}
+                </span>
+              )}
             </div>
           )}
 

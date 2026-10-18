@@ -75,6 +75,10 @@ export interface BoardCard {
   // e.g. [{ entity_id: "abc", time_chunks: ["evening", "night"] }]
   // empty time_chunks means "any time at this place"
   contexts?: Array<{ entity_id: string; time_chunks: string[] }>
+  // checklist (a list space) the card needs; list_gate (default on) blocks completing it until the list is done
+  list_id?: string | null
+  list_gate?: boolean
+  list_progress?: { list_id: string; slug: string; name: string; done: number; total: number; complete: boolean }
 }
 
 export interface LocationSignature {

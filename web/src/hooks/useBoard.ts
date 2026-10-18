@@ -16,7 +16,7 @@ export function useBoardActions(slug: string) {
     createCard: (body: { column_id: string; title: string; notes?: string; priority?: BoardCard['priority'] }) =>
       api.post<{ data: BoardCard }>(`/api/board/${slug}/cards`, body),
 
-    updateCard: (id: string, body: Partial<Pick<BoardCard, 'title' | 'notes' | 'priority' | 'tags' | 'color'>>) =>
+    updateCard: (id: string, body: Partial<BoardCard>) =>
       api.patch(`/api/board/${slug}/cards/${id}`, body),
 
     moveCard: (id: string, body: { column_id: string; before_id?: string | null; after_id?: string | null }) =>

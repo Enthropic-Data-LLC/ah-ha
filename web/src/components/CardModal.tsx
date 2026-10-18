@@ -1,10 +1,8 @@
 import { useState, useEffect } from 'react'
-import useSWR from 'swr'
 import type { BoardCard, BoardColumn, Recurrence, RecurrenceArchetype } from '../lib/types'
 import DeferMenu from './DeferMenu'
-import { fetcher } from '../lib/api'
-
-interface EntityOption { _id: string; name: string; icon: string }
+import ContextPicker, { type CardContext } from './ContextPicker'
+import ListAttach from './ListAttach'
 
 interface Props {
   card: BoardCard
@@ -15,17 +13,6 @@ interface Props {
 }
 
 const PRIORITY_OPTS = ['none', 'low', 'medium', 'high'] as const
-
-const TIME_CHUNK_OPTS = [
-  { value: 'wakeup',         label: 'Wake up',    sub: '5–8am' },
-  { value: 'morning',        label: 'Morning',    sub: '6–10am' },
-  { value: 'midday',         label: 'Midday',     sub: '10am–5pm' },
-  { value: 'evening',        label: 'Evening',    sub: '5–9pm' },
-  { value: 'night',          label: 'Night',      sub: '9pm–2am' },
-  { value: 'bedtime',        label: 'Bedtime',    sub: '9pm–1am' },
-  { value: 'weekend',        label: 'Weekend',    sub: 'Sat+Sun' },
-  { value: 'monday_evening', label: 'Mon evening',sub: 'Mon 5–9pm' },
-]
 
 const ARCHETYPE_LABELS: Record<RecurrenceArchetype, string> = {
   habit:    'Every day at the same time',
@@ -65,13 +52,12 @@ export default function CardModal({ card, columns, onClose, onSave, onDelete }: 
   const [timeAnchor, setTimeAnchor] = useState(card.recurrence?.time_anchor ?? 'morning')
   const [dayOfWeek, setDayOfWeek] = useState(card.recurrence?.day_of_week ?? 1)
   const [intervalDays, setIntervalDays] = useState(card.recurrence?.interval_days ?? 7)
-  type CardContext = { entity_id: string; time_chunks: string[] }
   const [contexts, setContexts] = useState<CardContext[]>(card.contexts ?? [])
-  const [expandedEntity, setExpandedEntity] = useState<string | null>(null)
+  const [listId, setListId] = useState<string | null>(card.list_id ?? null)
+  const [listGate, setListGate] = useState(card.list_gate !== false)
   const [saving, setSaving]       = useState(false)
   const [showDefer, setShowDefer] = useState(false)
   const [activeTab, setActiveTab] = useState<'details' | 'dates' | 'repeat'>('details')
-  const { data: entityData } = useSWR<{ data: EntityOption[] }>('/api/entities', fetcher)
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
@@ -100,6 +86,8 @@ export default function CardModal({ card, columns, onClose, onSave, onDelete }: 
       defer_until: fromDateInput(deferUntil),
       recurrence: buildRecurrence(),
       contexts,
+      list_id: listId,
+      list_gate: listGate,
     })
     setSaving(false)
     onClose()
@@ -209,81 +197,13 @@ export default function CardModal({ card, columns, onClose, onSave, onDelete }: 
                 </div>
               </div>
 
-              {/* Entity+time context — "Do this at [place] during [time]" */}
-              {entityData && entityData.data.length > 0 && (
-                <div className="space-y-2">
-                  <label className="text-xs text-slate-500 font-medium uppercase tracking-wide">Do this at</label>
-                  {entityData.data.map(e => {
-                    const ctx = contexts.find(c => c.entity_id === e._id)
-                    const active = !!ctx
-                    return (
-                      <div key={e._id} className={`rounded-xl border transition ${active ? 'border-indigo-700 bg-indigo-950/20' : 'border-slate-800'}`}>
-                        {/* Entity row */}
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (active) {
-                              setContexts(prev => prev.filter(c => c.entity_id !== e._id))
-                              setExpandedEntity(null)
-                            } else {
-                              setContexts(prev => [...prev, { entity_id: e._id, time_chunks: [] }])
-                              setExpandedEntity(e._id)
-                            }
-                          }}
-                          className="w-full flex items-center gap-2 px-3 py-2.5 text-left"
-                        >
-                          <span className="text-lg">{e.icon}</span>
-                          <span className={`text-sm flex-1 ${active ? 'text-indigo-300' : 'text-slate-400'}`}>{e.name}</span>
-                          {active && ctx && ctx.time_chunks.length > 0 && (
-                            <span className="text-xs text-indigo-500">
-                              {ctx.time_chunks.map(c => TIME_CHUNK_OPTS.find(o => o.value === c)?.label ?? c).join(' · ')}
-                            </span>
-                          )}
-                          {active && ctx && ctx.time_chunks.length === 0 && (
-                            <span className="text-xs text-slate-600">any time</span>
-                          )}
-                          {active && (
-                            <button
-                              type="button"
-                              onClick={e2 => { e2.stopPropagation(); setExpandedEntity(expandedEntity === e._id ? null : e._id) }}
-                              className="text-xs text-slate-600 hover:text-slate-300 px-1"
-                            >
-                              {expandedEntity === e._id ? '▲' : '▾'}
-                            </button>
-                          )}
-                        </button>
-                        {/* Inline time chunk picker — only when entity is active and expanded */}
-                        {active && expandedEntity === e._id && (
-                          <div className="px-3 pb-3 space-y-1.5">
-                            <p className="text-xs text-slate-600">When at {e.name}… (leave empty for any time)</p>
-                            <div className="flex flex-wrap gap-1.5">
-                              {TIME_CHUNK_OPTS.map(tc => {
-                                const on = ctx?.time_chunks.includes(tc.value) ?? false
-                                return (
-                                  <button
-                                    key={tc.value}
-                                    type="button"
-                                    onClick={() => setContexts(prev => prev.map(c =>
-                                      c.entity_id === e._id
-                                        ? { ...c, time_chunks: on ? c.time_chunks.filter(x => x !== tc.value) : [...c.time_chunks, tc.value] }
-                                        : c
-                                    ))}
-                                    className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs border transition ${
-                                      on ? 'border-indigo-500 bg-indigo-500/10 text-indigo-300' : 'border-slate-700 text-slate-500 hover:border-slate-500'
-                                    }`}
-                                  >
-                                    {tc.label} <span className="text-slate-600">{tc.sub}</span>
-                                  </button>
-                                )
-                              })}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
+              <ContextPicker contexts={contexts} onChange={setContexts} />
+              <ListAttach
+                cardTitle={title}
+                listId={listId}
+                gate={listGate}
+                onChange={next => { setListId(next.list_id); setListGate(next.list_gate) }}
+              />
             </>
           )}
 
