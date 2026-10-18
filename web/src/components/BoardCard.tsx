@@ -70,14 +70,17 @@ interface Props {
   onPickDate?: (card: BoardCard) => void
   onComplete?: (cardId: string) => Promise<void>
   onTag?: (card: BoardCard) => void
+  /** The column's closer kind — a card in a closer column counts as closed even if it was put there before the flag existed. */
+  columnCloses?: 'done' | 'closed' | null
 }
 
-export default function BoardCardItem({ card, index, onClick, onDefer, onPickDate, onComplete, onTag }: Props) {
+export default function BoardCardItem({ card, index, onClick, onDefer, onPickDate, onComplete, onTag, columnCloses }: Props) {
   const { data: entityData } = useEntities()
   const [showDefer, setShowDefer] = useState(false)
   const [completing, setCompleting] = useState(false)
   const isRecurring = !!card.recurrence
-  const timing = getTimingState(card)
+  const closedAs = columnCloses ?? card.closed_as ?? null
+  const timing = closedAs ? 'none' : getTimingState(card)
   const t = TIMING_STYLES[timing]
   const dueLabel = formatDueLabel(card, timing)
   const isDeferred = timing === 'deferred'
@@ -102,7 +105,7 @@ export default function BoardCardItem({ card, index, onClick, onDefer, onPickDat
           className={`
             relative group px-3 py-2.5 rounded-lg bg-slate-800 border cursor-pointer select-none space-y-1.5 transition
             ${t.border} ${t.bg}
-            ${isDeferred ? 'opacity-50' : ''}
+            ${isDeferred || closedAs ? 'opacity-50' : ''}
             ${snapshot.isDragging
               ? `border-indigo-500 shadow-xl shadow-indigo-900/30 rotate-1`
               : `border-slate-700 hover:border-slate-600 ${t.glow ? 'shadow-sm ' + t.glow : ''}`
@@ -112,8 +115,8 @@ export default function BoardCardItem({ card, index, onClick, onDefer, onPickDat
         >
           {/* Title row */}
           <div className="flex items-start justify-between gap-1">
-            <p className={`text-sm leading-snug flex-1 ${isDeferred ? 'text-slate-400' : ''}`}>
-              {card.title}
+            <p className={`text-sm leading-snug flex-1 ${isDeferred ? 'text-slate-400' : ''} ${closedAs === 'done' ? 'line-through text-slate-500' : closedAs === 'closed' ? 'text-slate-500 italic' : ''}`}>
+              {closedAs && <span className={`mr-1.5 not-italic no-underline inline-block ${closedAs === 'done' ? 'text-emerald-500' : 'text-slate-500'}`}>{closedAs === 'done' ? '✓' : '✕'}</span>}{card.title}
             </p>
             <div className="flex items-center gap-1 flex-shrink-0 mt-0.5">
               {streak && (
@@ -129,7 +132,7 @@ export default function BoardCardItem({ card, index, onClick, onDefer, onPickDat
                   ◈
                 </button>
               )}
-              {onComplete && (isRecurring || !!lp) && (
+              {onComplete && !closedAs && (isRecurring || !!lp) && (
                 <button
                   onClick={async e => {
                     e.stopPropagation()

@@ -319,8 +319,8 @@ const boardRoutes: FastifyPluginAsync = async (fastify) => {
           column_id: new ObjectId(body.column_id), position, updated_at: new Date(),
           // Landing in a closer column finishes the card; leaving one reopens it.
           ...(closes
-            ? { done: true, closed_as: closes, ...(closes === 'done' ? { completed_at: new Date() } : { closed_at: new Date() }) }
-            : { done: false, closed_as: null }),
+            ? { done: true, done_at: new Date(), closed_as: closes, ...(closes === 'done' ? { completed_at: new Date() } : { closed_at: new Date() }) }
+            : { done: false, done_at: null, closed_as: null }),
         } }
       )
       if (result.matchedCount === 0) return reply.status(404).send({ error: 'Not found' })

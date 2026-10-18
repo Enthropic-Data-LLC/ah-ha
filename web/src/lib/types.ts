@@ -80,6 +80,9 @@ export interface BoardCard {
   // checklist (a list space) the card needs; list_gate (default on) blocks completing it until the list is done
   list_id?: string | null
   list_gate?: boolean
+  /** Set when the card sits in a closer column. */
+  closed_as?: 'done' | 'closed' | null
+  done?: boolean
   list_progress?: { list_id: string; slug: string; name: string; done: number; total: number; complete: boolean }
 }
 

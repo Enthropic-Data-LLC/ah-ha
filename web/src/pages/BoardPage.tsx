@@ -401,6 +401,7 @@ export default function BoardPage({ slug }: Props) {
                           onPickDate={setActiveCard}
                           onComplete={completeCard}
                           onTag={c => setTaggingId(c._id)}
+                          columnCloses={col.closes ?? null}
                         />
                       ))}
                       {provided.placeholder}
