@@ -4,7 +4,7 @@ import { ObjectId } from 'mongodb'
 import { between, initial } from '../lib/lexorank.js'
 import { annotate, currentPlace, orgPlaces, resolveAt, taggedTo } from '../lib/places.js'
 import { canSee } from '../lib/scopes.js'
-import { withListProgress } from '../lib/list-progress.js'
+import { listProgressFor, withListProgress } from '../lib/list-progress.js'
 
 function publish(fastify: { redis: import('ioredis').Redis }, spaceRef: string, op: Record<string, unknown>) {
   fastify.redis.publish(`ws:${spaceRef}`, JSON.stringify(op)).catch(() => {})
@@ -70,6 +70,8 @@ const boardRoutes: FastifyPluginAsync = async (fastify) => {
         color: z.string().optional(),
         in_today: z.boolean().optional(),
         today_priority: z.number().int().min(1).max(5).optional(),
+        // Closer: 'done' = finished (waits on the card's list), 'closed' = no longer working (skips the list).
+        closes: z.enum(['done', 'closed']).nullable().optional(),
       }).parse(req.body)
       const space = await getSpace(fastify, req.params.slug, req.user!.orgId)
       if (!space) return reply.status(404).send({ error: 'Board not found' })
@@ -285,6 +287,19 @@ const boardRoutes: FastifyPluginAsync = async (fastify) => {
       })
       if (!destCol) return reply.status(404).send({ error: 'Column not found' })
 
+      // A "done" column is an antagonist of the list: it won't take a card whose list is unfinished.
+      // A "closed" column abandons the card, so the list doesn't matter.
+      const closes = destCol['closes'] as 'done' | 'closed' | null | undefined
+      if (closes === 'done' && card['list_id'] instanceof ObjectId && card['list_gate'] !== false) {
+        const p = (await listProgressFor(fastify, orgId, [card['list_id']])).get(String(card['list_id']))
+        if (p && !p.complete) {
+          return reply.status(409).send({
+            error: `Finish the list first — ${p.total - p.done} of ${p.total} still open on "${p.name}". Move it to a Closed column to drop it instead.`,
+            list_progress: p,
+          })
+        }
+      }
+
       // Anchors must be cards in the same space + org (no cross-tenant position leak).
       const beforeCard = body.before_id
         ? await fastify.mongo.collection('board_cards').findOne({ _id: new ObjectId(body.before_id), space_id: spaceId, org_id: orgId })
@@ -300,7 +315,13 @@ const boardRoutes: FastifyPluginAsync = async (fastify) => {
 
       const result = await fastify.mongo.collection('board_cards').updateOne(
         { _id: new ObjectId(req.params.id), org_id: orgId },
-        { $set: { column_id: new ObjectId(body.column_id), position, updated_at: new Date() } }
+        { $set: {
+          column_id: new ObjectId(body.column_id), position, updated_at: new Date(),
+          // Landing in a closer column finishes the card; leaving one reopens it.
+          ...(closes
+            ? { done: true, closed_as: closes, ...(closes === 'done' ? { completed_at: new Date() } : { closed_at: new Date() }) }
+            : { done: false, closed_as: null }),
+        } }
       )
       if (result.matchedCount === 0) return reply.status(404).send({ error: 'Not found' })
       return { ok: true, position }

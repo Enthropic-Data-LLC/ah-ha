@@ -10,7 +10,7 @@ const SLUG_RE = /^[a-z0-9-]{3,64}$/
 const DEFAULT_BOARD_COLUMNS = [
   { title: 'To Do',       color: '#94a3b8' },
   { title: 'In Progress', color: '#818cf8', in_today: true, today_priority: 1 },
-  { title: 'Done',        color: '#34d399' },
+  { title: 'Done',        color: '#34d399', closes: 'done' },
 ]
 
 function slugify(name: string): string {
@@ -91,6 +91,7 @@ const spacesRoutes: FastifyPluginAsync = async (fastify) => {
         org_id: user.orgId,
         title: col.title,
         color: col.color,
+        ...('closes' in col ? { closes: col.closes } : {}),
         ...('in_today' in col ? { in_today: col.in_today, today_priority: col.today_priority } : {}),
         position: base + i,
         created_at: now,

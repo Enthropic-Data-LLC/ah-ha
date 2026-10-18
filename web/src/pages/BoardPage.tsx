@@ -92,11 +92,16 @@ export default function BoardPage({ slug }: Props) {
     const before = filteredDest[destination.index - 1] ?? null
     const after = filteredDest[destination.index] ?? null
 
-    await actions.moveCard(draggableId, {
-      column_id: destination.droppableId,
-      before_id: before?._id ?? null,
-      after_id: after?._id ?? null,
-    })
+    try {
+      await actions.moveCard(draggableId, {
+        column_id: destination.droppableId,
+        before_id: before?._id ?? null,
+        after_id: after?._id ?? null,
+      })
+    } catch (e) {
+      // 409: heading into a Done column with its list unfinished
+      toast(e instanceof Error ? e.message : 'Could not move')
+    }
     await mutateCards()
   }
 
@@ -118,7 +123,7 @@ export default function BoardPage({ slug }: Props) {
   function toast(msg: string) {
     setToastMsg(msg)
     if (toastTimer.current) clearTimeout(toastTimer.current)
-    toastTimer.current = setTimeout(() => setToastMsg(null), 2500)
+    toastTimer.current = setTimeout(() => setToastMsg(null), 4000)
   }
 
   async function completeCard(cardId: string) {
@@ -356,6 +361,12 @@ export default function BoardPage({ slug }: Props) {
                       title={`Shown in Ah! Today, priority ${col.today_priority ?? 3} (1 is the highest)`}
                       className="px-1.5 py-0.5 rounded text-[10px] font-medium border border-indigo-500 bg-indigo-500/15 text-indigo-300 flex-shrink-0"
                     >Today · P{col.today_priority ?? 3}</button>
+                  )}
+                  {col.closes && (
+                    <span
+                      title={col.closes === 'done' ? 'Done column — needs the card\'s list complete' : 'Closed column — drops the card, list or not'}
+                      className="px-1.5 py-0.5 rounded text-[10px] font-medium border border-slate-600 text-slate-400 flex-shrink-0"
+                    >{col.closes === 'done' ? '✓ done' : '✕ closed'}</span>
                   )}
                   <span className="text-xs text-slate-600">
                     {(visibleCardsByColumn[col._id] ?? []).length}

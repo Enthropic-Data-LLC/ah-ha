@@ -991,3 +991,34 @@ describe('Card list gate', () => {
     await req('DELETE', `/api/board/${boardSlug}/cards/${card._id}`)
   })
 })
+
+describe('Closer columns', () => {
+  it('a done column waits on the list; a closed column does not', async () => {
+    type Col = { _id: string; closes?: string | null }
+    const cols = (await req<{ data: Col[] }>('GET', `/api/board/${boardSlug}/columns`)).body.data
+    const doneCol = cols[2]!, openCol = cols[0]!
+    expect((await req('PATCH', `/api/board/${boardSlug}/columns/${doneCol._id}`, { closes: 'done' })).status).toBe(200)
+    const closedCol = (await req<{ data: Col }>('POST', `/api/board/${boardSlug}/columns`, { title: 'Closed' })).body.data
+    expect((await req('PATCH', `/api/board/${boardSlug}/columns/${closedCol._id}`, { closes: 'closed' })).status).toBe(200)
+    expect((await req('PATCH', `/api/board/${boardSlug}/columns/${closedCol._id}`, { closes: 'nope' })).status).toBe(400)
+
+    const mk = async () => {
+      const card = (await req<{ data: { _id: string } }>('POST', `/api/board/${boardSlug}/cards`, { column_id: openCol._id, title: `Closer ${Date.now()}` })).body.data
+      const slug = `closer-list-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+      const list = (await req<{ data: { _id: string } }>('POST', '/api/spaces', { type: 'list', name: 'Closer list', slug })).body.data
+      const item = (await req<{ data: { _id: string } }>('POST', `/api/list/${slug}/items`, { title: 'Thing' })).body.data
+      await req('PATCH', `/api/board/${boardSlug}/cards/${card._id}`, { list_id: list._id })
+      return { card, slug, item }
+    }
+    const a = await mk()
+    expect((await req('PATCH', `/api/board/${boardSlug}/cards/${a.card._id}/move`, { column_id: doneCol._id })).status).toBe(409)
+    expect((await req('PATCH', `/api/board/${boardSlug}/cards/${a.card._id}/move`, { column_id: closedCol._id })).status).toBe(200)
+    // reopening clears the closed state
+    expect((await req('PATCH', `/api/board/${boardSlug}/cards/${a.card._id}/move`, { column_id: openCol._id })).status).toBe(200)
+    await req('PATCH', `/api/list/${a.slug}/items/${a.item._id}/check`, { done: true })
+    expect((await req('PATCH', `/api/board/${boardSlug}/cards/${a.card._id}/move`, { column_id: doneCol._id })).status).toBe(200)
+
+    await req('DELETE', `/api/board/${boardSlug}/cards/${a.card._id}`)
+    await req('PATCH', `/api/board/${boardSlug}/columns/${doneCol._id}`, { closes: null })
+  })
+})

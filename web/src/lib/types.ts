@@ -26,6 +26,8 @@ export interface BoardColumn {
   in_today?: boolean
   /** 1–5, ordinal: 1 is the highest and comes first in Ah! Today (In Progress 1, To Do 2). */
   today_priority?: number
+  /** Closer column: 'done' (finished — waits on the card's list) or 'closed' (no longer working — skips the list). */
+  closes?: 'done' | 'closed' | null
 }
 
 export type RecurrenceArchetype = 'habit' | 'schedule' | 'interval' | 'seasonal'

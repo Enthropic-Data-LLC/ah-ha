@@ -8,6 +8,7 @@ export interface ColumnChanges {
   color?: string
   in_today?: boolean
   today_priority?: number
+  closes?: 'done' | 'closed' | null
 }
 
 interface Props {
@@ -28,6 +29,7 @@ export default function ColumnSettings({ column, columns, cardCount, onSave, onM
   const [color, setColor] = useState(column.color)
   const [inToday, setInToday] = useState(!!column.in_today)
   const [priority, setPriority] = useState(column.today_priority ?? 3)
+  const [closes, setCloses] = useState<'done' | 'closed' | null>(column.closes ?? null)
   const others = columns.filter(c => c._id !== column._id)
   const [moveTo, setMoveTo] = useState(others[0]?._id ?? '')
   const [confirming, setConfirming] = useState(false)
@@ -49,6 +51,7 @@ export default function ColumnSettings({ column, columns, cardCount, onSave, onM
     if (inToday !== !!column.in_today) changes.in_today = inToday
     if (inToday && priority !== (column.today_priority ?? 3)) changes.today_priority = priority
     if (inToday && !column.in_today) changes.today_priority = priority
+    if (closes !== (column.closes ?? null)) changes.closes = closes
     if (Object.keys(changes).length === 0) { onClose(); return }
     run(() => onSave(changes))
   }
@@ -117,6 +120,29 @@ export default function ColumnSettings({ column, columns, cardCount, onSave, onM
               ))}
             </div>
           </div>
+        </div>
+
+        {/* Closer */}
+        <div className="space-y-2">
+          <span className="text-sm block">Closes cards</span>
+          <div className="grid grid-cols-3 gap-1.5" role="radiogroup" aria-label="Closes cards">
+            {([[null, 'No'], ['done', 'Done'], ['closed', 'Closed']] as const).map(([v, label]) => (
+              <button
+                key={label}
+                role="radio"
+                aria-checked={closes === v}
+                onClick={() => setCloses(v)}
+                className={`py-1.5 rounded-lg text-sm border transition ${
+                  closes === v ? 'border-indigo-500 bg-indigo-500/15 text-indigo-300' : 'border-slate-700 text-slate-400 hover:border-slate-500'
+                }`}
+              >{label}</button>
+            ))}
+          </div>
+          <p className="text-xs text-slate-500">
+            {closes === 'done' && 'Finished. A card can only be moved here once its list is complete.'}
+            {closes === 'closed' && 'No longer working on it. Takes cards even when their list is unfinished.'}
+            {closes === null && 'Ordinary column.'}
+          </p>
         </div>
 
         {/* Position */}
