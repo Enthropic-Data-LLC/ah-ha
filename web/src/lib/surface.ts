@@ -24,8 +24,17 @@ export const surface: Surface =
 
 export const isToday = surface === 'today'
 
+/**
+ * Transition: the data host still carries Today too, so nothing existing moves. Flip to false to make
+ * ah-ha.app the pure data layer (its /now then sends people to now.*; the server manifest follows via TODAY_ON_DATA).
+ */
+export const todayOnData = true
+
+/** Whether this host shows Today in its nav. */
+export const hasToday = isToday || todayOnData
+
 /** Where signed-in people land. */
-export const homePath = isToday ? '/now' : '/spaces'
+export const homePath = hasToday ? '/now' : '/spaces'
 
 /** Absolute URL of `path` on the other face. Without separate hosts (dev) it stays here and switches face. */
 export function otherFace(path: string): string {

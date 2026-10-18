@@ -1,7 +1,7 @@
 import SkipLink from '../components/SkipLink'
 import SiteFooter from '../components/SiteFooter'
 import AndroidInstall from '../components/AndroidInstall'
-import { isToday } from '../lib/surface'
+import { hasToday } from '../lib/surface'
 const SPACES = [
   {
     name: 'Trail',
@@ -73,7 +73,7 @@ const GH = 'https://github.com/Enthropic-Data-LLC/ah-ha'
 /** Signed in, the page still shows (from the app's Home link); its buttons open Ah! Today instead. */
 export default function LandingPage({ signedIn = false }: { signedIn?: boolean }) {
   const cta = signedIn
-    ? (isToday ? { href: '/now', short: 'Open Ah! Today', long: 'Open Ah! Today' } : { href: '/spaces', short: 'Open Ah-Ha', long: 'Open Ah-Ha' })
+    ? (hasToday ? { href: '/now', short: 'Open Ah! Today', long: 'Open Ah! Today' } : { href: '/spaces', short: 'Open Ah-Ha', long: 'Open Ah-Ha' })
     : null
   return (
     <div className="min-h-screen flex flex-col bg-slate-950 text-slate-100" style={{ fontFamily: "'DM Mono', 'Fira Code', 'Cascadia Code', monospace" }}>

@@ -29,7 +29,7 @@ import TagsPage from './pages/TagsPage'
 import TagsPrintPage from './pages/TagsPrintPage'
 import HelpPage from './pages/HelpPage'
 import SkipLink from './components/SkipLink'
-import { isToday, homePath, otherFace, TODAY_PATHS } from './lib/surface'
+import { isToday, hasToday, todayOnData, homePath, otherFace, TODAY_PATHS } from './lib/surface'
 
 // SVG icons for bottom nav
 const Icons = {
@@ -101,7 +101,7 @@ function Shell({ children }: { children: React.ReactNode }) {
           {user && (
             <>
               <span className="text-xs font-mono text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded-full hidden sm:inline">@{user.username}</span>
-              {isToday && navLink('/now', 'Ah! Today')}
+              {hasToday && navLink('/now', 'Ah! Today')}
               {navLink(spacesLink, isToday ? 'Spaces ↗' : 'Spaces')}
               {navLink(entitiesHref, 'Entities')}
               {!isToday && navLink('/search', 'Search')}
@@ -155,7 +155,7 @@ function Shell({ children }: { children: React.ReactNode }) {
             {/* Nav items */}
             <nav className="flex-1 px-3 py-4 space-y-0.5">
               <p className="text-[10px] font-mono uppercase tracking-wider text-slate-600 px-3 pb-1">Main</p>
-              {isToday && drawerLink('/now', '⏱  Ah! Today')}
+              {hasToday && drawerLink('/now', '⏱  Ah! Today')}
               {drawerLink(spacesLink, isToday ? '⊞  Spaces ↗' : '⊞  Spaces')}
               {drawerLink(entitiesHref, '📍  Entities')}
               {!isToday && drawerLink('/search', '⌕  Search')}
@@ -171,7 +171,7 @@ function Shell({ children }: { children: React.ReactNode }) {
               <p className="text-[10px] font-mono uppercase tracking-wider text-slate-600 px-3 pb-1 pt-3">More</p>
               {drawerLink('/help', '❓  Help')}
               {drawerLink('/feedback', '💬  Send feedback')}
-              {!isToday && drawerLink(otherFace('/now'), '⏱  Open Ah! Today ↗')}
+              {!hasToday && drawerLink(otherFace('/now'), '⏱  Open Ah! Today ↗')}
               {drawerLink('/', '🏠  Home page')}
             </nav>
           </div>
@@ -184,7 +184,7 @@ function Shell({ children }: { children: React.ReactNode }) {
       {/* Mobile bottom tab bar */}
       {user && (
         <nav className="sm:hidden fixed bottom-0 left-0 right-0 h-16 bg-slate-950 border-t border-slate-800 flex items-center justify-around px-2 z-40">
-          {isToday && tabLink('/now', Icons.now, 'Today')}
+          {hasToday && tabLink('/now', Icons.now, 'Today')}
           {tabLink(spacesLink, Icons.spaces, 'Spaces')}
           {!isToday && tabLink('/search', Icons.search, 'Search')}
           {tabLink('/settings', Icons.settings, 'Settings')}
@@ -204,7 +204,7 @@ export default function App() {
     window.location.replace(otherFace(path + window.location.search))
     return null
   }
-  if (!isToday && path === '/now') {
+  if (!isToday && !todayOnData && path === '/now') {
     window.location.replace(otherFace('/now' + window.location.search))
     return null
   }

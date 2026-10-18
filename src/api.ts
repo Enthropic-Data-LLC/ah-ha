@@ -252,7 +252,7 @@ await fastify.register(staticFiles, { root: webDist })
 fastify.get('/manifest.webmanifest', async (req, reply) => {
   const m = JSON.parse(await readFile(join(webDist, 'manifest.webmanifest'), 'utf8')) as Record<string, unknown>
   if (req.hostname.startsWith('now.')) Object.assign(m, { name: 'Ah! Today', short_name: 'Ah! Today', start_url: '/now' })
-  else Object.assign(m, { start_url: '/spaces' })
+  else if (process.env['TODAY_ON_DATA'] === '0') Object.assign(m, { start_url: '/spaces' })
   return reply.type('application/manifest+json').send(m)
 })
 // Page routes get the SPA shell; anything that looks like a file or an API call and
