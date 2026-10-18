@@ -227,6 +227,13 @@ const boardRoutes: FastifyPluginAsync = async (fastify) => {
         list_gate: z.union([z.enum(['none', 'move', 'complete']), z.boolean()]).optional(),
       }).parse(req.body)
 
+      // Done and closed cards are archived: out of interaction until moved back out of the closer column.
+      if (ObjectId.isValid(req.params.id)) {
+        const cur = await fastify.mongo.collection('board_cards').findOne(
+          { _id: new ObjectId(req.params.id), org_id: req.user!.orgId, deleted_at: { $exists: false } }, { projection: { closed_as: 1 } })
+        if (cur?.['closed_as']) return reply.status(409).send({ error: 'This card is archived — move it out of the closed column to edit it' })
+      }
+
       const update: Record<string, unknown> = { updated_at: new Date() }
       if (body.title !== undefined) update['title'] = body.title
       if (body.notes !== undefined) update['notes'] = body.notes

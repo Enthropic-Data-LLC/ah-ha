@@ -72,9 +72,11 @@ interface Props {
   onTag?: (card: BoardCard) => void
   /** The column's closer kind — a card in a closer column counts as closed even if it was put there before the flag existed. */
   columnCloses?: 'done' | 'closed' | null
+  /** Put an archived card back on the board. */
+  onRestore?: (card: BoardCard) => void
 }
 
-export default function BoardCardItem({ card, index, onClick, onDefer, onPickDate, onComplete, onTag, columnCloses }: Props) {
+export default function BoardCardItem({ card, index, onClick, onDefer, onPickDate, onComplete, onTag, columnCloses, onRestore }: Props) {
   const { data: entityData } = useEntities()
   const [showDefer, setShowDefer] = useState(false)
   const [completing, setCompleting] = useState(false)
@@ -96,15 +98,15 @@ export default function BoardCardItem({ card, index, onClick, onDefer, onPickDat
     : null
 
   return (
-    <Draggable draggableId={card._id} index={index}>
+    <Draggable draggableId={card._id} index={index} isDragDisabled={!!closedAs}>
       {(provided, snapshot) => (
         <div
           ref={provided.innerRef}
           {...provided.draggableProps}
           {...provided.dragHandleProps}
-          onClick={() => { if (!showDefer) onClick(card) }}
+          onClick={() => { if (!closedAs && !showDefer) onClick(card) }}
           className={`
-            relative group px-3 py-2.5 rounded-lg bg-slate-800 border cursor-pointer select-none space-y-1.5 transition
+            relative group px-3 py-2.5 rounded-lg bg-slate-800 border select-none space-y-1.5 transition ${closedAs ? 'cursor-default' : 'cursor-pointer'}
             ${t.border} ${t.bg}
             ${isDeferred || closedAs ? 'opacity-50' : ''}
             ${snapshot.isDragging
@@ -123,7 +125,7 @@ export default function BoardCardItem({ card, index, onClick, onDefer, onPickDat
               {streak && (
                 <span className="text-xs text-orange-400">🔥{streak}</span>
               )}
-              {onTag && (
+              {onTag && !closedAs && (
                 <button
                   onClick={e => { e.stopPropagation(); onTag(card) }}
                   className="opacity-0 group-hover:opacity-100 focus:opacity-100 p-0.5 text-slate-600 hover:text-indigo-300 rounded transition leading-none"
@@ -149,7 +151,7 @@ export default function BoardCardItem({ card, index, onClick, onDefer, onPickDat
                   {completing ? '…' : '✓'}
                 </button>
               )}
-              {onDefer && (
+              {onDefer && !closedAs && (
                 <button
                   onClick={e => { e.stopPropagation(); setShowDefer(v => !v) }}
                   className="opacity-0 group-hover:opacity-100 focus:opacity-100 p-0.5 text-slate-600 hover:text-slate-300 rounded transition leading-none"
@@ -161,6 +163,13 @@ export default function BoardCardItem({ card, index, onClick, onDefer, onPickDat
               )}
             </div>
           </div>
+
+          {closedAs && onRestore && (
+            <button
+              onClick={e => { e.stopPropagation(); onRestore(card) }}
+              className="text-xs text-slate-500 hover:text-indigo-300 transition"
+            >↩ Restore to board</button>
+          )}
 
           {/* Timing banner — only when there's a date signal */}
           {dueLabel && (

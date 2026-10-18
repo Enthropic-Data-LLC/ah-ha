@@ -72,6 +72,8 @@ const recurrenceRoutes: FastifyPluginAsync = async (fastify) => {
       })
       if (!card) return reply.status(404).send({ error: 'Card not found' })
 
+      if (card['closed_as']) return reply.status(409).send({ error: 'This card is archived' })
+
       // An unfinished list stops a card being completed in either of its gated modes
       // ("move" is the stricter one: it also stops any column change, see the move route).
       // A plain card is only held back where completing would close it — handled below.

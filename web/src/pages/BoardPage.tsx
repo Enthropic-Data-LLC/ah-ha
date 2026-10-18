@@ -67,6 +67,17 @@ export default function BoardPage({ slug }: Props) {
   const { user } = useMe()
   const [activeCard, setActiveCard] = useState<BoardCard | null>(null)
   const [taggingId, setTaggingId] = useState<string | null>(null)
+  const archKey = `aha:board:${slug}:show-archived`
+  const [showArchived, setShowArchived] = useState<Record<string, boolean>>(() => {
+    try { return JSON.parse(localStorage.getItem(archKey) ?? '{}') } catch { return {} }
+  })
+  function toggleArchived(colId: string) {
+    setShowArchived(prev => {
+      const next = { ...prev, [colId]: !prev[colId] }
+      try { localStorage.setItem(archKey, JSON.stringify(next)) } catch { /* private mode */ }
+      return next
+    })
+  }
   const [showDelete, setShowDelete] = useState(false)
   const [settingsFor, setSettingsFor] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
@@ -98,6 +109,8 @@ export default function BoardPage({ slug }: Props) {
         before_id: before?._id ?? null,
         after_id: after?._id ?? null,
       })
+      const destCol = columns.find(c => c._id === destination.droppableId)
+      if (destCol?.closes) toast(`Archived in ${destCol.title}${showArchived[destCol._id] ? '' : ' — use "show archived" to see it'}`)
     } catch (e) {
       // 409: heading into a Done column with its list unfinished
       toast(e instanceof Error ? e.message : 'Could not move')
@@ -112,6 +125,20 @@ export default function BoardPage({ slug }: Props) {
 
   async function saveCard(id: string, updates: Partial<BoardCard>) {
     await actions.updateCard(id, updates)
+    await mutateCards()
+  }
+
+  // Put an archived card back at the end of the first ordinary column.
+  async function restoreCard(card: BoardCard) {
+    const dest = columns.find(c => !c.closes)
+    if (!dest) { toast('Add a column that is not Done/Closed first'); return }
+    const last = (cardsByColumn[dest._id] ?? []).at(-1)
+    try {
+      await actions.moveCard(card._id, { column_id: dest._id, before_id: last?._id ?? null, after_id: null })
+      toast(`Restored to ${dest.title}`)
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'Could not restore')
+    }
     await mutateCards()
   }
 
@@ -192,7 +219,9 @@ export default function BoardPage({ slug }: Props) {
   }
 
   const visibleCardsByColumn = columns.reduce<Record<string, BoardCard[]>>((acc, col) => {
-    acc[col._id] = (cardsByColumn[col._id] ?? []).filter(c => cardVisible(c))
+    acc[col._id] = col.closes
+      ? (showArchived[col._id] ? (cardsByColumn[col._id] ?? []) : [])
+      : (cardsByColumn[col._id] ?? []).filter(c => cardVisible(c))
     return acc
   }, {})
 
@@ -363,6 +392,16 @@ export default function BoardPage({ slug }: Props) {
                     >Today · P{col.today_priority ?? 3}</button>
                   )}
                   {col.closes && (
+                    <button
+                      onClick={() => toggleArchived(col._id)}
+                      aria-pressed={!!showArchived[col._id]}
+                      title={showArchived[col._id] ? 'Hide archived cards' : 'Show archived cards'}
+                      className={`px-1.5 py-0.5 rounded text-[10px] font-medium border flex-shrink-0 transition ${
+                        showArchived[col._id] ? 'border-indigo-500 bg-indigo-500/15 text-indigo-300' : 'border-slate-700 text-slate-500 hover:text-slate-300'
+                      }`}
+                    >{showArchived[col._id] ? 'Hide' : 'Show'} archived</button>
+                  )}
+                  {col.closes && (
                     <span
                       title={col.closes === 'done' ? 'Done column — needs the card\'s list complete' : 'Closed column — drops the card, list or not'}
                       className="px-1.5 py-0.5 rounded text-[10px] font-medium border border-slate-600 text-slate-400 flex-shrink-0"
@@ -402,9 +441,15 @@ export default function BoardPage({ slug }: Props) {
                           onComplete={completeCard}
                           onTag={c => setTaggingId(c._id)}
                           columnCloses={col.closes ?? null}
+                          onRestore={restoreCard}
                         />
                       ))}
                       {provided.placeholder}
+                      {col.closes && !showArchived[col._id] && (cardsByColumn[col._id] ?? []).length > 0 && (
+                        <p className="px-2 py-3 text-xs text-slate-600 text-center">
+                          {(cardsByColumn[col._id] ?? []).length} archived
+                        </p>
+                      )}
                     </div>
                   )}
                 </Droppable>

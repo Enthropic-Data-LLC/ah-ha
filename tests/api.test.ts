@@ -589,6 +589,8 @@ describe('Reminders + day summary', () => {
     expect(s2).toBe(200)
     expect((sum as { data: { completed: Array<{ title: string }> } }).data.completed.map(c => c.title)).toContain(title)
 
+    // Completing steps a card along; it is only finished (and stops being "upcoming") once it reaches the end.
+    for (let i = 0; i < 6; i++) await req('POST', `/api/cards/${cardId}/complete`, {})
     const { body: after } = await req<{ data: Array<{ title: string }> }>('GET', '/api/cards/upcoming?hours=3')
     expect((after as { data: Array<{ title: string }> }).data.map(c => c.title)).not.toContain(title)
   })
@@ -1066,5 +1068,24 @@ describe('Closer columns', () => {
 
     await req('DELETE', `/api/board/${boardSlug}/cards/${a.card._id}`)
     await req('PATCH', `/api/board/${boardSlug}/columns/${doneCol._id}`, { closes: null })
+  })
+})
+
+describe('Archived cards', () => {
+  it('a card in a closer column is out of interaction until moved back out', async () => {
+    type Col = { _id: string; closes?: string | null }
+    const cols = (await req<{ data: Col[] }>('GET', `/api/board/${boardSlug}/columns`)).body.data
+    const closer = cols.find(c => c.closes === 'closed') ?? (await (async () => {
+      const c = (await req<{ data: Col }>('POST', `/api/board/${boardSlug}/columns`, { title: 'Archive' })).body.data
+      await req('PATCH', `/api/board/${boardSlug}/columns/${c._id}`, { closes: 'closed' })
+      return c
+    })())
+    const card = (await req<{ data: { _id: string } }>('POST', `/api/board/${boardSlug}/cards`, { column_id: cols[0]!._id, title: `Archive me ${Date.now()}` })).body.data
+    expect((await req('PATCH', `/api/board/${boardSlug}/cards/${card._id}/move`, { column_id: closer._id })).status).toBe(200)
+    expect((await req('PATCH', `/api/board/${boardSlug}/cards/${card._id}`, { title: 'nope' })).status).toBe(409)
+    expect((await req('POST', `/api/cards/${card._id}/complete`, {})).status).toBe(409)
+    expect((await req('PATCH', `/api/board/${boardSlug}/cards/${card._id}/move`, { column_id: cols[0]!._id })).status).toBe(200)
+    expect((await req('PATCH', `/api/board/${boardSlug}/cards/${card._id}`, { title: 'back' })).status).toBe(200)
+    await req('DELETE', `/api/board/${boardSlug}/cards/${card._id}`)
   })
 })
