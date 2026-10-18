@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import type { BoardCard, BoardColumn, Recurrence, RecurrenceArchetype } from '../lib/types'
+import { gateModeOf, type BoardCard, type BoardColumn, type GateMode, type Recurrence, type RecurrenceArchetype } from '../lib/types'
 import DeferMenu from './DeferMenu'
 import ContextPicker, { type CardContext } from './ContextPicker'
 import ListAttach from './ListAttach'
@@ -54,7 +54,7 @@ export default function CardModal({ card, columns, onClose, onSave, onDelete }: 
   const [intervalDays, setIntervalDays] = useState(card.recurrence?.interval_days ?? 7)
   const [contexts, setContexts] = useState<CardContext[]>(card.contexts ?? [])
   const [listId, setListId] = useState<string | null>(card.list_id ?? null)
-  const [listGate, setListGate] = useState(card.list_gate !== false)
+  const [listGate, setListGate] = useState<GateMode>(gateModeOf(card))
   const [saving, setSaving]       = useState(false)
   const [showDefer, setShowDefer] = useState(false)
   const [activeTab, setActiveTab] = useState<'details' | 'dates' | 'repeat'>('details')

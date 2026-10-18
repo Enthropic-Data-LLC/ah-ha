@@ -60,3 +60,23 @@ export async function withListProgress<T extends Record<string, unknown>>(
     return p ? { ...c, list_progress: p } : c
   })
 }
+
+export type GateMode = 'none' | 'move' | 'complete'
+
+/** What the card's list blocks. Older cards stored a boolean: true/unset = complete, false = none. */
+export function gateMode(card: Record<string, unknown>): GateMode {
+  const g = card['list_gate']
+  if (g === 'none' || g === 'move' || g === 'complete') return g
+  return g === false ? 'none' : 'complete'
+}
+
+/** The card's list progress if it is attached and still has open items, else null. */
+export async function openList(
+  fastify: FastifyInstance,
+  orgId: ObjectId,
+  card: Record<string, unknown>,
+): Promise<ListProgress | null> {
+  if (!(card['list_id'] instanceof ObjectId) || gateMode(card) === 'none') return null
+  const p = (await listProgressFor(fastify, orgId, [card['list_id']])).get(String(card['list_id']))
+  return p && !p.complete ? p : null
+}

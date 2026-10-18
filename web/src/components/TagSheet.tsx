@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { BoardCard } from '../lib/types'
+import { gateModeOf, type BoardCard, type GateMode } from '../lib/types'
 import ContextPicker, { type CardContext } from './ContextPicker'
 import ListAttach from './ListAttach'
 
@@ -11,7 +11,7 @@ export default function TagSheet({ card, onSave, onClose }: {
 }) {
   const [contexts, setContexts] = useState<CardContext[]>(card.contexts ?? [])
   const [listId, setListId] = useState<string | null>(card.list_id ?? null)
-  const [gate, setGate] = useState(card.list_gate !== false)
+  const [gate, setGate] = useState<GateMode>(gateModeOf(card))
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }

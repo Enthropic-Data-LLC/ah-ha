@@ -51,6 +51,16 @@ export interface Recurrence {
   end_count?: number | null
 }
 
+/** What an unfinished list blocks: nothing, any column change, or completing the card. */
+export type GateMode = 'none' | 'move' | 'complete'
+
+/** Older cards stored a boolean: true/unset means "complete", false means "none". */
+export function gateModeOf(card: { list_gate?: GateMode | boolean }): GateMode {
+  const g = card.list_gate
+  if (g === 'none' || g === 'move' || g === 'complete') return g
+  return g === false ? 'none' : 'complete'
+}
+
 export interface BoardCard {
   _id: string
   ref: string
@@ -79,7 +89,7 @@ export interface BoardCard {
   contexts?: Array<{ entity_id: string; time_chunks: string[] }>
   // checklist (a list space) the card needs; list_gate (default on) blocks completing it until the list is done
   list_id?: string | null
-  list_gate?: boolean
+  list_gate?: GateMode | boolean
   /** Set when the card sits in a closer column. */
   closed_as?: 'done' | 'closed' | null
   done?: boolean

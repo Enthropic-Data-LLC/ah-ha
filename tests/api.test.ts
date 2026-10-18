@@ -954,41 +954,87 @@ describe('Feedback', () => {
   })
 })
 
-// ── Card ↔ list: completeness gates completion ───────────────────────────────
+// ── Card ↔ list: three gate modes, and complete steps a card along ───────────
 
 describe('Card list gate', () => {
-  it('blocks completing a card until its list is done, and reports progress', async () => {
-    const cols = (await req<{ data: Array<{ _id: string }> }>('GET', `/api/board/${boardSlug}/columns`)).body.data
-    const card = (await req<{ data: { _id: string } }>('POST', `/api/board/${boardSlug}/cards`, { column_id: cols[0]!._id, title: `Gated ${Date.now()}` })).body.data
-    const slug = `gate-list-${Date.now()}`
+  type Col = { _id: string }
+  type Card = { _id: string; column_id: string; done?: boolean }
+  let cols: Col[] = []
+  let closedCol = ''
+
+  const cardsOf = async () => (await req<{ data: Card[] }>('GET', `/api/board/${boardSlug}/cards`)).body.data
+  const get = async (id: string) => (await cardsOf()).find(c => c._id === id)!
+  const move = (id: string, col: string) => req('PATCH', `/api/board/${boardSlug}/cards/${id}/move`, { column_id: col })
+  const complete = (id: string) => req('POST', `/api/cards/${id}/complete`, {})
+
+  async function make(mode: 'none' | 'move' | 'complete', col: string, withOpenItem = true) {
+    const card = (await req<{ data: { _id: string } }>('POST', `/api/board/${boardSlug}/cards`, { column_id: col, title: `Gate ${mode} ${Date.now()}` })).body.data
+    const slug = `gate-${mode}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
     const list = (await req<{ data: { _id: string } }>('POST', '/api/spaces', { type: 'list', name: 'Gate list', slug })).body.data
-    const item = (await req<{ data: { _id: string } }>('POST', `/api/list/${slug}/items`, { title: 'Tape' })).body.data
+    const item = withOpenItem ? (await req<{ data: { _id: string } }>('POST', `/api/list/${slug}/items`, { title: 'Tape' })).body.data : null
+    expect((await req('PATCH', `/api/board/${boardSlug}/cards/${card._id}`, { list_id: list._id, list_gate: mode })).status).toBe(200)
+    return { card, slug, item }
+  }
 
-    expect((await req('PATCH', `/api/board/${boardSlug}/cards/${card._id}`, { list_id: list._id })).status).toBe(200)
-    expect((await req('PATCH', `/api/board/${boardSlug}/cards/${card._id}`, { list_id: '000000000000000000000000' })).status).toBe(404)
-
-    type Cards = { data: Array<{ _id: string; list_progress?: { done: number; total: number; complete: boolean } }> }
-    const find = async () => (await req<Cards>('GET', `/api/board/${boardSlug}/cards`)).body.data.find(c => c._id === card._id)!
-    expect((await find()).list_progress).toMatchObject({ done: 0, total: 1, complete: false })
-
-    expect((await req('POST', `/api/cards/${card._id}/complete`, {})).status).toBe(409)
-
-    await req('PATCH', `/api/list/${slug}/items/${item._id}/check`, { done: true })
-    expect((await find()).list_progress).toMatchObject({ done: 1, total: 1, complete: true })
-    expect((await req('POST', `/api/cards/${card._id}/complete`, {})).status).toBe(200)
-
-    await req('DELETE', `/api/board/${boardSlug}/cards/${card._id}`)
+  beforeAll(async () => {
+    cols = (await req<{ data: Col[] }>('GET', `/api/board/${boardSlug}/columns`)).body.data
+    await req('PATCH', `/api/board/${boardSlug}/columns/${cols[2]!._id}`, { closes: 'done' })
+    closedCol = (await req<{ data: Col }>('POST', `/api/board/${boardSlug}/columns`, { title: 'Dropped' })).body.data._id
+    await req('PATCH', `/api/board/${boardSlug}/columns/${closedCol}`, { closes: 'closed' })
   })
 
-  it('gate off lets an unfinished list through', async () => {
-    const cols = (await req<{ data: Array<{ _id: string }> }>('GET', `/api/board/${boardSlug}/columns`)).body.data
-    const card = (await req<{ data: { _id: string } }>('POST', `/api/board/${boardSlug}/cards`, { column_id: cols[0]!._id, title: `Ungated ${Date.now()}` })).body.data
-    const slug = `ungate-list-${Date.now()}`
-    const list = (await req<{ data: { _id: string } }>('POST', '/api/spaces', { type: 'list', name: 'Ungate list', slug })).body.data
-    await req('POST', `/api/list/${slug}/items`, { title: 'Optional thing' })
-    await req('PATCH', `/api/board/${boardSlug}/cards/${card._id}`, { list_id: list._id, list_gate: false })
-    expect((await req('POST', `/api/cards/${card._id}/complete`, {})).status).toBe(200)
-    await req('DELETE', `/api/board/${boardSlug}/cards/${card._id}`)
+  it('reports list progress on the card', async () => {
+    const g = await make('complete', cols[1]!._id)
+    type P = { data: Array<{ _id: string; list_progress?: { done: number; total: number; complete: boolean } }> }
+    const find = async () => (await req<P>('GET', `/api/board/${boardSlug}/cards`)).body.data.find(c => c._id === g.card._id)!
+    expect((await find()).list_progress).toMatchObject({ done: 0, total: 1, complete: false })
+    await req('PATCH', `/api/list/${g.slug}/items/${g.item!._id}/check`, { done: true })
+    expect((await find()).list_progress).toMatchObject({ done: 1, total: 1, complete: true })
+    expect((await req('PATCH', `/api/board/${boardSlug}/cards/${g.card._id}`, { list_id: '000000000000000000000000' })).status).toBe(404)
+  })
+
+  it("'complete': can move around, can't be completed or put in Done", async () => {
+    const g = await make('complete', cols[1]!._id)
+    expect((await move(g.card._id, cols[0]!._id)).status).toBe(200)
+    expect((await move(g.card._id, cols[1]!._id)).status).toBe(200)
+    expect((await move(g.card._id, cols[2]!._id)).status).toBe(409)
+    expect((await complete(g.card._id)).status).toBe(409)   // would land in Done
+    await req('PATCH', `/api/list/${g.slug}/items/${g.item!._id}/check`, { done: true })
+    expect((await complete(g.card._id)).status).toBe(200)
+    expect((await get(g.card._id)).column_id).toBe(cols[2]!._id)
+  })
+
+  it("'move': can't change columns or complete; a Closed column still takes it", async () => {
+    const g = await make('move', cols[1]!._id)
+    expect((await move(g.card._id, cols[0]!._id)).status).toBe(409)
+    expect((await complete(g.card._id)).status).toBe(409)
+    expect((await move(g.card._id, closedCol)).status).toBe(200)
+    expect((await get(g.card._id)).done).toBe(true)
+  })
+
+  it("'none': the list has no effect", async () => {
+    const g = await make('none', cols[1]!._id)
+    expect((await move(g.card._id, cols[2]!._id)).status).toBe(200)
+    const h = await make('none', cols[1]!._id)
+    expect((await complete(h.card._id)).status).toBe(200)
+  })
+
+  it('legacy boolean list_gate still works (false = none)', async () => {
+    const g = await make('complete', cols[1]!._id)
+    await req('PATCH', `/api/board/${boardSlug}/cards/${g.card._id}`, { list_gate: false })
+    expect((await move(g.card._id, cols[2]!._id)).status).toBe(200)
+  })
+
+  it('complete steps a plain card to the next column and only finishes at the end', async () => {
+    const card = (await req<{ data: { _id: string } }>('POST', `/api/board/${boardSlug}/cards`, { column_id: cols[0]!._id, title: `Advance ${Date.now()}` })).body.data
+    expect((await complete(card._id)).status).toBe(200)
+    let c = await get(card._id)
+    expect(c.column_id).toBe(cols[1]!._id)
+    expect(c.done).not.toBe(true)
+    expect((await complete(card._id)).status).toBe(200)
+    c = await get(card._id)
+    expect(c.column_id).toBe(cols[2]!._id)
+    expect(c.done).toBe(true)
   })
 })
 

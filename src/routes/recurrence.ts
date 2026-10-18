@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { ObjectId } from 'mongodb'
-import { listProgressFor } from '../lib/list-progress.js'
+import { gateMode, openList } from '../lib/list-progress.js'
+import { between } from '../lib/lexorank.js'
 
 const TIME_ANCHOR_HOURS: Record<string, number> = {
   morning: 7,
@@ -71,16 +72,15 @@ const recurrenceRoutes: FastifyPluginAsync = async (fastify) => {
       })
       if (!card) return reply.status(404).send({ error: 'Card not found' })
 
-      // A card whose checklist is not finished cannot be completed (list_gate defaults on).
-      if (card['list_id'] instanceof ObjectId && card['list_gate'] !== false) {
-        const p = (await listProgressFor(fastify, req.user!.orgId, [card['list_id']])).get(String(card['list_id']))
-        if (p && !p.complete) {
-          return reply.status(409).send({
-            error: `Finish the list first — ${p.total - p.done} of ${p.total} still open on "${p.name}"`,
-            list_progress: p,
-          })
-        }
-      }
+      // An unfinished list stops a card being completed in either of its gated modes
+      // ("move" is the stricter one: it also stops any column change, see the move route).
+      // A plain card is only held back where completing would close it — handled below.
+      const mode = gateMode(card)
+      const open = await openList(fastify, req.user!.orgId, card)
+      const refuse = () => reply.status(409).send({
+        error: `Finish the list first — ${open!.total - open!.done} of ${open!.total} still open on "${open!.name}"`,
+        list_progress: open,
+      })
 
       const rec = card['recurrence'] as RecDoc | null | undefined
       const now = new Date()
@@ -94,9 +94,34 @@ const recurrenceRoutes: FastifyPluginAsync = async (fastify) => {
       }
 
       if (!rec) {
-        // Non-recurring: mark done
-        updates['done'] = true
+        // Non-recurring: completing steps the card to the next column of its board. It only
+        // finishes (done) when it lands in a closer column or there is nothing further on.
+        const cols = await fastify.mongo.collection('board_columns')
+          .find({ space_id: card['space_id'], org_id: req.user!.orgId, deleted_at: { $exists: false } })
+          .sort({ position: 1 }).toArray()
+        const idx = cols.findIndex(c => String(c._id) === String(card['column_id']))
+        const here = cols[idx]
+        const next = idx >= 0 && !here?.['closes'] ? cols[idx + 1] : undefined
+        const closes = next?.['closes'] as 'done' | 'closed' | null | undefined
+        const finishing = !next || !!closes
+
+        if (open && (mode === 'move' ? closes !== 'closed' : finishing && closes !== 'closed')) return refuse()
+
+        if (next) {
+          const last = await fastify.mongo.collection('board_cards')
+            .findOne({ column_id: next._id, deleted_at: { $exists: false } }, { sort: { position: -1 } })
+          updates['column_id'] = next._id
+          updates['position'] = between(last ? (last['position'] as number) : null, null)
+          updates['done'] = !!closes
+          updates['closed_as'] = closes ?? null
+          if (closes) updates['done_at'] = now
+          // completed_at stays: ticking it off counts for the wrap-up and streak even when it only steps along
+        } else {
+          updates['done'] = true
+          updates['done_at'] = now
+        }
       } else {
+        if (open) return refuse()
         const completions = (rec.completions ?? 0) + 1
 
         switch (rec.archetype) {

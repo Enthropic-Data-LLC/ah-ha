@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Draggable } from '@hello-pangea/dnd'
-import type { BoardCard } from '../lib/types'
+import { gateModeOf, type BoardCard } from '../lib/types'
 import DeferMenu from './DeferMenu'
 import { useEntities } from './ContextPicker'
 
@@ -89,7 +89,8 @@ export default function BoardCardItem({ card, index, onClick, onDefer, onPickDat
     return e ? { id: e._id, label: `${e.icon} ${e.name}`, times: c.time_chunks.length } : null
   }).filter((x): x is { id: string; label: string; times: number } => !!x)
   const lp = card.list_progress
-  const gated = !!lp && card.list_gate !== false && !lp.complete
+  const gateMode = gateModeOf(card)
+  const gated = !!lp && gateMode !== 'none' && !lp.complete
   const streak = (card.recurrence?.archetype === 'habit' && (card.recurrence.streak_count ?? 0) > 2)
     ? card.recurrence.streak_count
     : null
@@ -182,9 +183,9 @@ export default function BoardCardItem({ card, index, onClick, onDefer, onPickDat
                   className={`flex items-center gap-1 text-xs px-1.5 py-0.5 rounded border ${
                     lp.complete ? 'border-emerald-800 text-emerald-400 bg-emerald-950/30' : 'border-slate-700 text-slate-400'
                   }`}
-                  title={lp.name}
+                  title={`${lp.name}${gated ? (gateMode === 'move' ? ' — card is locked in place' : ' — card can\'t be completed yet') : ''}`}
                 >
-                  {lp.complete ? '✓' : '☰'} {lp.done}/{lp.total}
+                  {lp.complete ? '✓' : gated ? '🔒' : '☰'} {lp.done}/{lp.total}
                 </span>
               )}
             </div>

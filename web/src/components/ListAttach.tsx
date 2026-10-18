@@ -1,11 +1,17 @@
 import { useState } from 'react'
 import useSWR from 'swr'
 import { api, fetcher } from '../lib/api'
-import type { Space } from '../lib/types'
+import type { GateMode, Space } from '../lib/types'
 
 interface Item { _id: string; title: string; done: boolean }
 
-export interface ListChoice { list_id: string | null; list_gate: boolean }
+export interface ListChoice { list_id: string | null; list_gate: GateMode }
+
+const GATE_OPTS: Array<{ value: GateMode; label: string; hint: string }> = [
+  { value: 'none',     label: 'No effect',      hint: 'The list is just a reminder.' },
+  { value: 'move',     label: "Can't move",     hint: "The card can't change columns (or be completed) until the list is complete." },
+  { value: 'complete', label: "Can't complete", hint: "The card can move around, but can't be completed or put in a Done column until the list is complete." },
+]
 
 /**
  * Tie a card to a list: a supply list that must be gathered, or a checklist of subtasks.
@@ -15,7 +21,7 @@ export interface ListChoice { list_id: string | null; list_gate: boolean }
 export default function ListAttach({ cardTitle, listId, gate, onChange }: {
   cardTitle: string
   listId: string | null
-  gate: boolean
+  gate: GateMode
   onChange: (next: ListChoice) => void | Promise<void>
 }) {
   const { data: spaces, mutate: mutateSpaces } = useSWR<{ data: Space[] }>('/api/spaces?type=list', fetcher)
@@ -40,7 +46,7 @@ export default function ListAttach({ cardTitle, listId, gate, onChange }: {
     const slug = `${name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 50) || 'checklist'}-${Math.random().toString(36).slice(2, 6)}`
     const res = await api.post<{ data: Space }>('/api/spaces', { type: 'list', name, slug })
     await mutateSpaces()
-    await onChange({ list_id: res.data._id, list_gate: true })
+    await onChange({ list_id: res.data._id, list_gate: 'complete' })
   })
 
   const addItem = () => run(async () => {
@@ -111,10 +117,24 @@ export default function ListAttach({ cardTitle, listId, gate, onChange }: {
             <button type="submit" disabled={busy || !newItem.trim()} className="px-3 py-1.5 text-sm bg-slate-700 hover:bg-slate-600 rounded-lg disabled:opacity-40">Add</button>
           </form>
 
-          <label className="flex items-center gap-2 text-xs text-slate-400 cursor-pointer pt-1">
-            <input type="checkbox" checked={gate} onChange={e => onChange({ list_id: listId, list_gate: e.target.checked })} className="accent-indigo-500" />
-            Can't finish this task until the list is complete
-          </label>
+          <div className="space-y-1.5 pt-1">
+            <span className="text-xs text-slate-500 block">While the list is unfinished</span>
+            <div className="grid grid-cols-3 gap-1.5" role="radiogroup" aria-label="While the list is unfinished">
+              {GATE_OPTS.map(o => (
+                <button
+                  key={o.value}
+                  type="button"
+                  role="radio"
+                  aria-checked={gate === o.value}
+                  onClick={() => onChange({ list_id: listId, list_gate: o.value })}
+                  className={`py-1.5 rounded-lg text-xs border transition ${
+                    gate === o.value ? 'border-indigo-500 bg-indigo-500/15 text-indigo-300' : 'border-slate-700 text-slate-400 hover:border-slate-500'
+                  }`}
+                >{o.label}</button>
+              ))}
+            </div>
+            <p className="text-xs text-slate-600">{GATE_OPTS.find(o => o.value === gate)?.hint} A Closed column always takes it.</p>
+          </div>
         </div>
       )}
       {error && <p className="text-xs text-red-400">{error}</p>}

@@ -4,7 +4,7 @@ import { ObjectId } from 'mongodb'
 import { between, initial } from '../lib/lexorank.js'
 import { annotate, currentPlace, orgPlaces, resolveAt, taggedTo } from '../lib/places.js'
 import { canSee } from '../lib/scopes.js'
-import { listProgressFor, withListProgress } from '../lib/list-progress.js'
+import { gateMode, openList, withListProgress } from '../lib/list-progress.js'
 
 function publish(fastify: { redis: import('ioredis').Redis }, spaceRef: string, op: Record<string, unknown>) {
   fastify.redis.publish(`ws:${spaceRef}`, JSON.stringify(op)).catch(() => {})
@@ -223,7 +223,8 @@ const boardRoutes: FastifyPluginAsync = async (fastify) => {
         })).optional(),
         // A checklist (a list space) the card needs; `list_gate` makes finishing the card wait on it.
         list_id: z.string().nullable().optional(),
-        list_gate: z.boolean().optional(),
+        // none: no effect · move: can't change columns · complete: can't be completed. (A boolean is the old form.)
+        list_gate: z.union([z.enum(['none', 'move', 'complete']), z.boolean()]).optional(),
       }).parse(req.body)
 
       const update: Record<string, unknown> = { updated_at: new Date() }
@@ -249,7 +250,7 @@ const boardRoutes: FastifyPluginAsync = async (fastify) => {
           update['list_id'] = list._id
         }
       }
-      if (body.list_gate !== undefined) update['list_gate'] = body.list_gate
+      if (body.list_gate !== undefined) update['list_gate'] = body.list_gate === true ? 'complete' : body.list_gate === false ? 'none' : body.list_gate
 
       // The person's own snooze into the future (not a connected app's) counts toward Follow-through.
       const snooze = !req.apiKeyScopes && update['defer_until'] instanceof Date && (update['defer_until'] as Date) > new Date()
@@ -287,12 +288,13 @@ const boardRoutes: FastifyPluginAsync = async (fastify) => {
       })
       if (!destCol) return reply.status(404).send({ error: 'Column not found' })
 
-      // A "done" column is an antagonist of the list: it won't take a card whose list is unfinished.
-      // A "closed" column abandons the card, so the list doesn't matter.
+      // The card's list can hold it back: "move" stops any column change, "complete" stops
+      // it landing in a Done column. A "closed" column abandons the card, so the list doesn't matter.
       const closes = destCol['closes'] as 'done' | 'closed' | null | undefined
-      if (closes === 'done' && card['list_id'] instanceof ObjectId && card['list_gate'] !== false) {
-        const p = (await listProgressFor(fastify, orgId, [card['list_id']])).get(String(card['list_id']))
-        if (p && !p.complete) {
+      const mode = gateMode(card)
+      if (closes !== 'closed' && (mode === 'move' || (mode === 'complete' && closes === 'done'))) {
+        const p = await openList(fastify, orgId, card)
+        if (p) {
           return reply.status(409).send({
             error: `Finish the list first — ${p.total - p.done} of ${p.total} still open on "${p.name}". Move it to a Closed column to drop it instead.`,
             list_progress: p,
