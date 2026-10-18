@@ -44,6 +44,8 @@ Generate an API key from your Ah-Ha account settings at https://ah-ha.app.
 - **Auth:** Magic-link email + JWT
 - **Webhooks:** HMAC-signed inbound webhooks per Space
 
+See [API.md](API.md) for the API guide.
+
 ## Self-Hosting
 
 ```bash
