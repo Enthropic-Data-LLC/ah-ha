@@ -1,6 +1,7 @@
 import useSWR from 'swr'
 import { useState } from 'react'
 import { fetcher, api, ApiError } from '../lib/api'
+import { isToday, otherFace } from '../lib/surface'
 
 interface NfcTag {
   tag_id: string
@@ -43,7 +44,7 @@ export default function TapPage({ tagId }: { tagId: string }) {
   }
   // "Open" tags have no action to run — on the web, Now (with its Going-to checklist) is the screen.
   if (tag?.action.type === 'open') {
-    window.location.replace('/now')
+    window.location.replace(isToday ? '/now' : otherFace('/now'))
     return null
   }
   if (!tag) {

@@ -29,6 +29,7 @@ import TagsPage from './pages/TagsPage'
 import TagsPrintPage from './pages/TagsPrintPage'
 import HelpPage from './pages/HelpPage'
 import SkipLink from './components/SkipLink'
+import { isToday, homePath, otherFace, TODAY_PATHS } from './lib/surface'
 
 // SVG icons for bottom nav
 const Icons = {
@@ -87,6 +88,8 @@ function Shell({ children }: { children: React.ReactNode }) {
 
   const spacesHref   = user ? `/${user.username}/spaces`   : '/auth'
   const entitiesHref = user ? `/${user.username}/entities` : '/auth'
+  // Ah! Today (now.*) carries Today plus the account pages; the data host (ah-ha.app) has no Today page.
+  const spacesLink = isToday ? otherFace(spacesHref) : spacesHref
 
   return (
     <div className="flex flex-col min-h-screen">
@@ -94,24 +97,24 @@ function Shell({ children }: { children: React.ReactNode }) {
       {/* Top bar */}
       <header className="border-b border-slate-800 px-4 h-12 flex items-center justify-between flex-shrink-0 z-30 relative">
         <div className="flex items-center gap-4">
-          <a href={user ? '/now' : '/'} className="font-bold text-sm tracking-tight">aH-Ha</a>
+          <a href={user ? homePath : '/'} className="font-bold text-sm tracking-tight">{isToday ? 'Ah! Today' : 'aH-Ha'}</a>
           {user && (
             <>
               <span className="text-xs font-mono text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded-full hidden sm:inline">@{user.username}</span>
-              {navLink('/now', 'Ah! Today')}
-              {navLink(spacesHref, 'Spaces')}
+              {isToday && navLink('/now', 'Ah! Today')}
+              {navLink(spacesLink, isToday ? 'Spaces ↗' : 'Spaces')}
               {navLink(entitiesHref, 'Entities')}
-              {navLink('/search', 'Search')}
-              {navLink('/audit', 'Audit')}
+              {!isToday && navLink('/search', 'Search')}
+              {!isToday && navLink('/audit', 'Audit')}
             </>
           )}
         </div>
         <div className="flex items-center gap-3">
           {user && (
             <>
-              {navLink('/trackers', 'Trackers')}
-              {navLink('/tags', 'Tags')}
-              {navLink('/keys', 'API Keys')}
+              {!isToday && navLink('/trackers', 'Trackers')}
+              {!isToday && navLink('/tags', 'Tags')}
+              {!isToday && navLink('/keys', 'API Keys')}
               {navLink('/calendar', 'Calendar')}
               {navLink('/settings', 'Settings')}
               {navLink('/help', 'Help')}
@@ -152,22 +155,23 @@ function Shell({ children }: { children: React.ReactNode }) {
             {/* Nav items */}
             <nav className="flex-1 px-3 py-4 space-y-0.5">
               <p className="text-[10px] font-mono uppercase tracking-wider text-slate-600 px-3 pb-1">Main</p>
-              {drawerLink('/now', '⏱  Ah! Today')}
-              {drawerLink(spacesHref, '⊞  Spaces')}
+              {isToday && drawerLink('/now', '⏱  Ah! Today')}
+              {drawerLink(spacesLink, isToday ? '⊞  Spaces ↗' : '⊞  Spaces')}
               {drawerLink(entitiesHref, '📍  Entities')}
-              {drawerLink('/search', '⌕  Search')}
-              {drawerLink('/tags', '🏷️  Tags & QR codes')}
-              {drawerLink('/trackers', '📡  Trackers')}
+              {!isToday && drawerLink('/search', '⌕  Search')}
+              {!isToday && drawerLink('/tags', '🏷️  Tags & QR codes')}
+              {!isToday && drawerLink('/trackers', '📡  Trackers')}
               <p className="text-[10px] font-mono uppercase tracking-wider text-slate-600 px-3 pb-1 pt-3">Settings</p>
               {drawerLink('/calendar', '📅  Calendar')}
               {drawerLink('/settings', '🔔  Notifications')}
-              {drawerLink('/keys', '🔑  API Keys')}
-              {drawerLink('/audit', '📋  Audit Log')}
-              {drawerLink('/mqtt', '📡  MQTT')}
-              {drawerLink('/webhooks', '🔗  Webhooks')}
+              {!isToday && drawerLink('/keys', '🔑  API Keys')}
+              {!isToday && drawerLink('/audit', '📋  Audit Log')}
+              {!isToday && drawerLink('/mqtt', '📡  MQTT')}
+              {!isToday && drawerLink('/webhooks', '🔗  Webhooks')}
               <p className="text-[10px] font-mono uppercase tracking-wider text-slate-600 px-3 pb-1 pt-3">More</p>
               {drawerLink('/help', '❓  Help')}
               {drawerLink('/feedback', '💬  Send feedback')}
+              {!isToday && drawerLink(otherFace('/now'), '⏱  Open Ah! Today ↗')}
               {drawerLink('/', '🏠  Home page')}
             </nav>
           </div>
@@ -180,9 +184,9 @@ function Shell({ children }: { children: React.ReactNode }) {
       {/* Mobile bottom tab bar */}
       {user && (
         <nav className="sm:hidden fixed bottom-0 left-0 right-0 h-16 bg-slate-950 border-t border-slate-800 flex items-center justify-around px-2 z-40">
-          {tabLink('/now', Icons.now, 'Today')}
-          {tabLink(spacesHref, Icons.spaces, 'Spaces')}
-          {tabLink('/search', Icons.search, 'Search')}
+          {isToday && tabLink('/now', Icons.now, 'Today')}
+          {tabLink(spacesLink, Icons.spaces, 'Spaces')}
+          {!isToday && tabLink('/search', Icons.search, 'Search')}
           {tabLink('/settings', Icons.settings, 'Settings')}
         </nav>
       )}
@@ -193,6 +197,17 @@ function Shell({ children }: { children: React.ReactNode }) {
 export default function App() {
   const path = window.location.pathname
   const { user, isLoading, isLoggedOut } = useMe()
+
+  // Two faces of one app: Ah! Today (now.*) carries Today and the account pages; the data host has no
+  // Today page, so /now sends people (and installed apps / old links) across.
+  if (isToday && !TODAY_PATHS.some(re => re.test(path))) {
+    window.location.replace(otherFace(path + window.location.search))
+    return null
+  }
+  if (!isToday && path === '/now') {
+    window.location.replace(otherFace('/now' + window.location.search))
+    return null
+  }
 
   // Public routes — no auth needed
   // Public share link
@@ -213,10 +228,14 @@ export default function App() {
     return <VerifyPage />
   }
   // Home: signed in or out (the installed web app starts at /now, see vite.config.ts).
-  if (path === '/') return <LandingPage signedIn={!!user?.username} />
+  if (path === '/') {
+    if (isToday && isLoading) return <div className="min-h-screen" />
+    if (isToday && user?.username) return <Shell><NowPage /></Shell>
+    return <LandingPage signedIn={!!user?.username} />
+  }
   if (path === '/auth') {
     if (!isLoading && user?.username) {
-      window.location.replace('/now')
+      window.location.replace(homePath)
       return null
     }
     return <AuthPage />

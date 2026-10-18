@@ -1,4 +1,4 @@
-import type { FastifyPluginAsync } from 'fastify'
+import type { FastifyPluginAsync, FastifyReply } from 'fastify'
 import { z } from 'zod'
 import { nanoid } from 'nanoid'
 import { ObjectId } from 'mongodb'
@@ -7,6 +7,7 @@ import { sendMagicLink } from '../lib/email.js'
 import { signJWT } from '../lib/jwt.js'
 import { seedStarterContent } from '../lib/seed-starter.js'
 import { issueChallenge, verifyPow } from '../lib/pow.js'
+import { sessionCookieOptions, webBaseFor } from '../lib/hosts.js'
 
 const magicLinkBody = z.object({
   email: z.string().email().toLowerCase(),
@@ -26,6 +27,12 @@ function devLinkAllowed(addr: string | undefined): boolean {
   if (process.env['NODE_ENV'] === 'production') return false
   const a = (addr ?? '').replace(/^::ffff:/, '')
   return a === '127.0.0.1' || a === '::1' || a.startsWith('192.168.10.')
+}
+
+/** Set the session. With COOKIE_DOMAIN the cookie covers both hosts, so drop any older host-only copy that would shadow it. */
+function setSession(reply: FastifyReply, jwt: string) {
+  if (process.env['COOKIE_DOMAIN']) reply.clearCookie('aha_session', { path: '/' })
+  reply.setCookie('aha_session', jwt, sessionCookieOptions())
 }
 
 const authRoutes: FastifyPluginAsync = async (fastify) => {
@@ -50,7 +57,7 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
     if (!token) return
 
     // Fire email async — never block the response on email delivery
-    sendMagicLink(email, token).catch(err =>
+    sendMagicLink(email, token, webBaseFor(req.headers.origin)).catch(err =>
       fastify.log.error({ err }, 'sendMagicLink failed')
     )
 
@@ -93,13 +100,7 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
       username: user!['username'] as string ?? '',
     })
 
-    reply.setCookie('aha_session', jwt, {
-      httpOnly: true,
-      secure: (process.env['BASE_URL'] ?? '').startsWith('https') || process.env['NODE_ENV'] === 'production',
-      sameSite: 'lax',
-      path: '/',
-      maxAge: 30 * 24 * 60 * 60,
-    })
+    setSession(reply, jwt)
 
     return {
       ok: true,
@@ -153,13 +154,7 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
       username: body.username,
     })
 
-    reply.setCookie('aha_session', jwt, {
-      httpOnly: true,
-      secure: (process.env['BASE_URL'] ?? '').startsWith('https') || process.env['NODE_ENV'] === 'production',
-      sameSite: 'lax',
-      path: '/',
-      maxAge: 30 * 24 * 60 * 60,
-    })
+    setSession(reply, jwt)
 
     return { ok: true, username: body.username }
   })
@@ -183,6 +178,8 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
   // POST /auth/logout
   fastify.post('/auth/logout', async (_req, reply) => {
     reply.clearCookie('aha_session', { path: '/' })
+    const domain = process.env['COOKIE_DOMAIN']
+    if (domain) reply.clearCookie('aha_session', { path: '/', domain })
     return { ok: true }
   })
 

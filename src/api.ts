@@ -2,6 +2,7 @@ import 'dotenv/config'
 import { fileURLToPath } from 'url'
 import { join, dirname } from 'path'
 import { STATUS_CODES } from 'node:http'
+import { readFile } from 'node:fs/promises'
 import { ZodError } from 'zod'
 import Fastify, { type FastifyError } from 'fastify'
 import staticFiles from '@fastify/static'
@@ -45,6 +46,7 @@ import { startTrackers } from './trackers/engine.js'
 import linkRoutes from './routes/link.js'
 import { startEngine, type Engine } from './link/engine.js'
 import { setupTrailSchema, closePool } from './lib/timescale.js'
+import { allowedOrigins } from './lib/hosts.js'
 import { startModules } from './modules/index.js'
 
 const isProd = process.env['NODE_ENV'] === 'production'
@@ -65,7 +67,7 @@ const fastify = Fastify({
 
 await fastify.register(cookie)
 await fastify.register(cors, {
-  origin: isProd ? ['https://ah-ha.app'] : true,
+  origin: isProd ? allowedOrigins() : true,
   credentials: true,
 })
 await fastify.register(sensible)
@@ -246,6 +248,13 @@ if (process.env['NODE_ENV'] !== 'production' && process.env['ALLOW_DEV_LINK'] ==
 }
 
 await fastify.register(staticFiles, { root: webDist })
+// The installed app differs by face: now.* installs as Ah! Today and opens on it, the data host opens on Spaces.
+fastify.get('/manifest.webmanifest', async (req, reply) => {
+  const m = JSON.parse(await readFile(join(webDist, 'manifest.webmanifest'), 'utf8')) as Record<string, unknown>
+  if (req.hostname.startsWith('now.')) Object.assign(m, { name: 'Ah! Today', short_name: 'Ah! Today', start_url: '/now' })
+  else Object.assign(m, { start_url: '/spaces' })
+  return reply.type('application/manifest+json').send(m)
+})
 // Page routes get the SPA shell; anything that looks like a file or an API call and
 // matched nothing is a real 404 (it used to be a 200 HTML page, which hid broken icons).
 const FILE_LIKE = /\.(png|jpe?g|gif|webp|avif|svg|ico|xml|txt|json|js|mjs|css|map|webmanifest|woff2?|ttf|apk|zip|gz|pdf|php|asp|aspx|env|ya?ml|bak|sql)$/i

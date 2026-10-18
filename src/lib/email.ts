@@ -128,8 +128,7 @@ export async function sendMail(to: string, subject: string, body: MailBody) {
   }
 }
 
-export async function sendMagicLink(to: string, token: string) {
-  const base = process.env['BASE_URL'] ?? 'https://ah-ha.app'
+export async function sendMagicLink(to: string, token: string, base = process.env['BASE_URL'] ?? 'https://ah-ha.app') {
   const url  = `${base}/auth/verify?token=${token}`
   await sendMail(to, 'Your aH-Ha sign-in link', { html: magicLinkHtml(url) })
 }

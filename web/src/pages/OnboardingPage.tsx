@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { api, ApiError } from '../lib/api'
 import { mutate } from 'swr'
+import { homePath } from '../lib/surface'
 
 export default function OnboardingPage() {
   const [username, setUsername] = useState('')
@@ -14,7 +15,7 @@ export default function OnboardingPage() {
     try {
       await api.post('/auth/claim-username', { username })
       await mutate('/auth/me')
-      window.location.href = '/spaces'
+      window.location.href = homePath
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Something went wrong')
     } finally {

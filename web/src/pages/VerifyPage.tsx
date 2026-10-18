@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { api, ApiError } from '../lib/api'
 import { takeReturn } from './ConnectPage'
+import { homePath } from '../lib/surface'
 
 export default function VerifyPage() {
   const [status, setStatus] = useState<'idle' | 'loading' | 'error'>('idle')
@@ -27,7 +28,7 @@ export default function VerifyPage() {
     try {
       const res = await api.post<{ ok: boolean; username: string | null }>('/api/auth/verify', { token })
       // Back to an app's connect screen if that's what sent them to sign in.
-      window.location.replace(res.username ? (takeReturn() ?? `/${res.username}`) : '/onboarding')
+      window.location.replace(res.username ? (takeReturn() ?? homePath) : '/onboarding')
     } catch (err) {
       setStatus('error')
       setMessage(err instanceof ApiError ? err.message : 'Sign-in failed. The link may have expired.')
