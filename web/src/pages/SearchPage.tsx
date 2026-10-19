@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { api } from '../lib/api'
 
 interface SearchResult {
@@ -25,7 +25,9 @@ function refToUrl(ref: string): string {
 }
 
 export default function SearchPage() {
-  const [query, setQuery] = useState('')
+  // Tags elsewhere link here as /search?q=%23tag
+  const initialQ = new URLSearchParams(window.location.search).get('q') ?? ''
+  const [query, setQuery] = useState(initialQ)
   const [results, setResults] = useState<SearchResult[]>([])
   const [loading, setLoading] = useState(false)
   const [searched, setSearched] = useState(false)
@@ -44,6 +46,8 @@ export default function SearchPage() {
       setLoading(false)
     }
   }
+
+  useEffect(() => { if (initialQ) void search(initialQ) }, [])  // eslint-disable-line react-hooks/exhaustive-deps
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
     const q = e.target.value

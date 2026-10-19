@@ -310,9 +310,10 @@ export default function TrailPage({ slug }: { slug: string }) {
                 )}
 
                 {entry.tags.map(tag => (
-                  <span key={tag} className="px-1.5 py-0.5 bg-slate-800 rounded text-[10px] text-slate-400">
+                  <a key={tag} href={`/search?q=${encodeURIComponent('#' + tag)}`} title={`Search #${tag}`}
+                    className="px-1.5 py-0.5 bg-slate-800 hover:bg-slate-700 hover:text-indigo-300 rounded text-[10px] text-slate-400 transition">
                     #{tag}
-                  </span>
+                  </a>
                 ))}
 
                 <span
