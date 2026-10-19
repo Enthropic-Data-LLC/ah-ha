@@ -219,7 +219,7 @@ The Today layer reads your data and works out what deserves attention. It is ser
 
 ## Search, links, sharing
 
-- `GET /api/search?q=…` searches notes, cards, list items and trail across your spaces. Options: `type`, `space`, `limit` (1–50, default 20).
+- `GET /api/search?q=…` searches notes, cards, list items and trail across your spaces. Options: `type` (`board`, `note`, `list` or `trail`), `space`, `limit` (1–50, default 20). Trail entries match on their text or their tags, so `q=%23filter` (or `q=filter`) finds entries tagged `filter` as well as ones that mention it. Encode `#` as `%23` in a URL. Results are `{ type, ref, title, space_ref, updated_at | ts }`.
 - **Links** connect any two things: `POST /api/links { from, to, type }`, `GET /api/links`, `GET /api/links/traverse`, `DELETE /api/links/:id`.
 - **Sharing:** `POST /api/spaces/:ref/share` makes a public read-only link (`/s/<token>`). `GET /api/share/:token` reads it without signing in; `DELETE /api/share/:token` withdraws it.
 
