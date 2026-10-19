@@ -6,6 +6,10 @@
 const NODERED_URL = process.env['NODERED_URL'] ?? 'http://otto.local:1880'
 
 export async function postToNodeRed(type: string, username: string, data: unknown, log: (msg: string) => void = console.log): Promise<boolean> {
+  // The Node-RED flow sends to a default chat when none is given, so a user with no Telegram
+  // linked would have their message land in someone else's. No chat id, no delivery.
+  const chatId = (data as { telegram_chat_id?: unknown } | null)?.telegram_chat_id
+  if (!chatId) { log(`[node-red] skipped ${type} for ${username}: no Telegram chat linked`); return false }
   try {
     const res = await fetch(`${NODERED_URL}/webhook/ah-ha-notify`, {
       method: 'POST',
