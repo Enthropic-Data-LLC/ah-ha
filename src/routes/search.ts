@@ -17,6 +17,8 @@ const searchRoutes: FastifyPluginAsync = async (fastify) => {
       const orgId = req.user!.orgId
       const results: unknown[] = []
       const q = params.q
+      // "#filter" also finds entries tagged filter, not just ones with the word in the text
+      const tag = q.replace(/^#/, '')
 
       // Use $text search if text indexes exist, fall back to regex
       async function mongoSearch(
@@ -84,12 +86,12 @@ const searchRoutes: FastifyPluginAsync = async (fastify) => {
           ? getPool().query(
               `SELECT id, space_ref, ts, text, tone, source
                FROM trail_entries
-               WHERE org_id=$1 AND text ILIKE $2
-               ${params.space ? 'AND space_ref LIKE $3' : ''}
-               ORDER BY ts DESC LIMIT $${params.space ? 4 : 3}`,
+               WHERE org_id=$1 AND (text ILIKE $2 OR lower($3) = ANY(SELECT lower(t) FROM unnest(tags) t))
+               ${params.space ? 'AND space_ref LIKE $4' : ''}
+               ORDER BY ts DESC LIMIT $${params.space ? 5 : 4}`,
               params.space
-                ? [orgId.toString(), `%${q}%`, `%${params.space}%`, params.limit]
-                : [orgId.toString(), `%${q}%`, params.limit]
+                ? [orgId.toString(), `%${q}%`, tag, `%${params.space}%`, params.limit]
+                : [orgId.toString(), `%${q}%`, tag, params.limit]
             ).then(r => r.rows).catch(() => [])
           : Promise.resolve([]),
       ])
