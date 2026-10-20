@@ -8,6 +8,7 @@ import { signJWT } from '../lib/jwt.js'
 import { seedStarterContent } from '../lib/seed-starter.js'
 import { issueChallenge, verifyPow } from '../lib/pow.js'
 import { sessionCookieOptions, webBaseFor } from '../lib/hosts.js'
+import { isAdminEmail } from '../lib/admin.js'
 
 const magicLinkBody = z.object({
   email: z.string().email().toLowerCase(),
@@ -17,7 +18,7 @@ const magicLinkBody = z.object({
 
 // Top-level paths the web app owns; a user with one of these names would be unreachable at /:username.
 const RESERVED_USERNAMES = new Set([
-  'accessibility', 'android', 'api', 'assets', 'audit', 'auth', 'calendar', 'connect', 'download',
+  'accessibility', 'admin', 'android', 'api', 'assets', 'audit', 'auth', 'calendar', 'connect', 'download',
   'healthz', 'help', 'icons', 'keys', 'mqtt', 'now', 'onboarding', 'privacy', 'search', 'settings', 'spaces',
   'tags', 'terms', 'webhooks', 'feedback', 'trackers',
 ])
@@ -193,6 +194,7 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
       email: user['email'],
       plan: user['plan'],
       onboarding_completed: user['onboarding_completed'],
+      is_admin: isAdminEmail(user['email'] as string | undefined),
     }}
   })
 }

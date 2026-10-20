@@ -28,6 +28,7 @@ import { PrivacyPage, TermsPage, AccessibilityPage, AndroidPage } from './pages/
 import TagsPage from './pages/TagsPage'
 import TagsPrintPage from './pages/TagsPrintPage'
 import HelpPage from './pages/HelpPage'
+import AdminPage from './pages/AdminPage'
 import SkipLink from './components/SkipLink'
 import { isToday, hasToday, todayOnData, homePath, otherFace, TODAY_PATHS } from './lib/surface'
 
@@ -118,6 +119,7 @@ function Shell({ children }: { children: React.ReactNode }) {
               {navLink('/calendar', 'Calendar')}
               {navLink('/settings', 'Settings')}
               {navLink('/help', 'Help')}
+              {user.is_admin && !isToday && navLink('/admin', 'Admin')}
               {/* Hamburger — mobile only */}
               <button
                 onClick={() => setMenuOpen(true)}
@@ -171,6 +173,7 @@ function Shell({ children }: { children: React.ReactNode }) {
               <p className="text-[10px] font-mono uppercase tracking-wider text-slate-600 px-3 pb-1 pt-3">More</p>
               {drawerLink('/help', '❓  Help')}
               {drawerLink('/feedback', '💬  Send feedback')}
+              {user?.is_admin && !isToday && drawerLink('/admin', '🛠️  Admin')}
               {!hasToday && drawerLink(otherFace('/now'), '⏱  Open Ah! Today ↗')}
               {drawerLink('/', '🏠  Home page')}
             </nav>
@@ -323,6 +326,9 @@ export default function App() {
   if (path === '/audit') {
     return <Shell><AuditPage /></Shell>
   }
+
+  // Admin (the server answers 404 to anyone not in ADMIN_EMAILS)
+  if (path === '/admin') return <Shell><AdminPage /></Shell>
 
   // API Keys
   if (path === '/keys') {

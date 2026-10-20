@@ -4,6 +4,8 @@ export interface User {
   email: string
   plan: 'free' | 'pro' | 'team'
   orgId: string
+  /** In the server's ADMIN_EMAILS: sees /admin. */
+  is_admin?: boolean
 }
 
 export interface Space {

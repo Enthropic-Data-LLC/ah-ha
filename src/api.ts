@@ -41,6 +41,7 @@ import nfcRoutes from './routes/nfc.js'
 import connectRoutes from './routes/connect.js'
 import trackerRoutes from './trackers/routes.js'
 import feedbackRoutes from './routes/feedback.js'
+import adminRoutes from './routes/admin.js'
 import pushRoutes from './push/routes.js'
 import { startTrackers } from './trackers/engine.js'
 import linkRoutes from './routes/link.js'
@@ -215,6 +216,7 @@ await fastify.register(async (sub) => {
   await sub.register(connectRoutes)
   await sub.register(trackerRoutes)
   await sub.register(feedbackRoutes)
+  await sub.register(adminRoutes)
   await sub.register(pushRoutes)
   await sub.register(linkRoutes, { engine: () => linkEngine })
 })
