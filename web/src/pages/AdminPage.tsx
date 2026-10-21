@@ -1,6 +1,7 @@
 import useSWR from 'swr'
 import { useState } from 'react'
 import { api, fetcher } from '../lib/api'
+import UsageMeters, { fmtBytes, type Usage } from '../components/UsageMeters'
 
 // Operator view across all accounts (KB #1302). Shows accounts and usage, never content.
 
@@ -11,6 +12,8 @@ interface Overview {
   plans: Record<string, number>
   spaces: Record<string, number>
   trail_entries: { last_7d: number | null; last_30d: number | null }
+  ai_calls_month: { server_key: number; own_key: number }
+  limit_mode: 'off' | 'warn' | 'enforce'
 }
 
 interface UserRow {
@@ -25,9 +28,13 @@ interface UserRow {
   disabled_at: string | null
   spaces: number
   trail_30d: number
+  ai_calls_month: number
+  storage_bytes: number | null
+  limits: Usage['limits']
 }
 
-interface UserDetail extends Omit<UserRow, 'spaces' | 'trail_30d'> {
+interface UserDetail extends Omit<UserRow, 'spaces' | 'trail_30d' | 'ai_calls_month' | 'storage_bytes' | 'limits'> {
+  usage: Usage
   timezone: string | null
   own_ai_key: boolean
   counts: { cards: number; list_items: number }
@@ -79,9 +86,10 @@ function UserPanel({ id, onClose, onChanged }: { id: string; onClose: () => void
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [confirmDisable, setConfirmDisable] = useState(false)
+  const [grants, setGrants] = useState<Record<string, string> | null>(null)
   const u = data?.data
 
-  async function change(body: { plan?: string; disabled?: boolean }) {
+  async function change(body: { plan?: string; disabled?: boolean; grants?: Record<string, number> }) {
     setSaving(true); setError(''); setConfirmDisable(false)
     try {
       await api.patch(`/api/admin/users/${id}`, body)
@@ -144,6 +152,30 @@ function UserPanel({ id, onClose, onChanged }: { id: string; onClose: () => void
             ))}
             {saving && <span className="text-xs text-slate-400">Saving…</span>}
             {error && <span className="text-xs text-red-400" role="alert">{error}</span>}
+          </div>
+
+          <div className="space-y-3">
+            <h3 className="text-sm font-medium">Plan usage{u.usage.mode !== 'off' && <span className="ml-2 text-xs text-slate-400">limits: {u.usage.mode}</span>}</h3>
+            <UsageMeters u={u.usage} admin />
+            {grants === null ? (
+              <button onClick={() => setGrants({ spaces: String(u.usage.grants.spaces ?? 0), storage_mb: String(u.usage.grants.storage_mb ?? 0), ai_calls: String(u.usage.grants.ai_calls ?? 0) })}
+                      className="text-sm text-indigo-300 hover:text-indigo-200 transition">
+                Extra allowance{Object.keys(u.usage.grants).length ? `: ${Object.entries(u.usage.grants).map(([k, v]) => `+${v} ${k === 'storage_mb' ? 'MB' : k === 'ai_calls' ? 'AI/mo' : 'spaces'}`).join(', ')}` : '…'}
+              </button>
+            ) : (
+              <form className="flex flex-wrap items-end gap-3 text-sm"
+                    onSubmit={e => { e.preventDefault(); change({ grants: Object.fromEntries(Object.entries(grants).map(([k, v]) => [k, Math.max(0, parseInt(v, 10) || 0)])) }); setGrants(null) }}>
+                {([['spaces', 'Extra spaces'], ['storage_mb', 'Extra MB'], ['ai_calls', 'Extra AI / month']] as const).map(([k, label]) => (
+                  <label key={k} className="flex flex-col gap-1">
+                    <span className="text-xs text-slate-400">{label}</span>
+                    <input type="number" min={0} value={grants[k]} onChange={e => setGrants({ ...grants, [k]: e.target.value })}
+                           className="w-28 px-2 py-1 bg-slate-900 border border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                  </label>
+                ))}
+                <button className="px-3 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white transition">Save</button>
+                <button type="button" onClick={() => setGrants(null)} className="px-2 py-1 text-slate-400 hover:text-slate-200 transition">Cancel</button>
+              </form>
+            )}
           </div>
 
           {u.trail_by_day && <Activity days={u.trail_by_day} />}
@@ -222,7 +254,8 @@ export default function AdminPage() {
       {o && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <Tile label="Accounts" value={o.users.total} sub={`${o.users.new_7d} new this week · ${o.users.new_30d} in 30 days`} />
-          <Tile label="Signed in, last 7 days" value={o.users.signed_in_7d} />
+          <Tile label="Signed in, last 7 days" value={o.users.signed_in_7d}
+                sub={`AI this month: ${o.ai_calls_month.server_key} on our key · ${o.ai_calls_month.own_key} own`} />
           <Tile label="Trail entries, 7 days" value={o.trail_entries.last_7d ?? '—'} sub={o.trail_entries.last_30d != null ? `${o.trail_entries.last_30d} in 30 days` : undefined} />
           <Tile label="Spaces" value={Object.values(o.spaces).reduce((a, b) => a + b, 0)}
                 sub={Object.entries(o.spaces).map(([t, n]) => `${n} ${t}`).join(' · ')} />
@@ -257,11 +290,13 @@ export default function AdminPage() {
               <th className="px-4 py-2.5">Last sign-in</th>
               <th className="px-4 py-2.5 text-right">Spaces</th>
               <th className="px-4 py-2.5 text-right">Trail 30d</th>
+              <th className="px-4 py-2.5 text-right">AI mo</th>
+              <th className="px-4 py-2.5 text-right">Storage</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-800/60">
-            {list.isLoading && <tr><td colSpan={6} className="px-4 py-10 text-center text-slate-400">Loading…</td></tr>}
-            {!list.isLoading && rows.length === 0 && <tr><td colSpan={6} className="px-4 py-10 text-center text-slate-400">No accounts found.</td></tr>}
+            {list.isLoading && <tr><td colSpan={8} className="px-4 py-10 text-center text-slate-400">Loading…</td></tr>}
+            {!list.isLoading && rows.length === 0 && <tr><td colSpan={8} className="px-4 py-10 text-center text-slate-400">No accounts found.</td></tr>}
             {rows.map(u => (
               <tr key={u.id} className={`hover:bg-slate-900/40 transition-colors ${selected === u.id ? 'bg-slate-900/60' : ''}`}>
                 <td className="px-4 py-2.5">
@@ -275,6 +310,8 @@ export default function AdminPage() {
                 <td className="px-4 py-2.5 text-xs text-slate-400 tabular-nums whitespace-nowrap">{fmt(u.last_seen, true)}</td>
                 <td className="px-4 py-2.5 text-right tabular-nums">{u.spaces}</td>
                 <td className="px-4 py-2.5 text-right tabular-nums">{u.trail_30d}</td>
+                <td className={`px-4 py-2.5 text-right tabular-nums ${u.limits.ai_calls !== null && u.ai_calls_month >= u.limits.ai_calls ? 'text-amber-300' : ''}`}>{u.ai_calls_month}</td>
+                <td className="px-4 py-2.5 text-right tabular-nums text-xs text-slate-400">{fmtBytes(u.storage_bytes)}</td>
               </tr>
             ))}
           </tbody>

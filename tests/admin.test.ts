@@ -164,6 +164,23 @@ describe.skipIf(!ADMIN_EMAIL)('admin', () => {
     expect((await raw(adminCookie, 'PATCH', `/api/admin/users/${me.body.data.id}`, {})).status).toBe(400)
   })
 
+  it('grants extra allowance on top of the plan, shown in the account usage (counts only)', async () => {
+    const bad = await raw(adminCookie, 'PATCH', `/api/admin/users/${userId}`, { grants: { ai_calls: -5 } })
+    expect(bad.status).toBe(400)
+    expect((await raw(adminCookie, 'PATCH', `/api/admin/users/${userId}`, { grants: { ai_calls: 25, spaces: 2 } })).status).toBe(200)
+    let d = (await raw(adminCookie, 'GET', `/api/admin/users/${userId}`)).body.data
+    expect(d.usage.grants).toEqual({ ai_calls: 25, spaces: 2 })
+    // The user is on pro from the plan test above: unlimited spaces stay unlimited.
+    expect(d.usage.limits).toEqual({ spaces: null, storage_mb: 5120, ai_calls: 1025 })
+    expect(d.usage.used.storage_bytes).toBeGreaterThan(0)
+    expect((await raw(adminCookie, 'PATCH', `/api/admin/users/${userId}`, { grants: { ai_calls: 0, spaces: 0 } })).status).toBe(200)
+    d = (await raw(adminCookie, 'GET', `/api/admin/users/${userId}`)).body.data
+    expect(d.usage.grants).toEqual({})
+    const row = (await raw(adminCookie, 'GET', `/api/admin/users?q=${encodeURIComponent(`admin-u-${STAMP}`)}`)).body.data[0]
+    expect(row.ai_calls_month).toBe(0)
+    expect(row.limits.ai_calls).toBe(1000)
+  })
+
   it("an admin's API key does not reach admin routes", async () => {
     const k = await raw<{ data: { id: string; key: string } }>(adminCookie, 'POST', '/api/keys', { name: `admin-test-${STAMP}` })
     expect(k.status).toBe(201)

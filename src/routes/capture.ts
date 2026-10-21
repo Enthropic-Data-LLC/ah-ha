@@ -1,6 +1,6 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
-import { openSecret } from '../lib/secret-box.js'
+import { core, callerOf } from '../core/index.js'
 
 // Whitelist + bound the model's JSON so attacker-influenced text in the
 // capture prompt cannot return arbitrary fields/types to the client (CWE-1427).
@@ -25,10 +25,9 @@ export const captureRoute: FastifyPluginAsync = async (fastify) => {
     async (req, reply) => {
       const { text } = z.object({ text: z.string().min(1).max(500) }).parse(req.body)
 
-      // Get AI key: user BYOK or server key
-      const settings = await fastify.mongo.collection('user_settings')
-        .findOne({ user_id: req.user!.id })
-      const apiKey = openSecret(settings?.['anthropic_api_key'] as string | null) ?? process.env['ANTHROPIC_API_KEY']
+      // The user's own key, else the server's while their plan allows (core/settings).
+      const ai = await core(fastify).settings.aiKey(callerOf(req))
+      const apiKey = ai?.key
 
       if (!apiKey) {
         // No AI key — return raw title, no parsing
@@ -64,6 +63,7 @@ Examples:
 "dentist appointment tomorrow" → title:"Dentist appointment", due_date:"<tomorrow ISO>", recurrence:null`
 
       try {
+        ai!.used()
         const res = await fetch('https://api.anthropic.com/v1/messages', {
           method: 'POST',
           headers: {

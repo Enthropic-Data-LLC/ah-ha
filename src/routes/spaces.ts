@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { ObjectId } from 'mongodb'
 import type { SpaceType } from '../types.js'
 import { initial } from '../lib/lexorank.js'
+import { blockedBy } from '../lib/usage.js'
 
 const RESERVED_USERNAMES = new Set(['api', 'auth', 'app', 'settings', 'admin', 'www', 'status', 'docs', 'blog', 'onboarding'])
 const SLUG_RE = /^[a-z0-9-]{3,64}$/
@@ -52,6 +53,8 @@ const spacesRoutes: FastifyPluginAsync = async (fastify) => {
     if (RESERVED_USERNAMES.has(user.username)) {
       return reply.status(400).send({ error: 'Reserved username' })
     }
+    const limit = await blockedBy(fastify, user.orgId, 'space')
+    if (limit) return reply.status(403).send({ error: `${limit}. Delete one or upgrade to add more.`, code: 'PLAN_LIMIT' })
 
     const slug = body.slug ?? slugify(body.name)
     if (!SLUG_RE.test(slug)) {

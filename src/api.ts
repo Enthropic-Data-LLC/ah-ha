@@ -43,6 +43,7 @@ import trackerRoutes from './trackers/routes.js'
 import feedbackRoutes from './routes/feedback.js'
 import adminRoutes from './routes/admin.js'
 import portabilityRoutes from './routes/portability.js'
+import usageRoutes from './routes/usage.js'
 import pushRoutes from './push/routes.js'
 import { startTrackers } from './trackers/engine.js'
 import linkRoutes from './routes/link.js'
@@ -127,6 +128,10 @@ await fastify.register(rateLimit, {
   global: false,
   redis: fastify.redis,
   keyGenerator: (req) => req.user?.orgId?.toString() ?? req.ip,
+  // Dev only: the test suite signs in well over 10 times a minute from loopback. Same gate as
+  // /auth/dev-link (ALLOW_DEV_LINK=1 and not production); the socket address, not req.ip.
+  allowList: (req) => process.env['NODE_ENV'] !== 'production' && process.env['ALLOW_DEV_LINK'] === '1'
+    && ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(req.socket.remoteAddress ?? ''),
   // statusCode must be on this object: @fastify/rate-limit throws the value
   // returned here as the error, so it reaches setErrorHandler. Without it the
   // handler cannot tell a 429 from an unhandled crash and answers 500.
@@ -221,6 +226,7 @@ await fastify.register(async (sub) => {
   await sub.register(feedbackRoutes)
   await sub.register(adminRoutes)
   await sub.register(portabilityRoutes)
+  await sub.register(usageRoutes)
   await sub.register(pushRoutes)
   await sub.register(linkRoutes, { engine: () => linkEngine })
 })

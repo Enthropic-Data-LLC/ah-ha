@@ -49,15 +49,16 @@ export async function run(c: Core, caller: Caller, day: string) {
 
   const budget = c.kv('modules')
   const key = `${ID}:steps:${caller.orgId}:${day}`
-  const apiKey = await c.settings.anthropicKey(caller)
+  const ai = await c.settings.aiKey(caller)
   const marked: string[] = []
   for (const [kind, d] of todo) {
     let step: string | null = null
-    if (apiKey) {
+    if (ai) {
       const used = Number(await budget.get(key) ?? 0)
       if (used >= STEPS_PER_DAY) break            // today's suggestions are used up: the rest wait for tomorrow
       await budget.set(key, String(used + 1), 2 * 86_400)
-      step = await firstStep(apiKey, String(d['title'])).catch(() => null)
+      ai.used()
+      step = await firstStep(ai.key, String(d['title'])).catch(() => null)
     }
     const ft = { at: new Date(), count: Number(d['defer_count'] ?? SNOOZES), first_step: step, by: ID }
     await (kind === 'card' ? c.cards.setFollowThrough(caller, d._id, ft) : c.lists.setFollowThrough(caller, d._id, ft))

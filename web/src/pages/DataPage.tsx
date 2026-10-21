@@ -1,7 +1,10 @@
 import { useRef, useState } from 'react'
+import useSWR from 'swr'
 import { useMe } from '../hooks/useMe'
+import { fetcher } from '../lib/api'
+import UsageMeters, { type Usage } from '../components/UsageMeters'
 
-// Export the whole account as one file; import such a file back as new copies (KB #2159).
+// The account's plan and usage (KB #2160); export it as one file, import such a file back (KB #2159).
 
 interface ImportResult {
   counts: Record<string, number>
@@ -23,6 +26,8 @@ export default function DataPage() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [result, setResult] = useState<ImportResult | null>(null)
+  const usage = useSWR<{ data: Usage }>('/api/usage', fetcher).data?.data
+  const overAny = usage && (usage.over.spaces || usage.over.storage || usage.over.ai_calls)
 
   async function importFile(f: File) {
     setBusy(true); setError(''); setResult(null)
@@ -48,7 +53,22 @@ export default function DataPage() {
 
   return (
     <div className="max-w-2xl mx-auto w-full px-4 py-10 space-y-8 overflow-y-auto">
-      <h1 className="text-xl font-bold">Export &amp; import</h1>
+      <h1 className="text-xl font-bold">Your data</h1>
+
+      {usage && (
+        <section className="space-y-3">
+          <h2 className="font-semibold">Plan: <span className="capitalize">{usage.plan}</span></h2>
+          <UsageMeters u={usage} />
+          {usage.mode !== 'off' && overAny && (
+            <p role="status" className="text-sm text-amber-200">
+              {usage.mode === 'enforce'
+                ? 'You’ve reached a limit of your plan. Delete something or upgrade to keep adding.'
+                : 'You’re at a limit of your plan. Nothing is blocked yet.'}
+            </p>
+          )}
+          <p className="text-xs text-slate-400">Counted from sizes and totals only. Nobody reads your content to measure it.</p>
+        </section>
+      )}
 
       <section className="space-y-3">
         <h2 className="font-semibold">Export</h2>

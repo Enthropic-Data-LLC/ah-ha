@@ -80,7 +80,7 @@ const settingsRoutes: FastifyPluginAsync = async (fastify) => {
   )
 
   // The server-side AI key is resolved in-process by the capture/now routes
-  // (core/settings.ts anthropicKey()); it is deliberately NOT exposed over HTTP.
+  // (core/settings.ts aiKey()); it is deliberately NOT exposed over HTTP.
 }
 
 export default settingsRoutes

@@ -3,6 +3,8 @@ import { ObjectId } from 'mongodb'
 import { z } from 'zod'
 import { getPool } from '../lib/timescale.js'
 import { isAdminEmail } from '../lib/admin.js'
+import { limitMode, limitsFor } from '../lib/plans.js'
+import { monthKey, usageFor } from '../lib/usage.js'
 
 /**
  * /api/admin/* — the operator's view across every account (KB #1302).
@@ -14,7 +16,7 @@ import { isAdminEmail } from '../lib/admin.js'
  * the same 404 as a route that does not exist.
  *
  * It shows accounts and how much they use the app, never what they wrote: space names and
- * counts yes, card/note/trail text no.
+ * counts yes, card/note/trail text no. Plan usage (lib/usage) is counts and bytes only.
  */
 const PLANS = ['free', 'pro', 'team', 'iot', 'enterprise'] as const
 const DAY = 86400_000
@@ -48,7 +50,7 @@ const adminRoutes: FastifyPluginAsync = async (fastify) => {
   // GET /api/admin/overview — totals for the dashboard tiles
   fastify.get('/api/admin/overview', { preHandler: requireAdmin }, async () => {
     const now = Date.now()
-    const [total, new7, new30, signedIn7, plans, spaces, trail7, trail30] = await Promise.all([
+    const [total, new7, new30, signedIn7, plans, spaces, trail7, trail30, ai] = await Promise.all([
       users().countDocuments(),
       users().countDocuments({ created_at: { $gte: new Date(now - 7 * DAY) } }),
       users().countDocuments({ created_at: { $gte: new Date(now - 30 * DAY) } }),
@@ -57,6 +59,9 @@ const adminRoutes: FastifyPluginAsync = async (fastify) => {
       fastify.mongo.collection('spaces').aggregate<{ _id: string; n: number }>([{ $match: live }, { $group: { _id: '$type', n: { $sum: 1 } } }]).toArray(),
       trailCounts(7).catch(() => null),
       trailCounts(30).catch(() => null),
+      fastify.mongo.collection('ai_usage').aggregate<{ server_key: number; own_key: number }>([
+        { $match: { month: monthKey() } }, { $group: { _id: null, server_key: { $sum: '$server_key' }, own_key: { $sum: '$own_key' } } },
+      ]).toArray(),
     ])
     const sum = (m: Map<string, number> | null) => m ? [...m.values()].reduce((a, b) => a + b, 0) : null
     return { data: {
@@ -64,6 +69,8 @@ const adminRoutes: FastifyPluginAsync = async (fastify) => {
       plans: Object.fromEntries(plans.map(p => [p._id ?? 'free', p.n])),
       spaces: Object.fromEntries(spaces.map(s => [s._id, s.n])),
       trail_entries: { last_7d: sum(trail7), last_30d: sum(trail30) },
+      ai_calls_month: { server_key: ai[0]?.server_key ?? 0, own_key: ai[0]?.own_key ?? 0 },
+      limit_mode: limitMode(),
     } }
   })
 
@@ -84,7 +91,7 @@ const adminRoutes: FastifyPluginAsync = async (fastify) => {
     if (p.before) filter['_id'] = { $lt: new ObjectId(p.before) }
 
     const rows = await users()
-      .find(filter, { projection: { email: 1, username: 1, plan: 1, created_at: 1, last_seen: 1, onboarding_completed: 1, disabled_at: 1 } })
+      .find(filter, { projection: { email: 1, username: 1, plan: 1, created_at: 1, last_seen: 1, onboarding_completed: 1, disabled_at: 1, grants: 1 } })
       .sort({ _id: -1 })
       .limit(p.limit + 1)
       .toArray()
@@ -92,13 +99,18 @@ const adminRoutes: FastifyPluginAsync = async (fastify) => {
     if (has_more) rows.pop()
 
     const ids = rows.map(u => u._id)
-    const [spaceCounts, trail30] = await Promise.all([
+    const [spaceCounts, trail30, ai, stored] = await Promise.all([
       fastify.mongo.collection('spaces').aggregate<{ _id: ObjectId; n: number }>([
         { $match: { org_id: { $in: ids }, ...live } }, { $group: { _id: '$org_id', n: { $sum: 1 } } },
       ]).toArray(),
       trailCounts(30, ids.map(String)).catch(() => new Map<string, number>()),
+      fastify.mongo.collection('ai_usage').find({ org_id: { $in: ids }, month: monthKey() }).toArray(),
+      // Last measured size only: measuring is a scan, done when someone looks at an account.
+      fastify.mongo.collection('usage').find({ _id: { $in: ids } }).toArray(),
     ])
     const spacesBy = new Map(spaceCounts.map(s => [String(s._id), s.n]))
+    const aiBy = new Map(ai.map(a => [String(a['org_id']), (a['server_key'] as number) ?? 0]))
+    const storedBy = new Map(stored.map(s => [String(s._id), s['storage_bytes'] as number]))
 
     return {
       data: rows.map(u => ({
@@ -113,6 +125,9 @@ const adminRoutes: FastifyPluginAsync = async (fastify) => {
         disabled_at: u['disabled_at'] ?? null,
         spaces: spacesBy.get(String(u._id)) ?? 0,
         trail_30d: trail30.get(String(u._id)) ?? 0,
+        ai_calls_month: aiBy.get(String(u._id)) ?? 0,
+        storage_bytes: storedBy.get(String(u._id)) ?? null,
+        limits: limitsFor(u['plan'] as string | undefined, u['grants'] as never),
       })),
       meta: { has_more, before: has_more ? String(rows[rows.length - 1]!._id) : null },
     }
@@ -125,12 +140,13 @@ const adminRoutes: FastifyPluginAsync = async (fastify) => {
     if (!u) return reply.status(404).send({ data: null, error: { code: 'NOT_FOUND', message: 'No such user' } })
 
     const db = fastify.mongo
-    const [spaces, keys, actions, cards, items] = await Promise.all([
+    const [spaces, keys, actions, cards, items, usage] = await Promise.all([
       db.collection('spaces').find({ org_id: id, ...live }, { projection: { ref: 1, name: 1, type: 1, created_at: 1 } }).sort({ created_at: -1 }).toArray(),
       db.collection('api_keys').find({ user_id: id }, { projection: { name: 1, prefix: 1, access: 1, last_used: 1, created_at: 1, expires_at: 1, revoked_at: 1 } }).sort({ created_at: -1 }).toArray(),
       db.collection('audit_log').find({ org_id: id }, { projection: { action: 1, resource_ref: 1, actor_type: 1, ts: 1 } }).sort({ seq: -1 }).limit(25).toArray(),
       db.collection('board_cards').countDocuments({ created_by: id }),
       db.collection('list_items').countDocuments({ created_by: id }),
+      usageFor(fastify, id, { fresh: true }),
     ])
 
     // Entries per day, not the entries: how much they use it, not what they wrote.
@@ -156,6 +172,7 @@ const adminRoutes: FastifyPluginAsync = async (fastify) => {
       timezone: (u['settings'] as { timezone?: string } | undefined)?.timezone ?? null,
       own_ai_key: !!(u['llm'] as { provider?: string } | undefined)?.provider,
       counts: { cards, list_items: items },
+      usage,
       spaces: spaces.map(s => ({ ref: s['ref'], name: s['name'], type: s['type'], created_at: s['created_at'] })),
       keys: keys.map(k => ({ name: k['name'], prefix: k['prefix'], access: k['access'] ?? 'full', created_at: k['created_at'], last_used: k['last_used'], expires_at: k['expires_at'], revoked: !!k['revoked_at'] })),
       recent_actions: actions.map(a => ({ action: a['action'], resource_ref: a['resource_ref'], via: a['actor_type'], ts: a['ts'] })),
@@ -169,11 +186,17 @@ const adminRoutes: FastifyPluginAsync = async (fastify) => {
   // takes effect on the next request (auth.ts reads the flag every time).
   fastify.patch<{ Params: { id: string } }>('/api/admin/users/:id', { preHandler: requireAdmin }, async (req, reply) => {
     const id = new ObjectId(req.params.id)
-    const body = z.object({ plan: z.enum(PLANS).optional(), disabled: z.boolean().optional() })
+    const extra = z.number().int().min(0).max(1_000_000)
+    const body = z.object({
+      plan: z.enum(PLANS).optional(),
+      disabled: z.boolean().optional(),
+      // Extra allowance on top of the plan (lib/plans): monthly for AI, standing for the rest. 0 removes it.
+      grants: z.object({ spaces: extra.optional(), storage_mb: extra.optional(), ai_calls: extra.optional() }).strict().optional(),
+    })
       .strict()
-      .refine(b => b.plan !== undefined || b.disabled !== undefined, 'Nothing to change')
+      .refine(b => b.plan !== undefined || b.disabled !== undefined || b.grants !== undefined, 'Nothing to change')
       .parse(req.body)
-    const before = await users().findOne({ _id: id }, { projection: { plan: 1, email: 1, disabled_at: 1 } })
+    const before = await users().findOne({ _id: id }, { projection: { plan: 1, email: 1, disabled_at: 1, grants: 1 } })
     if (!before) return reply.status(404).send({ data: null, error: { code: 'NOT_FOUND', message: 'No such user' } })
     // Admins come from ADMIN_EMAILS; locking one out (yourself included) is done there, not here.
     if (body.disabled && isAdminEmail(before['email'] as string | undefined)) {
@@ -185,6 +208,10 @@ const adminRoutes: FastifyPluginAsync = async (fastify) => {
     if (body.plan !== undefined) set['plan'] = body.plan
     if (body.disabled === true && !before['disabled_at']) { set['disabled_at'] = new Date(); set['disabled_by'] = req.user!.id }
     if (body.disabled === false) { unset['disabled_at'] = ''; unset['disabled_by'] = '' }
+    for (const [k, v] of Object.entries(body.grants ?? {})) {
+      if (v) set[`grants.${k}`] = v
+      else unset[`grants.${k}`] = ''
+    }
     await users().updateOne({ _id: id }, { ...(Object.keys(set).length ? { $set: set } : {}), ...(Object.keys(unset).length ? { $unset: unset } : {}) })
 
     // Same hash-chained log as everything else, filed under the admin's org with the target in the ref.
@@ -194,9 +221,10 @@ const adminRoutes: FastifyPluginAsync = async (fastify) => {
     if (body.plan !== undefined && body.plan !== before['plan']) audit('admin.user.plan', `user:${id}:${(before['plan'] as string) ?? 'free'}->${body.plan}`)
     if (body.disabled === true && !before['disabled_at']) audit('admin.user.disable', `user:${id}`)
     if (body.disabled === false && before['disabled_at']) audit('admin.user.enable', `user:${id}`)
+    if (body.grants) audit('admin.user.grants', `user:${id}:${Object.entries(body.grants).map(([k, v]) => `${k}=${v}`).join(',')}`)
 
-    const after = await users().findOne({ _id: id }, { projection: { plan: 1, disabled_at: 1 } })
-    return { data: { id, plan: after?.['plan'] ?? 'free', disabled_at: after?.['disabled_at'] ?? null } }
+    const after = await users().findOne({ _id: id }, { projection: { plan: 1, disabled_at: 1, grants: 1 } })
+    return { data: { id, plan: after?.['plan'] ?? 'free', disabled_at: after?.['disabled_at'] ?? null, grants: after?.['grants'] ?? {} } }
   })
 }
 

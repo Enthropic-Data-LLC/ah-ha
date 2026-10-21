@@ -282,7 +282,8 @@ const nowRoutes: FastifyPluginAsync = async (fastify) => {
 
       let briefing: string | null = cached?.text ?? null
       const hasWork = (urgent.length + dueToday.length + habits.length + calendarEvents.length) > 0
-      const apiKey = reason && hasWork ? await c.settings.anthropicKey(caller) : process.env['ANTHROPIC_API_KEY']
+      const ai = reason && hasWork ? await c.settings.aiKey(caller) : null
+      const apiKey = ai?.key
       const countKey = `calls:${orgId}:${now.toISOString().slice(0, 10)}`
       const callsToday = reason && hasWork ? Number(await briefings.get(countKey) ?? 0) : 0
 
@@ -306,6 +307,7 @@ const nowRoutes: FastifyPluginAsync = async (fastify) => {
             week.length ? `last week: ${week.at(-1)!.text.replace(/^📈\s*/, '')}` : '',
           ].filter(Boolean).join('. ')
 
+          ai!.used()
           const res = await fetch('https://api.anthropic.com/v1/messages', {
             method: 'POST',
             headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },

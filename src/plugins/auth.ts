@@ -3,6 +3,7 @@ import type { FastifyPluginAsync, FastifyRequest, FastifyReply } from 'fastify'
 import { verifyJWT } from '../lib/jwt.js'
 import { validateApiKey } from '../lib/api-key.js'
 import { scopesAllow } from '../lib/scopes.js'
+import { blockedBy } from '../lib/usage.js'
 
 // Never reachable with an API key, whatever its scopes or access: otherwise a limited
 // key could mint itself a full one, or approve another app's connection.
@@ -32,7 +33,7 @@ async function authenticate(req: FastifyRequest, reply: FastifyReply) {
       if (!doc) return reply.status(401).send({ error: 'Authentication required' })
       req.user = { ...user, disabled: !!doc['disabled_at'] }
       if (req.user.disabled && !READ_METHODS.has(req.method)) return reply.status(403).send(DISABLED)
-      return
+      return storageGate(req, reply)
     }
   }
 
@@ -62,10 +63,18 @@ async function authenticate(req: FastifyRequest, reply: FastifyReply) {
     req.server.mongo.collection('api_keys')
       .updateOne({ _id: key._id }, { $set: { last_used: new Date() } })
       .catch(() => {})
-    return
+    return storageGate(req, reply)
   }
 
   return reply.status(401).send({ error: 'Authentication required' })
+}
+
+// Over the plan's storage with PLAN_LIMITS=enforce (lib/plans): reading and deleting still
+// work, adding doesn't. A no-op otherwise — blockedBy returns before measuring anything.
+async function storageGate(req: FastifyRequest, reply: FastifyReply) {
+  if (READ_METHODS.has(req.method) || req.method === 'DELETE') return
+  const why = await blockedBy(req.server, req.user!.orgId, 'write')
+  if (why) return reply.status(403).send({ error: `${why}. Delete something or upgrade to add more.`, code: 'PLAN_LIMIT' })
 }
 
 declare module 'fastify' {

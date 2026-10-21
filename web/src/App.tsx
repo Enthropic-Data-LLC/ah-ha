@@ -117,7 +117,7 @@ function Shell({ children }: { children: React.ReactNode }) {
               {!isToday && navLink('/trackers', 'Trackers')}
               {!isToday && navLink('/tags', 'Tags')}
               {!isToday && navLink('/keys', 'API Keys')}
-              {!isToday && navLink('/data', 'Export')}
+              {!isToday && navLink('/data', 'Your data')}
               {navLink('/calendar', 'Calendar')}
               {navLink('/settings', 'Settings')}
               {navLink('/help', 'Help')}
@@ -172,7 +172,7 @@ function Shell({ children }: { children: React.ReactNode }) {
               {!isToday && drawerLink('/audit', '📋  Audit Log')}
               {!isToday && drawerLink('/mqtt', '📡  MQTT')}
               {!isToday && drawerLink('/webhooks', '🔗  Webhooks')}
-              {!isToday && drawerLink('/data', '📦  Export & import')}
+              {!isToday && drawerLink('/data', '📦  Your data')}
               <p className="text-[10px] font-mono uppercase tracking-wider text-slate-600 px-3 pb-1 pt-3">More</p>
               {drawerLink('/help', '❓  Help')}
               {drawerLink('/feedback', '💬  Send feedback')}
