@@ -45,7 +45,9 @@ function formatDueLabel(card: BoardCard, state: string): string | null {
   const startOfToday = new Date(now); startOfToday.setHours(0, 0, 0, 0)
 
   if (state === 'overdue') {
-    const days = Math.floor((startOfToday.getTime() - due.getTime()) / 86400000)
+    // Calendar days: due yesterday at noon is 1 day past due, not 0.
+    const dueDay = new Date(due); dueDay.setHours(0, 0, 0, 0)
+    const days = Math.max(1, Math.round((startOfToday.getTime() - dueDay.getTime()) / 86400000))
     return days === 1 ? 'since yesterday' : `${days}d past due`
   }
   if (state === 'today') return 'today'
