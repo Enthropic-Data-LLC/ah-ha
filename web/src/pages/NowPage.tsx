@@ -47,9 +47,12 @@ const TONE_COLOR: Record<string, string> = {
 
 const LIMIT_CHOICES = [3, 5, 7, 10, 15, 20, 30]
 
-function DaysOverdue({ due }: { due: string }) {
-  const days = Math.floor((Date.now() - new Date(due).getTime()) / 86400000)
+// Counted in calendar days, so a card due later today reads "due today", not "-1d past due".
+function DueLabel({ due }: { due: string }) {
+  const day = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()
+  const days = Math.round((day(new Date()) - day(new Date(due))) / 86400000)
   if (days === 0) return <span className="text-xs text-amber-400">due today</span>
+  if (days < 0) return <span className="text-xs text-slate-400">{days === -1 ? 'due tomorrow' : `due in ${-days}d`}</span>
   return <span className="text-xs text-amber-500">{days}d past due</span>
 }
 
@@ -68,7 +71,7 @@ function CardRow({ card, onDefer, onComplete, onOpen }: {
           className="text-sm text-slate-200 truncate text-left w-full hover:text-indigo-300 transition"
         >{card.title}</button>
         <div className="flex items-center gap-2 mt-0.5">
-          {card.due_date && <DaysOverdue due={card.due_date} />}
+          {card.due_date && <DueLabel due={card.due_date} />}
           {card.recurrence?.archetype === 'habit' && (card.recurrence.streak_count ?? 0) > 2 && (
             <span className="text-xs text-orange-400">🔥 {card.recurrence.streak_count}</span>
           )}
