@@ -62,6 +62,12 @@ describe('admin routes refuse everyone else', () => {
     expect((await raw(userCookie, method, path, body)).status).toBe(404)
   })
 
+  it('a doubled leading slash is still an API path: JSON 404, not the page (KB #2161)', async () => {
+    const r = await fetch(`${API}//api/admin/overview`)
+    expect(r.status).toBe(404)
+    expect(r.headers.get('content-type')).toMatch(/json/)
+  })
+
   it('a non-admin cannot change their own plan', async () => {
     expect((await raw(userCookie, 'PATCH', `/api/admin/users/${userId}`, { plan: 'enterprise' })).status).toBe(404)
     const me = await raw<{ data: { plan: string } }>(userCookie, 'GET', '/auth/me')

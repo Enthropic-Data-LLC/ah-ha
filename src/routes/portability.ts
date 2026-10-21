@@ -76,7 +76,8 @@ const portabilityRoutes: FastifyPluginAsync = async (fastify) => {
     return seal(body)
   })
 
-  fastify.post('/api/import', { preHandler: fastify.authenticate, bodyLimit: 50 * 1024 * 1024 }, async (req, reply) => {
+  // Authenticated onRequest, before the body is read: nobody signed out gets to upload 50 MB.
+  fastify.post('/api/import', { onRequest: fastify.authenticate, bodyLimit: 50 * 1024 * 1024 }, async (req, reply) => {
     const me = req.user!
     const bad = (message: string, code = 'BAD_EXPORT') => reply.status(400).send({ data: null, error: { code, message } })
 

@@ -265,7 +265,8 @@ fastify.get('/manifest.webmanifest', async (req, reply) => {
 // matched nothing is a real 404 (it used to be a 200 HTML page, which hid broken icons).
 const FILE_LIKE = /\.(png|jpe?g|gif|webp|avif|svg|ico|xml|txt|json|js|mjs|css|map|webmanifest|woff2?|ttf|apk|zip|gz|pdf|php|asp|aspx|env|ya?ml|bak|sql)$/i
 fastify.setNotFoundHandler(async (req, reply) => {
-  const path = req.url.split('?')[0] ?? ''
+  // Leading slashes collapsed: //api/x is still an API path, not a page (KB #2161).
+  const path = (req.url.split('?')[0] ?? '').replace(/^\/{2,}/, '/')
   if (path.startsWith('/api/') || FILE_LIKE.test(path)) {
     return reply.status(404).send({ data: null, error: { code: 'NOT_FOUND', message: 'Not found' } })
   }
