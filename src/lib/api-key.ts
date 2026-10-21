@@ -34,6 +34,7 @@ export async function validateApiKey(db: Db, incoming: string) {
     org_id: key['org_id'] as ObjectId,
     plan: (user?.['plan'] as string) ?? 'free',
     username: (user?.['username'] as string) ?? '',
+    disabled: !!user?.['disabled_at'],
     scope: key['scope'] as string,
     access: key['access'] as string,
     scopes: Array.isArray(key['scopes']) ? (key['scopes'] as string[]) : null,

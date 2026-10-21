@@ -84,7 +84,7 @@ const adminRoutes: FastifyPluginAsync = async (fastify) => {
     if (p.before) filter['_id'] = { $lt: new ObjectId(p.before) }
 
     const rows = await users()
-      .find(filter, { projection: { email: 1, username: 1, plan: 1, created_at: 1, last_seen: 1, onboarding_completed: 1 } })
+      .find(filter, { projection: { email: 1, username: 1, plan: 1, created_at: 1, last_seen: 1, onboarding_completed: 1, disabled_at: 1 } })
       .sort({ _id: -1 })
       .limit(p.limit + 1)
       .toArray()
@@ -110,6 +110,7 @@ const adminRoutes: FastifyPluginAsync = async (fastify) => {
         last_seen: u['last_seen'] ?? null,
         onboarded: !!u['onboarding_completed'],
         admin: isAdminEmail(u['email'] as string | undefined),
+        disabled_at: u['disabled_at'] ?? null,
         spaces: spacesBy.get(String(u._id)) ?? 0,
         trail_30d: trail30.get(String(u._id)) ?? 0,
       })),
@@ -120,7 +121,7 @@ const adminRoutes: FastifyPluginAsync = async (fastify) => {
   // GET /api/admin/users/:id — one account: its spaces, keys, recent actions, 30 days of activity
   fastify.get<{ Params: { id: string } }>('/api/admin/users/:id', { preHandler: requireAdmin }, async (req, reply) => {
     const id = new ObjectId(req.params.id) // malformed → 400 via the central error handler
-    const u = await users().findOne({ _id: id }, { projection: { email: 1, username: 1, plan: 1, created_at: 1, last_seen: 1, onboarding_completed: 1, 'settings.timezone': 1, 'llm.provider': 1 } })
+    const u = await users().findOne({ _id: id }, { projection: { email: 1, username: 1, plan: 1, created_at: 1, last_seen: 1, onboarding_completed: 1, disabled_at: 1, 'settings.timezone': 1, 'llm.provider': 1 } })
     if (!u) return reply.status(404).send({ data: null, error: { code: 'NOT_FOUND', message: 'No such user' } })
 
     const db = fastify.mongo
@@ -151,6 +152,7 @@ const adminRoutes: FastifyPluginAsync = async (fastify) => {
       last_seen: u['last_seen'] ?? null,
       onboarded: !!u['onboarding_completed'],
       admin: isAdminEmail(u['email'] as string | undefined),
+      disabled_at: u['disabled_at'] ?? null,
       timezone: (u['settings'] as { timezone?: string } | undefined)?.timezone ?? null,
       own_ai_key: !!(u['llm'] as { provider?: string } | undefined)?.provider,
       counts: { cards, list_items: items },
@@ -161,23 +163,40 @@ const adminRoutes: FastifyPluginAsync = async (fastify) => {
     } }
   })
 
-  // PATCH /api/admin/users/:id { plan } — change an account's plan. The plan in an existing
-  // session token updates when that token is next issued (sign-in or username claim).
+  // PATCH /api/admin/users/:id { plan?, disabled? } — change an account's plan, or disable it
+  // (read-only: it can sign in, look and export, and nothing runs for it) and enable it again.
+  // A new plan reaches an existing session token when that token is next issued; disabling
+  // takes effect on the next request (auth.ts reads the flag every time).
   fastify.patch<{ Params: { id: string } }>('/api/admin/users/:id', { preHandler: requireAdmin }, async (req, reply) => {
     const id = new ObjectId(req.params.id)
-    const body = z.object({ plan: z.enum(PLANS) }).strict().parse(req.body)
-    const before = await users().findOneAndUpdate({ _id: id }, { $set: { plan: body.plan } }, { projection: { plan: 1 } })
+    const body = z.object({ plan: z.enum(PLANS).optional(), disabled: z.boolean().optional() })
+      .strict()
+      .refine(b => b.plan !== undefined || b.disabled !== undefined, 'Nothing to change')
+      .parse(req.body)
+    const before = await users().findOne({ _id: id }, { projection: { plan: 1, email: 1, disabled_at: 1 } })
     if (!before) return reply.status(404).send({ data: null, error: { code: 'NOT_FOUND', message: 'No such user' } })
+    // Admins come from ADMIN_EMAILS; locking one out (yourself included) is done there, not here.
+    if (body.disabled && isAdminEmail(before['email'] as string | undefined)) {
+      return reply.status(400).send({ data: null, error: { code: 'ADMIN', message: 'An admin can’t be disabled here — take the address out of ADMIN_EMAILS instead' } })
+    }
+
+    const set: Record<string, unknown> = {}
+    const unset: Record<string, ''> = {}
+    if (body.plan !== undefined) set['plan'] = body.plan
+    if (body.disabled === true && !before['disabled_at']) { set['disabled_at'] = new Date(); set['disabled_by'] = req.user!.id }
+    if (body.disabled === false) { unset['disabled_at'] = ''; unset['disabled_by'] = '' }
+    await users().updateOne({ _id: id }, { ...(Object.keys(set).length ? { $set: set } : {}), ...(Object.keys(unset).length ? { $unset: unset } : {}) })
+
     // Same hash-chained log as everything else, filed under the admin's org with the target in the ref.
-    fastify.audit({
-      actor_id: req.user!.id,
-      actor_type: 'user',
-      action: 'admin.user.plan',
-      resource_ref: `user:${id}:${(before['plan'] as string) ?? 'free'}->${body.plan}`,
-      org_id: req.user!.orgId,
-      ip: req.ip,
+    const audit = (action: string, ref: string) => fastify.audit({
+      actor_id: req.user!.id, actor_type: 'user', action, resource_ref: ref, org_id: req.user!.orgId, ip: req.ip,
     })
-    return { data: { id, plan: body.plan } }
+    if (body.plan !== undefined && body.plan !== before['plan']) audit('admin.user.plan', `user:${id}:${(before['plan'] as string) ?? 'free'}->${body.plan}`)
+    if (body.disabled === true && !before['disabled_at']) audit('admin.user.disable', `user:${id}`)
+    if (body.disabled === false && before['disabled_at']) audit('admin.user.enable', `user:${id}`)
+
+    const after = await users().findOne({ _id: id }, { projection: { plan: 1, disabled_at: 1 } })
+    return { data: { id, plan: after?.['plan'] ?? 'free', disabled_at: after?.['disabled_at'] ?? null } }
   })
 }
 

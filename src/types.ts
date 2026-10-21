@@ -112,6 +112,8 @@ declare module 'fastify' {
       orgId: ObjectId
       plan: Plan
       username: string
+      /** Set from /admin: the account can read and export, nothing else. */
+      disabled?: boolean
     }
     apiKeyId?: ObjectId
     /** Set for keys made by /connect: the only scopes this request may use. null = full-access key. */

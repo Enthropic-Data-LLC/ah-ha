@@ -7,8 +7,8 @@ import { userTz } from '../lib/repeat.js'
 export function usersCore(fastify: FastifyInstance) {
   const users = () => fastify.mongo.collection('users')
   return {
-    /** Everyone with an account: who background modules run for. */
-    all: () => users().find({}).project<{ _id: ObjectId }>({ _id: 1 }).toArray(),
+    /** Everyone with an active account: who background modules run for. */
+    all: () => users().find({ disabled_at: { $exists: false } }).project<{ _id: ObjectId }>({ _id: 1 }).toArray(),
 
     /** The user's time zone (briefing settings), as the Link engine reads it. */
     tz: (userId: ObjectId) => userTz(fastify, userId),

@@ -181,6 +181,12 @@ function Shell({ children }: { children: React.ReactNode }) {
         </div>
       )}
 
+      {user?.disabled && (
+        <div role="status" className="border-b border-amber-500/30 bg-amber-500/10 px-4 py-2 text-sm text-amber-200">
+          This account is disabled. You can still look around and export your data, but you can’t make changes.
+        </div>
+      )}
+
       {/* Main content */}
       <main id="main-content" tabIndex={-1} className="flex-1 flex flex-col overflow-hidden pb-16 sm:pb-0 focus:outline-none">{children}</main>
 

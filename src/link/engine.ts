@@ -71,6 +71,7 @@ export function startEngine(fastify: FastifyInstance) {
   async function sessionFor(owner: ObjectId) {
     const user = await fastify.mongo.collection('users').findOne({ _id: owner })
     if (!user) throw new Error('flow owner not found')
+    if (user['disabled_at']) throw new Error('flow owner is disabled')
     // Same shape auth.ts issues at sign-in: a user's org id is their own id.
     // Short-lived: this full-privilege token only needs to live for the
     // duration of one flow action's internal API calls (CWE-269).

@@ -199,7 +199,7 @@ async function main() {
 
       try {
         const user = await db.collection('users').findOne({ _id: pref['user_id'] })
-        if (!user) continue
+        if (!user || user['disabled_at']) continue
 
         // Find first trail space for this user
         const trailSpace = await db.collection('spaces').findOne({
@@ -252,7 +252,7 @@ async function main() {
 
     for (const card of dueToday) {
       const user = await db.collection('users').findOne({ _id: card['created_by'] })
-      if (!user) continue
+      if (!user || user['disabled_at']) continue
       const pref = await db.collection('notification_prefs').findOne({ user_id: user._id })
       const channels = (pref?.['channels'] as { telegram_chat_id?: string; email?: string } | undefined) ?? {}
       if (!channels.telegram_chat_id && !channels.email) continue
@@ -274,7 +274,7 @@ async function main() {
 
     for (const card of newlyOverdue) {
       const user = await db.collection('users').findOne({ _id: card['created_by'] })
-      if (!user) continue
+      if (!user || user['disabled_at']) continue
       const pref = await db.collection('notification_prefs').findOne({ user_id: user._id })
       const channels = (pref?.['channels'] as { telegram_chat_id?: string; email?: string } | undefined) ?? {}
 
@@ -300,7 +300,7 @@ async function main() {
 
       for (const card of escalating) {
         const user = await db.collection('users').findOne({ _id: card['created_by'] })
-        if (!user) continue
+        if (!user || user['disabled_at']) continue
         const pref = await db.collection('notification_prefs').findOne({ user_id: user._id })
         const channels = (pref?.['channels'] as { telegram_chat_id?: string; email?: string } | undefined) ?? {}
 
@@ -380,7 +380,7 @@ async function main() {
       await db.collection('board_cards').updateOne({ _id: card['_id'] }, { $set: { interval_notified: true } })
 
       const user = await db.collection('users').findOne({ _id: card['created_by'] })
-      if (!user) continue
+      if (!user || user['disabled_at']) continue
       const pref = await db.collection('notification_prefs').findOne({ user_id: user._id })
       const channels = (pref?.['channels'] as { telegram_chat_id?: string; email?: string } | undefined) ?? {}
       if (!channels.telegram_chat_id && !channels.email) continue

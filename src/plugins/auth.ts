@@ -8,6 +8,12 @@ import { scopesAllow } from '../lib/scopes.js'
 // key could mint itself a full one, or approve another app's connection.
 const SESSION_ONLY = ['/api/keys', '/api/connect/authorize']
 
+// A disabled account (users.disabled_at, set from /admin) can still sign in, look and export,
+// but changes nothing. The flag is read from the DB on every request, so disabling ends
+// writes at once — a session token issued earlier carries no say in it.
+const READ_METHODS = new Set(['GET', 'HEAD'])
+const DISABLED = { error: 'This account is disabled: it is read-only. You can still export your data.', code: 'ACCOUNT_DISABLED' }
+
 const authPlugin: FastifyPluginAsync = async (fastify) => {
   fastify.decorateRequest('user', undefined)
   fastify.decorateRequest('apiKeyId', undefined)
@@ -22,7 +28,10 @@ async function authenticate(req: FastifyRequest, reply: FastifyReply) {
   if (cookie) {
     const user = await verifyJWT(cookie).catch(() => null)
     if (user) {
-      req.user = user
+      const doc = await req.server.mongo.collection('users').findOne({ _id: user.id }, { projection: { disabled_at: 1 } })
+      if (!doc) return reply.status(401).send({ error: 'Authentication required' })
+      req.user = { ...user, disabled: !!doc['disabled_at'] }
+      if (req.user.disabled && !READ_METHODS.has(req.method)) return reply.status(403).send(DISABLED)
       return
     }
   }
@@ -34,6 +43,7 @@ async function authenticate(req: FastifyRequest, reply: FastifyReply) {
     if (!key) {
       return reply.status(401).send({ error: 'Invalid API key' })
     }
+    if (key.disabled) return reply.status(403).send(DISABLED)
     const route = req.routeOptions.url
     if (route && SESSION_ONLY.some(p => route === p || route.startsWith(p + '/'))) {
       return reply.status(403).send({ error: 'Not available to API keys' })

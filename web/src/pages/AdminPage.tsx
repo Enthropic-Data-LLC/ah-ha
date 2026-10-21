@@ -22,6 +22,7 @@ interface UserRow {
   last_seen: string | null
   onboarded: boolean
   admin: boolean
+  disabled_at: string | null
   spaces: number
   trail_30d: number
 }
@@ -77,12 +78,13 @@ function UserPanel({ id, onClose, onChanged }: { id: string; onClose: () => void
   const { data, mutate } = useSWR<{ data: UserDetail }>(`/api/admin/users/${id}`, fetcher)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [confirmDisable, setConfirmDisable] = useState(false)
   const u = data?.data
 
-  async function setPlan(plan: string) {
-    setSaving(true); setError('')
+  async function change(body: { plan?: string; disabled?: boolean }) {
+    setSaving(true); setError(''); setConfirmDisable(false)
     try {
-      await api.patch(`/api/admin/users/${id}`, { plan })
+      await api.patch(`/api/admin/users/${id}`, body)
       await mutate()
       onChanged()
     } catch (e) {
@@ -97,7 +99,7 @@ function UserPanel({ id, onClose, onChanged }: { id: string; onClose: () => void
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
           <h2 className="font-semibold truncate">{u ? (u.username ? `@${u.username}` : '(no username yet)') : 'Loading…'}</h2>
-          {u && <p className="text-sm text-slate-400 truncate">{u.email}{u.admin && ' · admin'}</p>}
+          {u && <p className="text-sm text-slate-400 truncate">{u.email}{u.admin && ' · admin'}{u.disabled_at && <span className="text-amber-300"> · disabled {fmt(u.disabled_at)}</span>}</p>}
         </div>
         <button onClick={onClose} className="text-sm text-slate-400 hover:text-slate-200 transition">Close</button>
       </div>
@@ -121,11 +123,25 @@ function UserPanel({ id, onClose, onChanged }: { id: string; onClose: () => void
               id="plan"
               value={u.plan}
               disabled={saving}
-              onChange={e => setPlan(e.target.value)}
+              onChange={e => change({ plan: e.target.value })}
               className="px-2 py-1 bg-slate-900 border border-slate-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
             >
               {PLANS.map(p => <option key={p} value={p}>{p}</option>)}
             </select>
+            {!u.admin && (u.disabled_at ? (
+              <button disabled={saving} onClick={() => change({ disabled: false })}
+                      className="ml-auto px-3 py-1 rounded-lg text-sm border border-slate-700 hover:bg-slate-800 transition">Enable account</button>
+            ) : confirmDisable ? (
+              <span className="ml-auto flex items-center gap-2 text-sm">
+                <span className="text-amber-200">Read-only, keys and automations off?</span>
+                <button disabled={saving} onClick={() => change({ disabled: true })}
+                        className="px-3 py-1 rounded-lg bg-amber-600 hover:bg-amber-500 text-white transition">Disable</button>
+                <button onClick={() => setConfirmDisable(false)} className="px-2 py-1 text-slate-400 hover:text-slate-200 transition">Cancel</button>
+              </span>
+            ) : (
+              <button onClick={() => setConfirmDisable(true)}
+                      className="ml-auto px-3 py-1 rounded-lg text-sm border border-amber-500/40 text-amber-300 hover:bg-amber-500/10 transition">Disable account</button>
+            ))}
             {saving && <span className="text-xs text-slate-400">Saving…</span>}
             {error && <span className="text-xs text-red-400" role="alert">{error}</span>}
           </div>
@@ -250,7 +266,7 @@ export default function AdminPage() {
               <tr key={u.id} className={`hover:bg-slate-900/40 transition-colors ${selected === u.id ? 'bg-slate-900/60' : ''}`}>
                 <td className="px-4 py-2.5">
                   <button onClick={() => setSelected(u.id)} className="text-left hover:text-indigo-300 transition">
-                    <span className="block">{u.username ? `@${u.username}` : <span className="text-slate-400">(no username)</span>}{u.admin && <span className="ml-2 text-xs text-indigo-400">admin</span>}</span>
+                    <span className="block">{u.username ? `@${u.username}` : <span className="text-slate-400">(no username)</span>}{u.admin && <span className="ml-2 text-xs text-indigo-400">admin</span>}{u.disabled_at && <span className="ml-2 text-xs text-amber-300">disabled</span>}</span>
                     <span className="block text-xs text-slate-400">{u.email}</span>
                   </button>
                 </td>

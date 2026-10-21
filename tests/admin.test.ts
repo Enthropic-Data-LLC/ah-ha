@@ -126,6 +126,35 @@ describe.skipIf(!ADMIN_EMAIL)('admin', () => {
     expect(after.body.data.plan).toBe('pro')
   })
 
+  it('disabling makes an account read-only and stops its keys; enabling undoes it', async () => {
+    const cookie = await claim(await login(`admin-d-${STAMP}@ah-ha.local`), `admd${STAMP}`.slice(0, 30))
+    const me = await raw<{ data: { id: string } }>(cookie, 'GET', '/auth/me')
+    const id = me.body.data.id
+    const key = (await raw<{ data: { key: string } }>(cookie, 'POST', '/api/keys', { name: 'before-disable' })).body.data.key
+    const bearer = { Authorization: `Bearer ${key}` }
+
+    expect((await raw(adminCookie, 'PATCH', `/api/admin/users/${id}`, { disabled: true })).status).toBe(200)
+
+    const after = await raw<{ data: { disabled: boolean } }>(cookie, 'GET', '/auth/me')
+    expect(after.body.data.disabled).toBe(true)
+    expect((await raw(cookie, 'GET', '/api/spaces')).status).toBe(200) // can still look
+    const write = await raw(cookie, 'POST', '/api/spaces', { type: 'list', name: 'blocked' })
+    expect(write.status).toBe(403)
+    expect(write.body.code).toBe('ACCOUNT_DISABLED')
+    expect((await raw('', 'GET', '/api/spaces', undefined, bearer)).status).toBe(403) // keys stop entirely
+    expect((await raw(adminCookie, 'GET', `/api/admin/users/${id}`)).body.data.disabled_at).toBeTruthy()
+
+    expect((await raw(adminCookie, 'PATCH', `/api/admin/users/${id}`, { disabled: false })).status).toBe(200)
+    expect((await raw(cookie, 'POST', '/api/spaces', { type: 'list', name: 'allowed again' })).status).toBe(201)
+    expect((await raw('', 'GET', '/api/spaces', undefined, bearer)).status).toBe(200)
+  })
+
+  it('an admin cannot be disabled from the panel, themselves included', async () => {
+    const me = await raw<{ data: { id: string } }>(adminCookie, 'GET', '/auth/me')
+    expect((await raw(adminCookie, 'PATCH', `/api/admin/users/${me.body.data.id}`, { disabled: true })).status).toBe(400)
+    expect((await raw(adminCookie, 'PATCH', `/api/admin/users/${me.body.data.id}`, {})).status).toBe(400)
+  })
+
   it("an admin's API key does not reach admin routes", async () => {
     const k = await raw<{ data: { id: string; key: string } }>(adminCookie, 'POST', '/api/keys', { name: `admin-test-${STAMP}` })
     expect(k.status).toBe(201)

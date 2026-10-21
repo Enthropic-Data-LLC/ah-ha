@@ -195,6 +195,7 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
       plan: user['plan'],
       onboarding_completed: user['onboarding_completed'],
       is_admin: isAdminEmail(user['email'] as string | undefined),
+      disabled: !!user['disabled_at'],
     }}
   })
 }

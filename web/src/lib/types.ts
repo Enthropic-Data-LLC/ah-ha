@@ -6,6 +6,8 @@ export interface User {
   orgId: string
   /** In the server's ADMIN_EMAILS: sees /admin. */
   is_admin?: boolean
+  /** Disabled from /admin: read-only, can still export. */
+  disabled?: boolean
 }
 
 export interface Space {

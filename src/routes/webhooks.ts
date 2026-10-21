@@ -115,6 +115,8 @@ const webhooksRoutes: FastifyPluginAsync = async (fastify) => {
       })
 
       if (!wh) return reply.status(404).send({ error: 'Webhook not found' })
+      const whOwner = await fastify.mongo.collection('users').findOne({ _id: wh['user_id'] as ObjectId }, { projection: { disabled_at: 1 } })
+      if (!whOwner || whOwner['disabled_at']) return reply.status(403).send({ error: 'This account is disabled', code: 'ACCOUNT_DISABLED' })
 
       // A secret is always required now (fail closed). Legacy secret-less
       // webhooks must be recreated before they can receive again.
