@@ -126,7 +126,7 @@ describe.skipIf(!ADMIN_EMAIL)('admin', () => {
     expect(after.body.data.plan).toBe('pro')
   })
 
-  it('disabling makes an account read-only and stops its keys; enabling undoes it', async () => {
+  it('disabling makes an account read-only (export still works) and stops its keys; enabling undoes it', async () => {
     const cookie = await claim(await login(`admin-d-${STAMP}@ah-ha.local`), `admd${STAMP}`.slice(0, 30))
     const me = await raw<{ data: { id: string } }>(cookie, 'GET', '/auth/me')
     const id = me.body.data.id
@@ -142,6 +142,9 @@ describe.skipIf(!ADMIN_EMAIL)('admin', () => {
     expect(write.status).toBe(403)
     expect(write.body.code).toBe('ACCOUNT_DISABLED')
     expect((await raw('', 'GET', '/api/spaces', undefined, bearer)).status).toBe(403) // keys stop entirely
+    const exported = await raw(cookie, 'GET', '/api/export') // can still take their data
+    expect(exported.status).toBe(200)
+    expect((await raw(cookie, 'POST', '/api/import', exported.body)).status).toBe(403)
     expect((await raw(adminCookie, 'GET', `/api/admin/users/${id}`)).body.data.disabled_at).toBeTruthy()
 
     expect((await raw(adminCookie, 'PATCH', `/api/admin/users/${id}`, { disabled: false })).status).toBe(200)

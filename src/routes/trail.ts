@@ -25,7 +25,7 @@ const queryParams = z.object({
   cursor: z.string().optional(),      // ISO timestamp for pagination
 })
 
-function hashEntry(id: string, ts: Date, text: string): string {
+export function hashEntry(id: string, ts: Date, text: string): string {
   return createHash('sha256').update(`${id}|${ts.toISOString()}|${text}`).digest('hex')
 }
 

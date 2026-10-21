@@ -29,6 +29,7 @@ import TagsPage from './pages/TagsPage'
 import TagsPrintPage from './pages/TagsPrintPage'
 import HelpPage from './pages/HelpPage'
 import AdminPage from './pages/AdminPage'
+import DataPage from './pages/DataPage'
 import SkipLink from './components/SkipLink'
 import { isToday, hasToday, todayOnData, homePath, otherFace, TODAY_PATHS } from './lib/surface'
 
@@ -116,6 +117,7 @@ function Shell({ children }: { children: React.ReactNode }) {
               {!isToday && navLink('/trackers', 'Trackers')}
               {!isToday && navLink('/tags', 'Tags')}
               {!isToday && navLink('/keys', 'API Keys')}
+              {!isToday && navLink('/data', 'Export')}
               {navLink('/calendar', 'Calendar')}
               {navLink('/settings', 'Settings')}
               {navLink('/help', 'Help')}
@@ -170,6 +172,7 @@ function Shell({ children }: { children: React.ReactNode }) {
               {!isToday && drawerLink('/audit', '📋  Audit Log')}
               {!isToday && drawerLink('/mqtt', '📡  MQTT')}
               {!isToday && drawerLink('/webhooks', '🔗  Webhooks')}
+              {!isToday && drawerLink('/data', '📦  Export & import')}
               <p className="text-[10px] font-mono uppercase tracking-wider text-slate-600 px-3 pb-1 pt-3">More</p>
               {drawerLink('/help', '❓  Help')}
               {drawerLink('/feedback', '💬  Send feedback')}
@@ -183,7 +186,7 @@ function Shell({ children }: { children: React.ReactNode }) {
 
       {user?.disabled && (
         <div role="status" className="border-b border-amber-500/30 bg-amber-500/10 px-4 py-2 text-sm text-amber-200">
-          This account is disabled. You can still look around and export your data, but you can’t make changes.
+          This account is disabled. You can still look around and <a href="/data" className="underline hover:text-amber-100">export your data</a>, but you can’t make changes.
         </div>
       )}
 
@@ -332,6 +335,9 @@ export default function App() {
   if (path === '/audit') {
     return <Shell><AuditPage /></Shell>
   }
+
+  // Export & import
+  if (path === '/data') return <Shell><DataPage /></Shell>
 
   // Admin (the server answers 404 to anyone not in ADMIN_EMAILS)
   if (path === '/admin') return <Shell><AdminPage /></Shell>

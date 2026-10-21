@@ -18,7 +18,7 @@ const magicLinkBody = z.object({
 
 // Top-level paths the web app owns; a user with one of these names would be unreachable at /:username.
 const RESERVED_USERNAMES = new Set([
-  'accessibility', 'admin', 'android', 'api', 'assets', 'audit', 'auth', 'calendar', 'connect', 'download',
+  'accessibility', 'admin', 'android', 'data', 'api', 'assets', 'audit', 'auth', 'calendar', 'connect', 'download',
   'healthz', 'help', 'icons', 'keys', 'mqtt', 'now', 'onboarding', 'privacy', 'search', 'settings', 'spaces',
   'tags', 'terms', 'webhooks', 'feedback', 'trackers',
 ])

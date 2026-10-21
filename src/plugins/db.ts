@@ -39,6 +39,7 @@ async function ensureIndexes(db: Db) {
       { unique: true, name: 'username_unique_when_set', partialFilterExpression: { username: { $type: 'string' } } },
     ),
     db.collection('spaces').createIndex({ ref: 1 }, { unique: true }),
+    db.collection('imports').createIndex({ org_id: 1, export_id: 1 }, { unique: true }),
     db.collection('spaces').createIndex({ owner_id: 1, org_id: 1 }),
     db.collection('spaces').createIndex({ org_id: 1, type: 1 }),
     db.collection('board_cards').createIndex({ space_id: 1, org_id: 1, column_id: 1, position: 1 }),

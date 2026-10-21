@@ -42,6 +42,7 @@ import connectRoutes from './routes/connect.js'
 import trackerRoutes from './trackers/routes.js'
 import feedbackRoutes from './routes/feedback.js'
 import adminRoutes from './routes/admin.js'
+import portabilityRoutes from './routes/portability.js'
 import pushRoutes from './push/routes.js'
 import { startTrackers } from './trackers/engine.js'
 import linkRoutes from './routes/link.js'
@@ -98,6 +99,8 @@ const TIGHT_AUTH = new Set([
   '/auth/dev-link',
   '/api/auth/verify',
   '/api/feedback', // public input: one form, not a firehose
+  '/api/export',   // the whole account, both ways: heavy, and never needed often
+  '/api/import',
 ])
 
 fastify.addHook('onRoute', (route) => {
@@ -217,6 +220,7 @@ await fastify.register(async (sub) => {
   await sub.register(trackerRoutes)
   await sub.register(feedbackRoutes)
   await sub.register(adminRoutes)
+  await sub.register(portabilityRoutes)
   await sub.register(pushRoutes)
   await sub.register(linkRoutes, { engine: () => linkEngine })
 })

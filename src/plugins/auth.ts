@@ -6,7 +6,7 @@ import { scopesAllow } from '../lib/scopes.js'
 
 // Never reachable with an API key, whatever its scopes or access: otherwise a limited
 // key could mint itself a full one, or approve another app's connection.
-const SESSION_ONLY = ['/api/keys', '/api/connect/authorize']
+const SESSION_ONLY = ['/api/keys', '/api/connect/authorize', '/api/export', '/api/import']
 
 // A disabled account (users.disabled_at, set from /admin) can still sign in, look and export,
 // but changes nothing. The flag is read from the DB on every request, so disabling ends
