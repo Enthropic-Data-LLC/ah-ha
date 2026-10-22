@@ -23,6 +23,10 @@ export function cardsCore(fastify: FastifyInstance) {
     overdue: (c: Caller, before: Date, now: Date, limit: number) =>
       cards().find({ ...open(c), due_date: { $lt: before }, ...visibleAt(now) }).sort({ due_date: 1 }).limit(limit).toArray(),
 
+    /** Open cards due after [after] and up to [until] (null = no end), soonest first. */
+    dueAfter: (c: Caller, after: Date, until: Date | null, now: Date, limit: number) =>
+      cards().find({ ...open(c), due_date: { $gt: after, ...(until ? { $lte: until } : {}) }, ...visibleAt(now) }).sort({ due_date: 1 }).limit(limit).toArray(),
+
     /** Open cards due in [start, end], highest priority first. */
     dueBetween: (c: Caller, start: Date, end: Date, now: Date, limit: number) =>
       cards().find({ ...open(c), due_date: { $gte: start, $lte: end }, ...visibleAt(now) }).sort({ priority: -1 }).limit(limit).toArray(),

@@ -3,8 +3,10 @@ import { fetcher, api } from '../lib/api'
 import { useState, useEffect } from 'react'
 import { useMe } from '../hooks/useMe'
 import ConfirmDeleteModal from '../components/ConfirmDeleteModal'
+import { useSpaceName } from '../hooks/useSpaceName'
 
 export default function NotePage({ slug }: { slug: string }) {
+  const spaceName = useSpaceName('note', slug)
   const { user } = useMe()
   const [showDelete, setShowDelete] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -61,7 +63,7 @@ export default function NotePage({ slug }: { slug: string }) {
   return (
     <div className="flex flex-col h-full max-w-3xl mx-auto w-full px-4 py-8 space-y-3">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold capitalize">{slug}</h1>
+        <h1 className="text-xl font-bold">{spaceName}</h1>
         <div className="flex items-center gap-3">
           {saveError && <span className="text-xs text-red-400">{saveError}</span>}
           {!saveError && savedAt && !dirty && (
@@ -90,7 +92,7 @@ export default function NotePage({ slug }: { slug: string }) {
 
       {showDelete && (
         <ConfirmDeleteModal
-          name={slug}
+          name={spaceName || slug}
           type="note"
           onConfirm={deleteSpace}
           onCancel={() => setShowDelete(false)}

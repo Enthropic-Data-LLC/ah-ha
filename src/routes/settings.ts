@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
 import { sealSecret, openSecret } from '../lib/secret-box.js'
+import { DUE_WINDOWS } from '../core/settings.js'
 
 const settingsRoutes: FastifyPluginAsync = async (fastify) => {
   // GET /api/settings
@@ -15,6 +16,7 @@ const settingsRoutes: FastifyPluginAsync = async (fastify) => {
           anthropic_api_key: (() => { const k = openSecret(settings?.['anthropic_api_key'] as string | null); return k ? '••••' + k.slice(-4) : null })(),
           has_anthropic_key: !!(settings?.['anthropic_api_key']),
           today_limit: (settings?.['today_limit'] as number | null | undefined) ?? null,
+          due_window: (settings?.['due_window'] as number | 'all' | undefined) ?? null,
         }
       }
     }
@@ -29,6 +31,8 @@ const settingsRoutes: FastifyPluginAsync = async (fastify) => {
         anthropic_api_key: z.string().min(1).optional().nullable(),
         // Ah! Today shows at most this many items; null = no limit.
         today_limit: z.number().int().min(1).max(100).nullable().optional(),
+        // The date-range slider (board, Ah! Today, the phone): days ahead, or 'all'.
+        due_window: z.union([z.literal('all'), z.number().int().refine(n => DUE_WINDOWS.includes(n as never), 'Not a slider stop')]).optional(),
       }).parse(req.body)
 
       const update: Record<string, unknown> = { user_id: req.user!.id, updated_at: new Date() }
@@ -36,6 +40,7 @@ const settingsRoutes: FastifyPluginAsync = async (fastify) => {
         update['anthropic_api_key'] = body.anthropic_api_key ? sealSecret(body.anthropic_api_key) : null
       }
       if (body.today_limit !== undefined) update['today_limit'] = body.today_limit
+      if (body.due_window !== undefined) update['due_window'] = body.due_window
 
       await fastify.mongo.collection('user_settings').updateOne(
         { user_id: req.user!.id },

@@ -6,6 +6,7 @@ import { createMagicToken, consumeMagicToken } from '../lib/magic-link.js'
 import { sendMagicLink } from '../lib/email.js'
 import { signJWT } from '../lib/jwt.js'
 import { seedStarterContent } from '../lib/seed-starter.js'
+import { userTz } from '../lib/repeat.js'
 import { issueChallenge, verifyPow } from '../lib/pow.js'
 import { sessionCookieOptions, webBaseFor } from '../lib/hosts.js'
 import { isAdminEmail } from '../lib/admin.js'
@@ -113,7 +114,11 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post('/auth/claim-username', {
     preHandler: fastify.authenticate,
   }, async (req, reply) => {
-    const body = z.object({ username: z.string().min(3).max(32).regex(/^[a-z0-9-]+$/) }).parse(req.body)
+    const body = z.object({
+      username: z.string().min(3).max(32).regex(/^[a-z0-9-]+$/),
+      // The browser's time zone, so the starter cards are due "today" where the user is.
+      tz: z.string().max(64).optional(),
+    }).parse(req.body)
     if (RESERVED_USERNAMES.has(body.username)) return reply.status(409).send({ error: 'Username taken' })
 
     const existing = await fastify.mongo.collection('users').findOne({ username: body.username })
@@ -140,7 +145,11 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
     // First onboarding only; best-effort — must never block or fail sign-up.
     if (firstOnboarding) {
       try {
-        await seedStarterContent(fastify, { userId: req.user!.id, orgId: req.user!.orgId, username: body.username })
+        const tz = (() => { try { Intl.DateTimeFormat(undefined, { timeZone: body.tz }); return body.tz } catch { return undefined } })()
+        await seedStarterContent(fastify, {
+          userId: req.user!.id, orgId: req.user!.orgId, username: body.username,
+          tz: tz ?? await userTz(fastify, req.user!.id),
+        })
       } catch (e) {
         req.log.error({ err: e }, 'starter content seed failed')
       }

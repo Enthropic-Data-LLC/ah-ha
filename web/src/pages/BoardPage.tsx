@@ -2,13 +2,16 @@ import { useState, useRef } from 'react'
 import { DragDropContext, Droppable, type DropResult } from '@hello-pangea/dnd'
 import { useBoardColumns, useBoardCards, useBoardActions } from '../hooks/useBoard'
 import { useMe } from '../hooks/useMe'
-import { api } from '../lib/api'
+import useSWR from 'swr'
+import { api, fetcher } from '../lib/api'
+import { DUE_WINDOWS, dueWindowLabel, type DueWindow } from '../lib/dueWindow'
 import BoardCardItem from '../components/BoardCard'
 import CardModal from '../components/CardModal'
 import TagSheet from '../components/TagSheet'
 import ConfirmDeleteModal from '../components/ConfirmDeleteModal'
 import ColumnSettings, { type ColumnChanges } from '../components/ColumnSettings'
 import type { BoardCard, BoardColumn } from '../lib/types'
+import { useSpaceName } from '../hooks/useSpaceName'
 
 interface Props {
   slug: string
@@ -61,6 +64,7 @@ function AddCardForm({ columnId, onAdd }: { columnId: string; onAdd: (title: str
 }
 
 export default function BoardPage({ slug }: Props) {
+  const spaceName = useSpaceName('board', slug)
   const { data: colData, mutate: mutateColumns } = useBoardColumns(slug)
   const { data: cardData, mutate: mutateCards } = useBoardCards(slug)
   const actions = useBoardActions(slug)
@@ -196,21 +200,31 @@ export default function BoardPage({ slug }: Props) {
   }
 
   // Date range filter
-  const SLIDER_STEPS = [1, 3, 7, 14, 30, Infinity]
-  const SLIDER_LABELS = ['Today', '3 days', '1 week', '2 weeks', '30 days', 'All']
-  const [sliderStep, setSliderStep] = useState(5) // default: All
+  // One setting per account (lib/dueWindow), saved as the slider moves; never set = All here.
+  const { data: settings } = useSWR<{ data: { due_window: DueWindow | null } }>('/api/settings', fetcher)
+  const [localWindow, setLocalWindow] = useState<DueWindow | null>(null)
+  const dueWindow: DueWindow = localWindow ?? settings?.data?.due_window ?? 'all'
+  const sliderStep = DUE_WINDOWS.indexOf(dueWindow)
+  const saveWindow = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  function setSliderStep(step: number) {
+    const w = DUE_WINDOWS[step]!
+    setLocalWindow(w)
+    clearTimeout(saveWindow.current)
+    saveWindow.current = setTimeout(() => { api.put('/api/settings', { due_window: w }).catch(() => {}) }, 400)
+  }
   const [showUndated, setShowUndated] = useState(true)
 
-  const dueDays = SLIDER_STEPS[sliderStep]
 
   function cardVisible(card: BoardCard): boolean {
     const now = new Date()
     const isDeferred = card.defer_until && new Date(card.defer_until) > now
     const hasDueDate = !!card.due_date && !isDeferred
     if (!hasDueDate) return showUndated
-    if (dueDays === Infinity) return true
-    const cutoff = new Date(now.getTime() + dueDays * 86400000)
+    if (dueWindow === 'all') return true
+    // Today counts as day 1, so "3 days" is today, tomorrow and the day after.
+    const cutoff = new Date(now)
     cutoff.setHours(23, 59, 59, 999)
+    cutoff.setDate(cutoff.getDate() + dueWindow - 1)
     return new Date(card.due_date!) <= cutoff
   }
 
@@ -272,7 +286,7 @@ export default function BoardPage({ slug }: Props) {
       {/* Board header */}
       <div className="flex flex-col border-b border-slate-800 flex-shrink-0">
         <div className="flex items-center justify-between px-6 py-3">
-          <h1 className="font-semibold capitalize">{slug}</h1>
+          <h1 className="font-semibold">{spaceName}</h1>
           <div className="flex items-center gap-2">
           <button
             onClick={addColumn}
@@ -322,7 +336,7 @@ export default function BoardPage({ slug }: Props) {
         <div className="px-4 pb-3 flex items-center gap-2">
           {/* Calendar-check icon — dated filter label */}
           <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"
-            className={`w-4 h-4 flex-shrink-0 ${sliderStep < 5 ? 'text-indigo-400' : 'text-slate-600'}`}>
+            className={`w-4 h-4 flex-shrink-0 ${dueWindow !== 'all' ? 'text-indigo-400' : 'text-slate-600'}`}>
             <rect x="1.5" y="2.5" width="13" height="12" rx="1.5"/>
             <line x1="5" y1="1" x2="5" y2="4"/>
             <line x1="11" y1="1" x2="11" y2="4"/>
@@ -332,7 +346,7 @@ export default function BoardPage({ slug }: Props) {
           <input
             type="range"
             min={0}
-            max={5}
+            max={DUE_WINDOWS.length - 1}
             step={1}
             value={sliderStep}
             onChange={e => {
@@ -341,8 +355,8 @@ export default function BoardPage({ slug }: Props) {
             }}
             className="flex-1 h-1 accent-indigo-500 cursor-pointer"
           />
-          <span className={`text-xs w-12 text-right flex-shrink-0 tabular-nums ${sliderStep < 5 ? 'text-indigo-400' : 'text-slate-600'}`}>
-            {SLIDER_LABELS[sliderStep]}
+          <span className={`text-xs w-12 text-right flex-shrink-0 tabular-nums ${dueWindow !== 'all' ? 'text-indigo-400' : 'text-slate-600'}`}>
+            {dueWindowLabel(dueWindow)}
           </span>
           {/* Calendar-no icon — undated toggle */}
           <button
@@ -507,7 +521,7 @@ export default function BoardPage({ slug }: Props) {
 
       {showDelete && (
         <ConfirmDeleteModal
-          name={slug}
+          name={spaceName || slug}
           type="board"
           onConfirm={deleteSpace}
           onCancel={() => setShowDelete(false)}

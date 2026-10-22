@@ -52,7 +52,10 @@ const BOARD_MAX = 20
  * cut off. The focus card and calendar are not counted.
  */
 const LIMIT_ORDER = ['urgent', 'habits', 'due_today', 'location_context', 'board', 'resurfaced',
-  'entity_list_items', 'list_items', 'nudges'] as const
+  'entity_list_items', 'list_items', 'nudges', 'upcoming'] as const
+
+/** Ah! Today's "Coming up": at most this many, soonest first. */
+const UPCOMING_MAX = 5
 
 function applyLimit<T extends Record<(typeof LIMIT_ORDER)[number], unknown[]>>(sections: T, max: number | null) {
   const total = LIMIT_ORDER.reduce((n, k) => n + sections[k].length, 0)
@@ -139,6 +142,22 @@ const nowRoutes: FastifyPluginAsync = async (fastify) => {
 
       // List items due today
       const listItems = await c.lists.dueBy(caller, todayEnd, now, 10)
+
+      // Coming up: what's due after today, as far ahead as the person's slider reaches.
+      // Never set, or set to Today, adds nothing; 'all' takes the soonest few, however far.
+      const dueWindow = await c.settings.dueWindow(caller).catch(() => null)
+      let upcoming: Array<{ _id: unknown; title: unknown; due: unknown; kind: 'card' | 'item'; ref?: unknown }> = []
+      if (dueWindow != null && dueWindow !== 1) {
+        const until = dueWindow === 'all' ? null : new Date(todayEnd.getTime() + (dueWindow - 1) * 86400000)
+        const [cardsAhead, itemsAhead] = await Promise.all([
+          c.cards.dueAfter(caller, todayEnd, until, now, UPCOMING_MAX),
+          c.lists.dueAfter(caller, todayEnd, until, now, UPCOMING_MAX),
+        ])
+        upcoming = [
+          ...cardsAhead.map(d => ({ _id: d['_id'], title: d['title'], due: d['due_date'], kind: 'card' as const, ref: d['ref'] })),
+          ...itemsAhead.map(i => ({ _id: i['_id'], title: i['title'], due: i['due_at'], kind: 'item' as const })),
+        ].sort((a, b) => new Date(a.due as Date).getTime() - new Date(b.due as Date).getTime()).slice(0, UPCOMING_MAX)
+      }
 
       // Entity-tagged list items — surface when checked in, regardless of due date
       let entityListItems: Array<{ _id: string; title: string; space_ref?: string; contexts: unknown; repeat: string }> = []
@@ -354,6 +373,7 @@ const nowRoutes: FastifyPluginAsync = async (fastify) => {
         entity_list_items: entityListItems,
         list_items: listItems.map(i => ({ _id: i['_id'], title: i['title'], due_at: i['due_at'], repeat: i['repeat'] ?? 'once' })),
         nudges:     nudges.map(c => ({ _id: c['_id'], title: c['title'], ref: c['ref'], recurrence: c['recurrence'], created_at: c['created_at'] })),
+        upcoming,
       }, await c.settings.todayLimit(caller).catch(() => null))
 
       return {
@@ -366,6 +386,7 @@ const nowRoutes: FastifyPluginAsync = async (fastify) => {
           },
           ...sections,
           limit,
+          due_window: dueWindow,
           trail_pulse: trailPulse,
           calendar_events: calendarEvents,
           briefing,

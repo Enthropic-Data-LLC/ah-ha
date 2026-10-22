@@ -3,6 +3,7 @@ import { fetcher, api } from '../lib/api'
 import { useState, useRef, useEffect } from 'react'
 import { useMe } from '../hooks/useMe'
 import ConfirmDeleteModal from '../components/ConfirmDeleteModal'
+import { useSpaceName } from '../hooks/useSpaceName'
 
 type ColType = 'text' | 'number' | 'date' | 'checkbox' | 'select' | 'multiselect'
 
@@ -130,6 +131,7 @@ function CellEditor({
 }
 
 export default function TablePage({ slug }: { slug: string }) {
+  const spaceName = useSpaceName('table', slug)
   const { user } = useMe()
   const [showDelete, setShowDelete] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -199,7 +201,7 @@ export default function TablePage({ slug }: { slug: string }) {
     <div className="flex flex-col h-full px-4 py-6 gap-4">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-        <h1 className="text-xl font-bold capitalize">{slug}</h1>
+        <h1 className="text-xl font-bold">{spaceName}</h1>
         <button onClick={() => setShowDelete(true)} className="text-slate-700 hover:text-red-400 text-xs transition" title="Delete table">✕</button>
       </div>
         <button
@@ -334,7 +336,7 @@ export default function TablePage({ slug }: { slug: string }) {
 
       {showDelete && (
         <ConfirmDeleteModal
-          name={slug}
+          name={spaceName || slug}
           type="table"
           onConfirm={deleteSpace}
           onCancel={() => setShowDelete(false)}

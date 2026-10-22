@@ -9,6 +9,7 @@ const TYPE_ICONS: Record<string, string> = {
   trail: '📍',
   note: '📝',
   list: '✅',
+  table: '🧮',
 }
 
 const TYPE_LABELS: Record<string, string> = {
@@ -16,6 +17,7 @@ const TYPE_LABELS: Record<string, string> = {
   trail: 'Trail',
   note: 'Note',
   list: 'List',
+  table: 'Table',
 }
 
 function toSlug(name: string) {
@@ -32,6 +34,25 @@ export default function SpacesPage() {
   const [submitting, setSubmitting] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const { data: examples, mutate: mutateExamples } = useSWR<{ data: { spaces: number; places: number } }>('/api/examples', fetcher)
+  const [clearAsk, setClearAsk] = useState(false)
+  const [clearing, setClearing] = useState(false)
+  const [cleared, setCleared] = useState('')
+
+  async function clearExamples() {
+    setClearing(true)
+    try {
+      const r = await api.post<{ data: { items: number; cards: number; spaces: number; places: number } }>('/api/examples/clear', {})
+      const d = (r as { data: { spaces: number; places: number } }).data
+      setCleared(`Cleared ${d.spaces} example space${d.spaces === 1 ? '' : 's'} and ${d.places} place${d.places === 1 ? '' : 's'}. Anything you added is still there.`)
+      setClearAsk(false)
+      await Promise.all([mutate(), mutateExamples()])
+    } catch (err: any) {
+      setError(err?.message ?? 'Failed to clear examples')
+    } finally {
+      setClearing(false)
+    }
+  }
 
   async function createSpace(e: React.FormEvent) {
     e.preventDefault()
@@ -79,6 +100,26 @@ export default function SpacesPage() {
         </button>
       </div>
 
+      {examples && examples.data.spaces + examples.data.places > 0 && !creating && (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-slate-400 bg-slate-900 border border-slate-800 rounded-xl px-4 py-3">
+          {clearAsk ? (
+            <>
+              <span className="flex-1 min-w-[12rem]">Clear the examples? Anything you added to them stays.</span>
+              <button onClick={clearExamples} disabled={clearing} className="px-3 py-1 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-xs font-medium rounded-lg transition">
+                {clearing ? 'Clearing…' : 'Yes, clear'}
+              </button>
+              <button onClick={() => setClearAsk(false)} className="text-xs text-slate-500 hover:text-slate-300">Cancel</button>
+            </>
+          ) : (
+            <>
+              <span className="flex-1 min-w-[12rem]">Some of these are examples to get you started.</span>
+              <button onClick={() => { setClearAsk(true); setCleared('') }} className="text-xs text-indigo-400 hover:text-indigo-300 underline">Clear examples</button>
+            </>
+          )}
+        </div>
+      )}
+      {cleared && <p className="text-sm text-slate-400">{cleared}</p>}
+
       {creating && (
         <form onSubmit={createSpace} className="bg-slate-900 border border-slate-700 rounded-xl p-4 space-y-3">
           <h2 className="text-sm font-semibold">New space</h2>
@@ -94,8 +135,8 @@ export default function SpacesPage() {
           {name && (
             <p className="text-xs text-slate-500">slug: <span className="text-slate-400">{toSlug(name)}</span></p>
           )}
-          <div className="grid grid-cols-4 gap-2">
-            {(['board', 'trail', 'note', 'list'] as const).map(t => (
+          <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
+            {(['board', 'trail', 'note', 'list', 'table'] as const).map(t => (
               <button
                 key={t}
                 type="button"

@@ -4,6 +4,7 @@ import { useRef, useState } from 'react'
 import { useMe } from '../hooks/useMe'
 import CardModal from '../components/CardModal'
 import type { BoardCard, BoardColumn, Entity } from '../lib/types'
+import { DUE_WINDOWS, dueWindowLabel, type DueWindow } from '../lib/dueWindow'
 
 interface NowCard { _id: string; title: string; due_date?: string; priority?: string; ref?: string; created_at?: string; recurrence?: { archetype: string; streak_count?: number; time_anchor?: string; interval_days?: number; last_completed_at?: string | null } }
 interface NowBoardCard extends NowCard { column: string; column_priority: number }
@@ -29,6 +30,9 @@ interface NowData {
   location_context: NowCard[]
   board?: NowBoardCard[]
   limit?: { max: number | null; total: number; hidden: number }
+  /** Due after today, as far ahead as the account's date-range setting reaches. */
+  upcoming?: Array<{ _id: string; title: string; due: string; kind: 'card' | 'item'; ref?: string }>
+  due_window?: DueWindow | null
   trail_pulse: { recent_tone: string; total_today: number } | null
   briefing: string | null
   /** Statuses kept by trackers (Trackers page), switched on for Today. */
@@ -227,6 +231,11 @@ export default function NowPage() {
     await mutate()
   }
 
+  async function setDueWindow(due_window: DueWindow) {
+    await api.put('/api/settings', { due_window })
+    await mutate()
+  }
+
   async function setLimit(today_limit: number | null) {
     await api.put('/api/settings', { today_limit })
     await mutate()
@@ -246,7 +255,8 @@ export default function NowPage() {
   }
 
   const board = now.board ?? []
-  const total = now.urgent.length + now.due_today.length + now.habits.length + now.resurfaced.length + now.list_items.length + now.nudges.length + now.entity_list_items.length + board.length
+  const upcoming = now.upcoming ?? []
+  const total = now.urgent.length + now.due_today.length + now.habits.length + now.resurfaced.length + now.list_items.length + now.nudges.length + now.entity_list_items.length + board.length + upcoming.length
   const isEmpty = total === 0
 
   return (
@@ -492,6 +502,20 @@ export default function NowPage() {
         ))}
       </Section>
 
+      {/* Coming up: due after today, within the account's date range */}
+      <Section title="Coming up" count={upcoming.length} accent="text-slate-500">
+        {upcoming.map(u => (
+          <div key={u._id} className="flex items-center gap-3 py-2.5 px-3">
+            <button
+              onClick={() => u.ref && openCard(u.ref, u._id)}
+              disabled={!u.ref}
+              className="text-sm text-slate-300 flex-1 truncate text-left enabled:hover:text-indigo-300 transition"
+            >{u.title}</button>
+            <DueLabel due={u.due} />
+          </div>
+        ))}
+      </Section>
+
       {/* Nudges (interval recurrence) */}
       {now.nudges.length > 0 && (
         <div className="space-y-1 border-t border-slate-800/60 pt-4">
@@ -525,6 +549,17 @@ export default function NowPage() {
             {LIMIT_CHOICES.map(n => <option key={n} value={n}>{n}</option>)}
           </select>
           items
+        </label>
+        <span>·</span>
+        <label className="flex items-center gap-1">
+          Look ahead
+          <select
+            value={String(now.due_window ?? 1)}
+            onChange={e => setDueWindow(e.target.value === 'all' ? 'all' : Number(e.target.value) as DueWindow)}
+            className="bg-slate-900 border border-slate-800 rounded text-slate-400 px-1 py-0.5"
+          >
+            {DUE_WINDOWS.map(w => <option key={w} value={String(w)}>{dueWindowLabel(w)}</option>)}
+          </select>
         </label>
       </div>
     </div>

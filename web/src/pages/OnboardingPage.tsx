@@ -13,7 +13,7 @@ export default function OnboardingPage() {
     setLoading(true)
     setError('')
     try {
-      await api.post('/auth/claim-username', { username })
+      await api.post('/auth/claim-username', { username, tz: Intl.DateTimeFormat().resolvedOptions().timeZone })
       await mutate('/auth/me')
       window.location.href = homePath
     } catch (err) {

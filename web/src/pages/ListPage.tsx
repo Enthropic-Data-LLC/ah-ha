@@ -4,8 +4,10 @@ import { useState } from 'react'
 import { useMe } from '../hooks/useMe'
 import ConfirmDeleteModal from '../components/ConfirmDeleteModal'
 import type { Entity, ListItem } from '../lib/types'
+import { useSpaceName } from '../hooks/useSpaceName'
 
 export default function ListPage({ slug }: { slug: string }) {
+  const spaceName = useSpaceName('list', slug)
   const { user } = useMe()
   const [showDelete, setShowDelete] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -77,7 +79,7 @@ export default function ListPage({ slug }: { slug: string }) {
     <>
     <div className="max-w-2xl mx-auto px-4 py-8 space-y-6">
       <div className="flex items-center gap-2">
-        <h1 className="text-xl font-bold capitalize">{slug}</h1>
+        <h1 className="text-xl font-bold">{spaceName}</h1>
         <button onClick={() => setShowDelete(true)} className="text-slate-700 hover:text-red-400 text-xs transition" title="Delete list">✕</button>
       </div>
 
@@ -201,7 +203,7 @@ export default function ListPage({ slug }: { slug: string }) {
 
     {showDelete && (
       <ConfirmDeleteModal
-        name={slug}
+        name={spaceName || slug}
         type="list"
         onConfirm={deleteSpace}
         onCancel={() => setShowDelete(false)}

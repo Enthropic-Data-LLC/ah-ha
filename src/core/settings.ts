@@ -3,6 +3,10 @@ import type { Caller } from './index.js'
 import { openSecret } from '../lib/secret-box.js'
 import { recordAi, blockedBy } from '../lib/usage.js'
 
+/** The stops on the date-range slider, in days from today (1 = today only), plus 'all'. */
+export const DUE_WINDOWS = [1, 2, 3, 5, 8] as const
+export type DueWindow = typeof DUE_WINDOWS[number] | 'all'
+
 export function settingsCore(fastify: FastifyInstance) {
   return {
     /**
@@ -24,6 +28,13 @@ export function settingsCore(fastify: FastifyInstance) {
       const s = await fastify.mongo.collection('user_settings').findOne({ user_id: c.userId })
       const n = s?.['today_limit']
       return typeof n === 'number' && n > 0 ? n : null
+    },
+
+    /** How far ahead the person looks (the board slider, synced): days, 'all', or null if never set. */
+    dueWindow: async (c: Caller): Promise<DueWindow | null> => {
+      const s = await fastify.mongo.collection('user_settings').findOne({ user_id: c.userId })
+      const w = s?.['due_window']
+      return w === 'all' || DUE_WINDOWS.includes(w as never) ? w as DueWindow : null
     },
   }
 }

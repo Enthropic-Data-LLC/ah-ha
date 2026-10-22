@@ -8,7 +8,7 @@ import { blockedBy } from '../lib/usage.js'
 const RESERVED_USERNAMES = new Set(['api', 'auth', 'app', 'settings', 'admin', 'www', 'status', 'docs', 'blog', 'onboarding'])
 const SLUG_RE = /^[a-z0-9-]{3,64}$/
 
-const DEFAULT_BOARD_COLUMNS = [
+export const DEFAULT_BOARD_COLUMNS = [
   { title: 'To Do',       color: '#94a3b8' },
   { title: 'In Progress', color: '#818cf8', in_today: true, today_priority: 1 },
   { title: 'Done',        color: '#34d399', closes: 'done' },
@@ -145,6 +145,57 @@ const spacesRoutes: FastifyPluginAsync = async (fastify) => {
       return { ok: true }
     }
   )
+
+  // GET /api/examples — how many starter examples (spaces + places) are still there
+  fastify.get('/api/examples', { preHandler: fastify.authenticate }, async (req) => {
+    const live = { org_id: req.user!.orgId, example: true, deleted_at: { $exists: false } }
+    const [spaces, places] = await Promise.all([
+      fastify.mongo.collection('spaces').countDocuments(live),
+      fastify.mongo.collection('entities').countDocuments(live),
+    ])
+    return { data: { spaces, places } }
+  })
+
+  // POST /api/examples/clear — remove the starter examples the user hasn't taken over.
+  // Example items and cards go. A space goes only if nothing of the user's own is left in it
+  // (a note: if it was never saved); a place only if it was never changed and none of the
+  // user's own list items is tagged to it. Soft deletes, like every other delete. What stays
+  // is the user's now, so it stops counting as an example.
+  fastify.post('/api/examples/clear', { preHandler: fastify.authenticate }, async (req) => {
+    const db = fastify.mongo
+    const orgId = req.user!.orgId
+    const now = new Date()
+    const live = { org_id: orgId, deleted_at: { $exists: false } }
+    const gone = { $set: { deleted_at: now } }
+    const keep = { $unset: { example: '' } }
+
+    const items = await db.collection('list_items').updateMany({ ...live, example: true }, gone)
+    const cards = await db.collection('board_cards').updateMany({ ...live, example: true }, gone)
+
+    let spaces = 0
+    for (const sp of await db.collection('spaces').find({ ...live, example: true }).toArray()) {
+      const id = sp._id
+      const kept = sp['type'] === 'list' ? await db.collection('list_items').countDocuments({ ...live, space_id: id })
+        : sp['type'] === 'board' ? await db.collection('board_cards').countDocuments({ ...live, space_id: id })
+        : sp['type'] === 'note' ? await db.collection('note_content').countDocuments(
+          { org_id: orgId, space_id: id, $or: [{ example: { $ne: true } }, { updated_at: { $gt: sp['created_at'] } }] })
+        : 1
+      await db.collection('spaces').updateOne({ _id: id }, kept ? keep : gone)
+      if (kept) continue
+      spaces++
+    }
+
+    let places = 0
+    for (const e of await db.collection('entities').find({ ...live, example: true }).toArray()) {
+      const kept = (e['updated_at'] as Date).getTime() !== (e['created_at'] as Date).getTime()
+        || await db.collection('list_items').countDocuments({ ...live, 'contexts.entity_id': String(e._id) }) > 0
+      await db.collection('entities').updateOne({ _id: e._id }, kept ? keep : gone)
+      if (kept) continue
+      places++
+    }
+
+    return { data: { items: items.modifiedCount, cards: cards.modifiedCount, spaces, places } }
+  })
 
   // GET /api/spaces — list my spaces, optional ?type= filter
   fastify.get<{ Querystring: { type?: string } }>(

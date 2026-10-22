@@ -38,6 +38,10 @@ export function listsCore(fastify: FastifyInstance) {
     reopenAlways: (c: Caller, tz?: string) => reopenAlways(fastify, c.orgId, c.userId, tz),
 
     /** Open, visible list items due by [end], soonest first. */
+    /** Open items due after [after] and up to [until] (null = no end), soonest first. */
+    dueAfter: (c: Caller, after: Date, until: Date | null, now: Date, limit: number) =>
+      items().find({ ...open(c), due_at: { $gt: after, ...(until ? { $lte: until } : {}) }, ...visibleAt(now) }).sort({ due_at: 1 }).limit(limit).toArray(),
+
     dueBy: (c: Caller, end: Date, now: Date, limit: number) =>
       items().find({ ...open(c), due_at: { $lte: end }, ...visibleAt(now) }).sort({ due_at: 1 }).limit(limit).toArray(),
 
