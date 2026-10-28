@@ -107,7 +107,7 @@ export function registerTableTools(server: McpServer) {
     'Add a new row. Pass cells keyed by column name (e.g. {"Status": "Done", "Priority": "High"}).',
     {
       slug: z.string().describe('Table slug'),
-      cells: z.record(z.unknown()).optional().describe('Cell values keyed by column name'),
+      cells: z.record(z.string(), z.unknown()).optional().describe('Cell values keyed by column name'),
     },
     async ({ slug, cells = {} }) => {
       const { columns } = await fetchTable(slug)
@@ -123,7 +123,7 @@ export function registerTableTools(server: McpServer) {
     {
       slug: z.string().describe('Table slug'),
       id: z.string().describe('Row ID'),
-      cells: z.record(z.unknown()).describe('Cells to update, keyed by column name'),
+      cells: z.record(z.string(), z.unknown()).describe('Cells to update, keyed by column name'),
     },
     async ({ slug, id, cells }) => {
       const { columns } = await fetchTable(slug)
