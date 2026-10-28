@@ -11,15 +11,15 @@ const prefsBody = z.object({
       tz => { try { Intl.DateTimeFormat(undefined, { timeZone: tz }); return true } catch { return false } },
       'Invalid timezone'
     ).default('UTC'),
-  }).default({}),
+  }).prefault({}),
   presence: z.object({
     enabled: z.boolean().default(false),
     notify_on: z.array(z.enum(['home', 'away'])).default(['home', 'away']),
-  }).default({}),
+  }).prefault({}),
   channels: z.object({
     telegram_chat_id: z.string().optional(),
     email: z.string().email().optional(),
-  }).default({}),
+  }).prefault({}),
 })
 
 const notificationsRoutes: FastifyPluginAsync = async (fastify) => {

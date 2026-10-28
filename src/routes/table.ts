@@ -107,7 +107,7 @@ const tableRoutes: FastifyPluginAsync = async (fastify) => {
     { preHandler: fastify.authenticate },
     async (req, reply) => {
       const { cells } = z.object({
-        cells: z.record(z.unknown()).default({}),
+        cells: z.record(z.string(), z.unknown()).default({}),
       }).parse(req.body)
 
       const space = await getSpace(fastify, req.params.slug, req.user!.orgId)
@@ -139,7 +139,7 @@ const tableRoutes: FastifyPluginAsync = async (fastify) => {
     { preHandler: fastify.authenticate },
     async (req, reply) => {
       const { cells } = z.object({
-        cells: z.record(z.unknown()),
+        cells: z.record(z.string(), z.unknown()),
       }).parse(req.body)
 
       // Use dot-notation $set so we merge rather than overwrite the whole cells map

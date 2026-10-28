@@ -116,7 +116,7 @@ const spacesRoutes: FastifyPluginAsync = async (fastify) => {
         name: z.string().min(1).max(100).optional(),
         description: z.string().max(500).optional(),
         pinned: z.boolean().optional(),
-        settings: z.record(z.unknown()).optional(),
+        settings: z.record(z.string(), z.unknown()).optional(),
       }).parse(req.body)
 
       const space = await fastify.mongo.collection('spaces').findOne({ ref, org_id: req.user!.orgId })

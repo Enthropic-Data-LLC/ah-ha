@@ -11,7 +11,7 @@ const appendBody = z.object({
   tone: z.enum(['happy', 'sorrow', 'neutral']).default('neutral'),
   source: z.string().max(100).optional(),
   tags: z.array(z.string()).default([]),
-  meta: z.record(z.unknown()).default({}),
+  meta: z.record(z.string(), z.unknown()).default({}),
 })
 
 const queryParams = z.object({

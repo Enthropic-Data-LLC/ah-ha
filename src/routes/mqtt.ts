@@ -11,7 +11,7 @@ const subBody = z.object({
     .describe('Template string — use {{payload.field}}, {{topic.0}}, {{ts}}'),
   tone_field: z.string().nullable().default(null)
     .describe('JSONPath into payload for tone value, e.g. "status"'),
-  tone_map: z.record(z.enum(TONE_VALUES)).default({})
+  tone_map: z.record(z.string(), z.enum(TONE_VALUES)).default({})
     .describe('Map raw field values to tones, e.g. {"ok":"happy","degraded":"sorrow"}. Use "*" as fallback key.'),
   default_tone: z.enum(TONE_VALUES).default('neutral'),
   enabled: z.boolean().default(true),
