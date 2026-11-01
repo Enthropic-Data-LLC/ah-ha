@@ -5,6 +5,7 @@ import { between, initial } from '../lib/lexorank.js'
 import { annotate, currentPlace, orgPlaces, resolveAt, taggedTo } from '../lib/places.js'
 import { canSee } from '../lib/scopes.js'
 import { REPEATS, reopenAlways } from '../lib/repeat.js'
+import { isHeadingOut } from '../lib/heading-out.js'
 
 const listRoutes: FastifyPluginAsync = async (fastify) => {
   // GET /api/list/:slug/items — location-aware: each item gets `places` and `here`,
@@ -27,6 +28,7 @@ const listRoutes: FastifyPluginAsync = async (fastify) => {
       const space = await getSpace(fastify, req.params.slug, orgId)
       if (!space) return { data: [], meta }
       meta['default_repeat'] = (space['settings'] as { default_repeat?: string } | undefined)?.default_repeat ?? 'once'
+      meta['heading_out'] = isHeadingOut(space)
 
       const filter: Record<string, unknown> = {
         space_id: space._id,
@@ -135,15 +137,21 @@ const listRoutes: FastifyPluginAsync = async (fastify) => {
     }
   )
 
-  // PATCH /api/list/:slug/settings — what new items default to ("once" | "always")
+  // PATCH /api/list/:slug/settings — default_repeat: what new items default to ("once" | "always");
+  // heading_out: true puts the whole list on the Heading out checklist (see lib/heading-out).
   fastify.patch<{ Params: { slug: string } }>(
     '/api/list/:slug/settings',
     { preHandler: fastify.authenticate },
     async (req, reply) => {
-      const { default_repeat } = z.object({ default_repeat: z.enum(REPEATS) }).parse(req.body)
+      const body = z.object({ default_repeat: z.enum(REPEATS).optional(), heading_out: z.boolean().optional() })
+        .refine(b => b.default_repeat !== undefined || b.heading_out !== undefined, { message: 'Nothing to change' })
+        .parse(req.body)
+      const set: Record<string, unknown> = { updated_at: new Date() }
+      if (body.default_repeat !== undefined) set['settings.default_repeat'] = body.default_repeat
+      if (body.heading_out !== undefined) set['settings.heading_out'] = body.heading_out
       const result = await fastify.mongo.collection('spaces').updateOne(
         { slug: req.params.slug, type: 'list', org_id: req.user!.orgId, deleted_at: { $exists: false } },
-        { $set: { 'settings.default_repeat': default_repeat, updated_at: new Date() } },
+        { $set: set },
       )
       if (result.matchedCount === 0) return reply.status(404).send({ error: 'List not found' })
       return { ok: true }

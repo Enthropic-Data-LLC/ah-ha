@@ -27,6 +27,8 @@ Tap the **1x** or **↻ Always** tag next to an item to switch it.
 
 Under the box where you add items, choose **New items: 1x** or **↻ Always**. Your "Always take" list, for example, can start every new item as **↻ Always**.
 
+Next to **🚪 Heading out**, choose **Take every time** to put the whole list on the phone's [[heading-out|Heading out]] checklist. Choose **No** for lists like Shopping.
+
 ## Put an item at a place
 
 Tap **📍 Where?** next to an item and choose a place, such as the store or work. The item then shows up on Ah! Today when you're there. See [[places|Places]].

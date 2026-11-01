@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { ObjectId } from 'mongodb'
 import { currentPlace } from '../lib/places.js'
 import { reopenAlways } from '../lib/repeat.js'
+import { headingOutLists } from '../lib/heading-out.js'
 import { emit } from '../link/engine.js'
 
 const signatureSchema = z.discriminatedUnion('kind', [
@@ -27,6 +28,11 @@ async function taggedOpen(fastify: FastifyInstance, orgId: ObjectId, userId: Obj
     }).toArray(),
   ])
   return { listItems, cards }
+}
+
+/** Ids of the org's heading-out lists: their place-tagged items are things to take there. */
+async function takeListIds(fastify: FastifyInstance, orgId: ObjectId): Promise<Set<string>> {
+  return new Set((await headingOutLists(fastify, orgId)).map(s => String(s['_id'])))
 }
 
 type Sig = Record<string, unknown> & { kind: string }
@@ -347,7 +353,34 @@ const entityRoutes: FastifyPluginAsync = async (fastify) => {
     }
   })
 
-  // GET /api/entities/going-to?ids=id1,id2 — merged checklist for multiple destinations
+  // GET /api/heading-out — everything on the heading-out lists (see lib/heading-out):
+  // open items, plus Always items checked earlier today, since you may be heading out again.
+  fastify.get('/api/heading-out', { preHandler: fastify.authenticate }, async (req) => {
+    const orgId = req.user!.orgId
+    await reopenAlways(fastify, orgId, req.user!.id)
+    const lists = await headingOutLists(fastify, orgId)
+    const items = lists.length === 0 ? [] : await fastify.mongo.collection('list_items').find({
+      org_id: orgId, deleted_at: { $exists: false },
+      space_id: { $in: lists.map(s => s['_id']) },
+      $or: [{ done: false }, { repeat: 'always' }],
+    }).sort({ position: 1 }).toArray()
+    const order = new Map(lists.map((s, n) => [String(s['_id']), n]))
+    const slugOf = new Map(lists.map(s => [String(s['_id']), s['slug'] as string]))
+    items.sort((a, b) => (order.get(String(a['space_id'])) ?? 0) - (order.get(String(b['space_id'])) ?? 0))
+    return {
+      data: {
+        lists: lists.map(s => ({ slug: s['slug'] as string, name: s['name'] as string })),
+        items: items.map(i => ({
+          _id: String(i['_id']), title: i['title'] as string, done: Boolean(i['done']),
+          repeat: (i['repeat'] as string | undefined) ?? 'once', list: slugOf.get(String(i['space_id'])) ?? null,
+        })),
+      },
+    }
+  })
+
+  // GET /api/entities/going-to?ids=id1,id2 — merged checklist for multiple destinations.
+  // list_items = things to take there (from heading-out lists); there_items = tagged items
+  // from other lists, things to do or buy there; cards = tasks there.
   fastify.get<{ Querystring: { ids?: string } }>(
     '/api/entities/going-to',
     { preHandler: fastify.authenticate },
@@ -356,12 +389,16 @@ const entityRoutes: FastifyPluginAsync = async (fastify) => {
       if (!ids.length) return { data: [] }
 
       const orgId = req.user!.orgId
+      const take = await takeListIds(fastify, orgId)
+      type Item = { _id: string; title: string; repeat: string }
       const sections: Array<{
         entity: { _id: string; name: string; icon: string }
-        list_items: Array<{ _id: string; title: string; repeat: string }>
+        list_items: Item[]
+        there_items: Item[]
         cards: Array<{ _id: string; title: string; ref: string }>
         total: number
       }> = []
+      const item = (i: Record<string, unknown>): Item => ({ _id: String(i['_id']), title: i['title'] as string, repeat: (i['repeat'] as string | undefined) ?? 'once' })
 
       for (const idStr of ids) {
         let entityId: ObjectId
@@ -376,7 +413,8 @@ const entityRoutes: FastifyPluginAsync = async (fastify) => {
 
         sections.push({
           entity: { _id: entity['_id'].toString(), name: entity['name'] as string, icon: entity['icon'] as string },
-          list_items: listItems.map(i => ({ _id: i['_id'].toString(), title: i['title'] as string, repeat: (i['repeat'] as string | undefined) ?? 'once' })),
+          list_items: listItems.filter(i => take.has(String(i['space_id']))).map(item),
+          there_items: listItems.filter(i => !take.has(String(i['space_id']))).map(item),
           cards: cards.map(c => ({ _id: c['_id'].toString(), title: c['title'] as string, ref: c['ref'] as string })),
           total: listItems.length + cards.length,
         })
@@ -401,11 +439,14 @@ const entityRoutes: FastifyPluginAsync = async (fastify) => {
       const orgId = req.user!.orgId
 
       const { listItems, cards } = await taggedOpen(fastify, orgId, req.user!.id, entityIdStr)
+      const take = await takeListIds(fastify, orgId)
+      const item = (i: Record<string, unknown>) => ({ _id: String(i['_id']), title: i['title'], space_id: i['space_id']?.toString(), repeat: i['repeat'] ?? 'once' })
 
       return {
         data: {
           entity: { _id: entity['_id'], name: entity['name'] as string, icon: entity['icon'] as string },
-          list_items: listItems.map(i => ({ _id: i['_id'].toString(), title: i['title'], space_id: i['space_id']?.toString(), repeat: i['repeat'] ?? 'once' })),
+          list_items: listItems.filter(i => take.has(String(i['space_id']))).map(item),
+          there_items: listItems.filter(i => !take.has(String(i['space_id']))).map(item),
           cards: cards.map(c => ({ _id: c['_id'].toString(), title: c['title'], ref: c['ref'] })),
           total: listItems.length + cards.length,
         }

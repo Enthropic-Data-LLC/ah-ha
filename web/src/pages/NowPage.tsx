@@ -190,7 +190,7 @@ export default function NowPage() {
   const { data: entitiesData } = useSWR<{ data: Entity[] }>('/api/entities', fetcher)
   const goingToKey = goingToIds.size > 0 ? `/api/entities/going-to?ids=${[...goingToIds].join(',')}` : null
   const { data: goingToData, mutate: mutateGoingTo } = useSWR<{
-    data: Array<{ entity: { _id: string; name: string; icon: string }; list_items: Array<{ _id: string; title: string }>; cards: Array<{ _id: string; title: string; ref: string }>; total: number }>
+    data: Array<{ entity: { _id: string; name: string; icon: string }; list_items: Array<{ _id: string; title: string }>; there_items?: Array<{ _id: string; title: string }>; cards: Array<{ _id: string; title: string; ref: string }>; total: number }>
   }>(goingToKey, fetcher)
 
   const { data: activeCardData, mutate: mutateCard } = useSWR<{ data: BoardCard }>(
@@ -346,13 +346,13 @@ export default function NowPage() {
                     </span>
                     {section.total === 0
                       ? <span className="text-xs text-emerald-400">All clear ✓</span>
-                      : <span className="text-xs text-slate-600">{section.total - [...checkedOff].filter(id => section.list_items.some(i => i._id === id) || section.cards.some(c => c._id === id)).length} remaining</span>
+                      : <span className="text-xs text-slate-600">{section.total - [...checkedOff].filter(id => [...section.list_items, ...(section.there_items ?? [])].some(i => i._id === id) || section.cards.some(c => c._id === id)).length} remaining</span>
                     }
                   </div>
                   {section.total === 0 && (
                     <p className="px-4 py-3 text-xs text-slate-600">No items tagged for {section.entity.name}.</p>
                   )}
-                  {section.list_items.map(item => (
+                  {[...section.list_items.map(i => ({ ...i, kind: 'take' })), ...(section.there_items ?? []).map(i => ({ ...i, kind: 'there' }))].map(item => (
                     <button
                       key={item._id}
                       onClick={() => {
@@ -366,7 +366,7 @@ export default function NowPage() {
                         {checkedOff.has(item._id) && <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7"/></svg>}
                       </div>
                       <span className={`text-sm flex-1 ${checkedOff.has(item._id) ? 'line-through text-slate-500' : 'text-slate-200'}`}>{item.title}</span>
-                      <span className="text-xs text-slate-700">item</span>
+                      <span className="text-xs text-slate-700">{item.kind}</span>
                     </button>
                   ))}
                   {section.cards.map(card => (

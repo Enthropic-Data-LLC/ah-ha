@@ -246,6 +246,40 @@ describe('List', () => {
     expect((await req('PATCH', `/api/list/${listSlug}/settings`, { default_repeat: 'sometimes' })).status).toBe(400)
     await req('PATCH', `/api/list/${listSlug}/settings`, { default_repeat: 'once' })
   })
+
+  it('Heading out: a list is a Take list only when set; tagged items elsewhere are things to do there', async () => {
+    type Id = { data: { _id: string } }
+    type Section = { list_items: Array<{ _id: string }>; there_items: Array<{ _id: string }> }
+    type HeadingOut = { data: { lists: Array<{ slug: string }>; items: Array<{ _id: string; list: string }> } }
+    type Meta = { meta: { heading_out: boolean } }
+    const place = ((await req<Id>('POST', '/api/entities', { name: `Heading out test ${Date.now()}` })).body as Id).data._id
+    const milk = ((await req<Id>('POST', `/api/list/${listSlug}/items`, { title: 'Milk', contexts: [{ entity_id: place, time_chunks: [] }] })).body as Id).data._id
+    const goingTo = async () => ((await req<{ data: Section[] }>('GET', `/api/entities/going-to?ids=${place}`)).body as { data: Section[] }).data[0]!
+    const headingOut = async () => ((await req<HeadingOut>('GET', '/api/heading-out')).body as HeadingOut).data
+    const meta = async () => ((await req<Meta>('GET', `/api/list/${listSlug}/items`)).body as Meta).meta
+
+    // Unset, only always-take counts: milk tagged to the store is to buy there, not to take.
+    expect((await meta()).heading_out).toBe(false)
+    let g = await goingTo()
+    expect(g.there_items.map(i => i._id)).toContain(milk)
+    expect(g.list_items.map(i => i._id)).not.toContain(milk)
+    expect((await headingOut()).lists.map(l => l.slug)).not.toContain(listSlug)
+
+    // On: the whole list is on Heading out, and its tagged items are things to take there.
+    expect((await req('PATCH', `/api/list/${listSlug}/settings`, { heading_out: true })).status).toBe(200)
+    expect((await meta()).heading_out).toBe(true)
+    const ho = await headingOut()
+    expect(ho.lists.map(l => l.slug)).toContain(listSlug)
+    expect(ho.items.find(i => i._id === milk)?.list).toBe(listSlug)
+    g = await goingTo()
+    expect(g.list_items.map(i => i._id)).toContain(milk)
+    expect(g.there_items.map(i => i._id)).not.toContain(milk)
+
+    expect((await req('PATCH', `/api/list/${listSlug}/settings`, {})).status).toBe(400)
+    await req('PATCH', `/api/list/${listSlug}/settings`, { heading_out: false })
+    await req('DELETE', `/api/list/${listSlug}/items/${milk}`)
+    await req('DELETE', `/api/entities/${place}`)
+  })
 })
 
 // ── Table ───────────────────────────────────────────────────────────────────

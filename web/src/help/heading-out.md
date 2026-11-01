@@ -11,10 +11,10 @@ Tap 🚪 **Heading out** on Ah! Today in the phone app before you leave.
 - **Coming up:** your next calendar events and where they are.
 - **Where to?:** the places you're going. The app guesses from your calendar; tap a place to add or remove it.
 - **Take:** what to bring. It combines:
-  - your list named **Always take** (keys, wallet, phone…), every time
-  - things you tagged to the places you're going
+  - your **Heading out** lists (keys, wallet, phone…), every time
+  - things on those lists that you tagged to the places you're going
   - an umbrella or jacket if the weather calls for it
-- **While you're there:** tasks tagged to those places.
+- **While you're there:** things to do or buy there. These are items from your other lists (like **Shopping**) and tasks that you tagged to those places.
 
 Tick things off as you pack. When everything is ticked, you'll see **All packed — go!**
 
@@ -24,6 +24,13 @@ If an event doesn't match a place, tap the right place once. The app remembers, 
 
 ## Things you always need
 
-Make a list called **Always take** on ah-ha.app and put your everyday things on it. Mark them **↻ Always** so they come back every day. See [[lists|Lists]].
+Make a list called **Always take** on ah-ha.app and put your everyday things on it. It is a Heading out list from the start. Mark the items **↻ Always** so they come back every day. See [[lists|Lists]].
+
+## Choose your Heading out lists
+
+Open any list on ah-ha.app. Next to **🚪 Heading out**, choose:
+
+- **Take every time:** the whole list is on the checklist each time you leave. You can choose more than one list, like **Always take** and **Gym bag**.
+- **No:** the list stays off **Take**. Its items that are tagged to a place show under **While you're there** instead. Use this for shopping lists, so milk isn't something to pack.
 
 > **Tip:** Long-press an item on the checklist to switch it between **1x** and **↻ Always**.

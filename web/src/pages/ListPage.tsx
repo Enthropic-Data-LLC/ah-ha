@@ -13,7 +13,7 @@ export default function ListPage({ slug }: { slug: string }) {
   const [deleting, setDeleting] = useState(false)
   const [expandedItem, setExpandedItem] = useState<string | null>(null)
 
-  const { data, mutate } = useSWR<{ data: ListItem[]; meta?: { default_repeat?: 'once' | 'always' } }>(`/api/list/${slug}/items`, fetcher)
+  const { data, mutate } = useSWR<{ data: ListItem[]; meta?: { default_repeat?: 'once' | 'always'; heading_out?: boolean } }>(`/api/list/${slug}/items`, fetcher)
   const { data: entityData } = useSWR<{ data: Entity[] }>('/api/entities', fetcher)
   const [title, setTitle] = useState('')
   const [adding, setAdding] = useState(false)
@@ -45,6 +45,11 @@ export default function ListPage({ slug }: { slug: string }) {
     await mutate()
   }
 
+  async function setHeadingOut(on: boolean) {
+    await api.patch(`/api/list/${slug}/settings`, { heading_out: on })
+    await mutate()
+  }
+
   async function deleteItem(id: string) {
     await api.delete(`/api/list/${slug}/items/${id}`)
     await mutate()
@@ -71,6 +76,7 @@ export default function ListPage({ slug }: { slug: string }) {
 
   const items = data?.data ?? []
   const defaultRepeat = data?.meta?.default_repeat ?? 'once'
+  const headingOut = data?.meta?.heading_out ?? false
   const entities = entityData?.data ?? []
   const open = items.filter(i => !i.done)
   const done = items.filter(i => i.done)
@@ -106,6 +112,22 @@ export default function ListPage({ slug }: { slug: string }) {
           </button>
         ))}
         <span className="text-slate-600">{defaultRepeat === 'always' ? 'checked items come back tomorrow' : 'checked items stay done'}</span>
+      </div>
+      <div className="flex flex-wrap items-center gap-2 -mt-3 text-xs text-slate-500">
+        <span>🚪 Heading out:</span>
+        {([true, false] as const).map(on => (
+          <button
+            key={String(on)}
+            onClick={() => setHeadingOut(on)}
+            aria-pressed={headingOut === on}
+            className={`px-2 py-0.5 rounded border transition ${headingOut === on ? 'border-indigo-500 bg-indigo-500/10 text-indigo-300' : 'border-slate-700 hover:border-slate-500'}`}
+          >
+            {on ? 'Take every time' : 'No'}
+          </button>
+        ))}
+        <span className="text-slate-600">{headingOut
+          ? 'the whole list is on the Heading out checklist'
+          : 'items tagged to a place show under “While you’re there”'}</span>
       </div>
 
       <div className="space-y-1">
